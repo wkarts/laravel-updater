@@ -16,11 +16,15 @@ class GitDriver implements CodeDriverInterface
 
     public function currentRevision(): string
     {
-        $result = $this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD']);
-        return trim($result['stdout']);
+        return trim($this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD'])['stdout']);
     }
 
     public function hasUpdates(): bool
+    {
+        return $this->statusUpdates()['has_updates'];
+    }
+
+    public function statusUpdates(): array
     {
         $remote = $this->config['remote'];
         $branch = $this->config['branch'];
@@ -29,7 +33,23 @@ class GitDriver implements CodeDriverInterface
         $local = trim($this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD'])['stdout']);
         $remoteHead = trim($this->shellRunner->runOrFail(['git', 'rev-parse', "{$remote}/{$branch}"])['stdout']);
 
-        return $local !== $remoteHead;
+        $ahead = (int) trim($this->shellRunner->runOrFail(['git', 'rev-list', '--count', "{$remote}/{$branch}..HEAD"])['stdout']);
+        $behind = (int) trim($this->shellRunner->runOrFail(['git', 'rev-list', '--count', "HEAD..{$remote}/{$branch}"])['stdout']);
+
+        return [
+            'local' => $local,
+            'remote' => $remoteHead,
+            'behind_by_commits' => $behind,
+            'ahead_by_commits' => $ahead,
+            'has_updates' => $behind > 0,
+        ];
+    }
+
+    public function isWorkingTreeClean(): bool
+    {
+        $result = $this->shellRunner->runOrFail(['git', 'status', '--porcelain']);
+
+        return trim($result['stdout']) === '';
     }
 
     public function update(): string

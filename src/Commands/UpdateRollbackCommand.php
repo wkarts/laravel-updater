@@ -10,21 +10,21 @@ use Throwable;
 
 class UpdateRollbackCommand extends Command
 {
-    protected $signature = 'system:update:rollback {--backup= : Caminho do dump} {--snapshot= : Caminho do snapshot} {--revision= : Revision git}';
+    protected $signature = 'system:update:rollback {--backup= : Caminho do dump} {--snapshot= : Caminho do snapshot} {--revision= : Revision git} {--force : Executa sem confirmação}';
     protected $description = 'Executa rollback completo da última atualização.';
 
     public function handle(UpdaterKernel $kernel): int
     {
-        if (!$this->confirm('Confirma rollback do sistema?')) {
+        if (!$this->option('force') && !$this->confirm('Confirma rollback do sistema?')) {
             $this->warn('Rollback cancelado.');
             return self::INVALID;
         }
 
-        $context = [
+        $context = array_filter([
             'backup_file' => $this->option('backup'),
             'snapshot_file' => $this->option('snapshot'),
             'revision_before' => $this->option('revision'),
-        ];
+        ]);
 
         try {
             $kernel->rollback($context);

@@ -21,6 +21,8 @@ use Argws\LaravelUpdater\Pipeline\Steps\SeedStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SnapshotCodeStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SqlPatchStep;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
+use Argws\LaravelUpdater\Support\PreflightChecker;
+use Argws\LaravelUpdater\Support\StateStore;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -30,6 +32,8 @@ class UpdaterKernel
         private readonly EnvironmentDetector $environmentDetector,
         private readonly UpdatePipeline $pipeline,
         private readonly CodeDriverInterface $codeDriver,
+        private readonly PreflightChecker $preflight,
+        private readonly StateStore $store,
         private readonly LoggerInterface $logger
     ) {
     }
@@ -39,13 +43,13 @@ class UpdaterKernel
         return new UpdatePipeline([
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
             new MaintenanceOnStep($services['shell']),
-            new BackupDatabaseStep($services['backup'], (bool) config('updater.backup.enabled', true)),
-            new SnapshotCodeStep($services['shell'], $services['files'], config('updater.snapshot')),
+            new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
+            new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot')),
             new GitUpdateStep($services['code']),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
             new SeedStep($services['shell']),
-            new SqlPatchStep((string) config('updater.sql_patch_path')),
+            new SqlPatchStep((string) config('updater.patches.path'), $services['store']),
             new BuildAssetsStep($services['shell'], (bool) config('updater.build_assets', false)),
             new CacheClearStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
@@ -53,41 +57,62 @@ class UpdaterKernel
         ], $services['logger']);
     }
 
-    public function check(): array
+    public function check(bool $allowDirty = false): array
     {
         $this->environmentDetector->ensureCli();
+        $this->store->ensureSchema();
+        $this->preflight->validate(['allow_dirty' => $allowDirty]);
 
         return [
             'enabled' => (bool) config('updater.enabled', true),
             'current_revision' => $this->codeDriver->currentRevision(),
-            'has_updates' => $this->codeDriver->hasUpdates(),
+            ...$this->codeDriver->statusUpdates(),
         ];
     }
 
-    public function run(): array
+    public function run(array $options = []): array
     {
         $this->environmentDetector->ensureCli();
+        $this->store->ensureSchema();
+        $this->preflight->validate($options);
+
+        $runId = $this->store->createRun($options);
         $context = [
+            'run_id' => $runId,
+            'options' => $options,
             'started_at' => now()->toIso8601String(),
-            'idempotency_key' => hash('sha256', (string) now()->timestamp . php_uname()),
+            'idempotency_key' => hash('sha256', $runId . ':' . now()->timestamp),
         ];
 
         try {
             $this->pipeline->run($context);
             $context['status'] = 'success';
+            $this->store->finishRun($runId, $context);
             $this->logger->info('updater.run.success', $context);
             return $context;
         } catch (Throwable $throwable) {
             $context['status'] = 'failed';
             $context['error'] = $throwable->getMessage();
+            $this->store->finishRun($runId, $context, ['message' => mb_substr($throwable->getMessage(), 0, 1000)]);
             $this->logger->error('updater.run.failed', $context);
             throw $throwable;
         }
     }
 
-    public function rollback(array $context): void
+    public function rollback(array $context = []): void
     {
         $this->environmentDetector->ensureCli();
+        $this->store->ensureSchema();
+
+        if ($context === []) {
+            $last = $this->store->lastRun() ?? [];
+            $context = [
+                'revision_before' => $last['revision_before'] ?? null,
+                'backup_file' => $last['backup_file'] ?? null,
+                'snapshot_file' => $last['snapshot_file'] ?? null,
+                'options' => [],
+            ];
+        }
 
         try {
             $this->pipeline->rollback($context);
@@ -100,11 +125,19 @@ class UpdaterKernel
 
     public function status(): array
     {
+        $this->store->ensureSchema();
+
         return [
             'enabled' => (bool) config('updater.enabled', true),
             'mode' => (string) config('updater.mode', 'inplace'),
             'channel' => (string) config('updater.channel', 'stable'),
             'revision' => $this->codeDriver->currentRevision(),
+            'last_run' => $this->store->lastRun(),
         ];
+    }
+
+    public function stateStore(): StateStore
+    {
+        return $this->store;
     }
 }

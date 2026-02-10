@@ -8,7 +8,8 @@ use Argws\LaravelUpdater\Exceptions\UpdaterException;
 
 class ShellRunner
 {
-    public function run(array $command, ?string $cwd = null): array
+    /** @param array<string, string> $env */
+    public function run(array $command, ?string $cwd = null, array $env = []): array
     {
         if ($command === []) {
             throw new UpdaterException('Comando inválido: vazio.');
@@ -19,7 +20,7 @@ class ShellRunner
 
         $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
         $workingDirectory = $cwd ?? getcwd();
-        $process = proc_open($fullCommand, $descriptor, $pipes, $workingDirectory ?: '.');
+        $process = proc_open($fullCommand, $descriptor, $pipes, $workingDirectory ?: '.', $env === [] ? null : $env);
 
         if (!is_resource($process)) {
             throw new UpdaterException('Falha ao iniciar comando de sistema.');
@@ -40,13 +41,20 @@ class ShellRunner
         ];
     }
 
-    public function runOrFail(array $command, ?string $cwd = null): array
+    /** @param array<string, string> $env */
+    public function runOrFail(array $command, ?string $cwd = null, array $env = []): array
     {
-        $result = $this->run($command, $cwd);
+        $result = $this->run($command, $cwd, $env);
         if ($result['exit_code'] !== 0) {
             throw new UpdaterException(sprintf('Comando falhou (%s): %s', $result['exit_code'], $result['stderr'] ?: $result['stdout']));
         }
 
         return $result;
+    }
+
+    public function binaryExists(string $binary): bool
+    {
+        $result = $this->run(['bash', '-lc', 'command -v ' . escapeshellarg($binary) . ' >/dev/null 2>&1']);
+        return $result['exit_code'] === 0;
     }
 }

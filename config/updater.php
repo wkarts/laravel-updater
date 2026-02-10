@@ -26,9 +26,42 @@ return [
         'keep' => (int) env('UPDATER_SNAPSHOT_KEEP', 10),
     ],
 
+    'paths' => [
+        'exclude_snapshot' => [
+            '.env',
+            'storage',
+            'bootstrap/cache',
+            'vendor',
+            'node_modules',
+            'public/uploads',
+            'storage/app/updater/backups',
+            'storage/app/updater/snapshots',
+        ],
+        'uploads_paths' => ['public/uploads'],
+    ],
+
+    'sqlite' => [
+        'path' => env('UPDATER_SQLITE_PATH', storage_path('app/updater/updater.sqlite')),
+    ],
+
+    'patches' => [
+        'enabled' => (bool) env('UPDATER_PATCHES_ENABLED', true),
+        'path' => env('UPDATER_SQL_PATCH_PATH', database_path('updates')),
+        'table' => 'updater_patches',
+    ],
+
     'lock' => [
         'driver' => env('UPDATER_LOCK_DRIVER', 'file'),
         'timeout' => (int) env('UPDATER_LOCK_TIMEOUT', 600),
+    ],
+
+    'trigger' => [
+        'driver' => env('UPDATER_TRIGGER_DRIVER', 'queue'),
+    ],
+
+    'preflight' => [
+        'min_free_disk_mb' => (int) env('UPDATER_MIN_FREE_DISK_MB', 200),
+        'require_clean_git' => (bool) env('UPDATER_REQUIRE_CLEAN_GIT', true),
     ],
 
     'build_assets' => (bool) env('UPDATER_BUILD_ASSETS', false),
@@ -39,7 +72,11 @@ return [
         'timeout' => (int) env('UPDATER_HEALTHCHECK_TIMEOUT', 5),
     ],
 
-    'sql_patch_path' => env('UPDATER_SQL_PATCH_PATH', database_path('updates')),
+    'ui' => [
+        'enabled' => (bool) env('UPDATER_UI_ENABLED', true),
+        'prefix' => env('UPDATER_UI_PREFIX', '_updater'),
+        'middleware' => ['web', 'auth'],
+    ],
 
     'log' => [
         'enabled' => (bool) env('UPDATER_LOG_ENABLED', true),

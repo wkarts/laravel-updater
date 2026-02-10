@@ -14,11 +14,23 @@ class SeedStep implements PipelineStepInterface
     }
 
     public function name(): string { return 'seed'; }
-    public function shouldRun(array $context): bool { return true; }
+
+    public function shouldRun(array $context): bool
+    {
+        return (bool) ($context['options']['seed'] ?? false) || !empty($context['options']['seeders']);
+    }
 
     public function handle(array &$context): void
     {
-        $this->shellRunner->runOrFail(['php', 'artisan', 'db:seed', '--force']);
+        $seeders = $context['options']['seeders'] ?? [];
+        if ($seeders === []) {
+            $this->shellRunner->runOrFail(['php', 'artisan', 'db:seed', '--force']);
+            return;
+        }
+
+        foreach ($seeders as $seeder) {
+            $this->shellRunner->runOrFail(['php', 'artisan', 'db:seed', '--class=' . $seeder, '--force']);
+        }
     }
 
     public function rollback(array &$context): void

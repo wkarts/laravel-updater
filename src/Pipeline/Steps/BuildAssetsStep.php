@@ -14,7 +14,11 @@ class BuildAssetsStep implements PipelineStepInterface
     }
 
     public function name(): string { return 'build_assets'; }
-    public function shouldRun(array $context): bool { return $this->enabled; }
+
+    public function shouldRun(array $context): bool
+    {
+        return $this->enabled && !(bool) ($context['options']['no_build'] ?? false);
+    }
 
     public function handle(array &$context): void
     {
