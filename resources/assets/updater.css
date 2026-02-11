@@ -372,3 +372,14 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         font-size: 13px;
     }
 }
+
+/* Auth card */
+.up-auth-shell .up-auth-card{
+ width:17%;
+ height:366px;
+ position:relative;
+ top:181px;
+ left:400px;
+ right:-200px;
+ transform:translatex(373px) translatey(86px);
+}
