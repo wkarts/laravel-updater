@@ -248,3 +248,32 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     .btn, input, select, textarea { font-size: 14px; }
     .form-inline > * { min-width: 100%; }
 }
+
+.auth-page {
+    min-height: 100vh;
+    background: linear-gradient(145deg, #e2e8f0 0%, #f8fafc 35%, #eef2ff 100%);
+}
+.auth-container {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+}
+.auth-card {
+    width: 100%;
+    max-width: 480px;
+    border-radius: 18px;
+}
+.auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+@media (max-width: 640px) {
+    .auth-card {
+        max-width: 100%;
+        padding: 14px;
+    }
+}

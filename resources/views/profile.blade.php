@@ -1,6 +1,8 @@
 @extends('laravel-updater::layout')
 
-@section('title', 'Perfil Updater')
+@section('title', 'Meu perfil')
+@section('page_title', 'Meu perfil')
+@section('breadcrumbs', 'Perfil')
 
 @section('content')
 <div class="grid">
@@ -12,13 +14,17 @@
 
     <div class="card">
         <h3>Trocar senha</h3>
-        <form method="POST" action="{{ route('updater.profile.password') }}">
+        <form method="POST" action="{{ route('updater.profile.password') }}" class="form-grid">
             @csrf
-            <label for="password">Nova senha</label>
-            <input id="password" type="password" name="password" required>
-            <label for="password_confirmation" style="margin-top:10px;">Confirmar senha</label>
-            <input id="password_confirmation" type="password" name="password_confirmation" required>
-            <div style="margin-top:14px;"><button type="submit">Salvar senha</button></div>
+            <div>
+                <label for="password">Nova senha</label>
+                <input id="password" type="password" name="password" required>
+            </div>
+            <div>
+                <label for="password_confirmation">Confirmar senha</label>
+                <input id="password_confirmation" type="password" name="password_confirmation" required>
+            </div>
+            <button class="btn btn-primary" type="submit">Salvar senha</button>
         </form>
     </div>
 </div>
@@ -31,17 +37,17 @@
     <p class="muted">URI:</p>
     <code>{{ $otpauthUri }}</code>
 
-    <form method="POST" action="{{ route('updater.profile.2fa.enable') }}" style="margin-top:12px;">
+    <form method="POST" action="{{ route('updater.profile.2fa.enable') }}" class="form-grid" style="margin-top:12px;">
         @csrf
         <label for="code">Código para ativar 2FA</label>
         <input id="code" type="text" name="code" required>
-        <div style="margin-top:14px;"><button type="submit">Ativar 2FA</button></div>
+        <button class="btn btn-primary" type="submit">Ativar 2FA</button>
     </form>
 
     @if(!empty($user['totp_enabled']))
         <form method="POST" action="{{ route('updater.profile.2fa.disable') }}" style="margin-top:10px;">
             @csrf
-            <button class="danger" type="submit">Desativar 2FA</button>
+            <button class="btn btn-danger" type="submit">Desativar 2FA</button>
         </form>
     @endif
 </div>

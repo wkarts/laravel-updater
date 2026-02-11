@@ -1,18 +1,16 @@
-@extends('laravel-updater::layout')
+@extends('laravel-updater::layout-auth')
 
-@section('title', '2FA Updater')
+@section('title', 'Código 2FA')
 
 @section('content')
-<div class="card" style="max-width:460px; margin: 0 auto;">
-    <h2>Confirmação 2FA</h2>
-    <p class="muted">Digite o código de 6 dígitos do seu app autenticador.</p>
-    <form method="POST" action="{{ route('updater.2fa.verify') }}">
-        @csrf
-        <label for="code">Código</label>
+<h2>Verificação em duas etapas</h2>
+<p class="muted">Informe o código de 6 dígitos do aplicativo autenticador.</p>
+<form method="POST" action="{{ route('updater.2fa.verify') }}" class="form-grid" style="margin-top: 12px;">
+    @csrf
+    <div>
+        <label for="code">Código 2FA</label>
         <input id="code" type="text" name="code" maxlength="6" required>
-        <div style="margin-top:14px;">
-            <button type="submit">Validar</button>
-        </div>
-    </form>
-</div>
+    </div>
+    <button class="btn btn-primary" type="submit">Validar código</button>
+</form>
 @endsection
