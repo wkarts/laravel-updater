@@ -40,13 +40,35 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
                 Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
 
-                Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings'])->name('updater.section');
+                Route::get('/users', [ManagerController::class, 'usersIndex'])->name('updater.users.index');
+                Route::get('/users/create', [ManagerController::class, 'usersCreate'])->name('updater.users.create');
+                Route::post('/users', [ManagerController::class, 'usersStore'])->name('updater.users.store');
+                Route::get('/users/{id}/edit', [ManagerController::class, 'usersEdit'])->name('updater.users.edit');
+                Route::put('/users/{id}', [ManagerController::class, 'usersUpdate'])->name('updater.users.update');
+                Route::delete('/users/{id}', [ManagerController::class, 'usersDelete'])->name('updater.users.delete');
+                Route::post('/users/{id}/2fa/reset', [ManagerController::class, 'usersResetTwoFactor'])->name('updater.users.2fa.reset');
+
+                Route::get('/profiles', [ManagerController::class, 'profilesIndex'])->name('updater.profiles.index');
+                Route::get('/profiles/create', [ManagerController::class, 'profilesCreate'])->name('updater.profiles.create');
+                Route::post('/profiles', [ManagerController::class, 'profilesStore'])->name('updater.profiles.store');
+                Route::get('/profiles/{id}/edit', [ManagerController::class, 'profilesEdit'])->name('updater.profiles.edit');
+                Route::put('/profiles/{id}', [ManagerController::class, 'profilesUpdate'])->name('updater.profiles.update');
+                Route::delete('/profiles/{id}', [ManagerController::class, 'profilesDelete'])->name('updater.profiles.delete');
+                Route::post('/profiles/{id}/activate', [ManagerController::class, 'profilesActivate'])->name('updater.profiles.activate');
+
+                Route::get('/settings', [ManagerController::class, 'settingsIndex'])->name('updater.settings.index');
                 Route::post('/settings/branding', [ManagerController::class, 'saveBranding'])->name('updater.settings.branding.save');
+                Route::delete('/settings/branding/{asset}', [ManagerController::class, 'removeBrandingAsset'])->whereIn('asset', ['logo', 'favicon'])->name('updater.settings.branding.asset.remove');
                 Route::post('/settings/branding/reset', [ManagerController::class, 'resetBranding'])->name('updater.settings.branding.reset');
+                Route::post('/settings/tokens', [ManagerController::class, 'createApiToken'])->name('updater.settings.tokens.create');
+                Route::delete('/settings/tokens/{id}', [ManagerController::class, 'revokeApiToken'])->name('updater.settings.tokens.revoke');
+
                 Route::post('/sources/save', [ManagerController::class, 'saveSource'])->name('updater.sources.save');
                 Route::post('/sources/{id}/activate', [ManagerController::class, 'activateSource'])->name('updater.sources.activate');
+                Route::delete('/sources/{id}', [ManagerController::class, 'deleteSource'])->name('updater.sources.delete');
                 Route::post('/sources/test', [ManagerController::class, 'testSourceConnection'])->name('updater.sources.test');
-                Route::post('/profiles/save', [ManagerController::class, 'saveProfile'])->name('updater.profiles.save');
+
+                Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings'])->name('updater.section');
             });
         });
     } else {

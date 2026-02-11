@@ -2,15 +2,16 @@
 
 @section('title', 'Dashboard Updater')
 @section('page_title', 'Dashboard')
+@section('breadcrumbs', 'Dashboard')
 
 @section('content')
 <div class="grid">
     <div class="card">
         <h3>Resumo rápido</h3>
-        <p><span class="badge">Profile ativa: {{ $activeProfile['name'] ?? 'padrão' }}</span></p>
-        <p><span class="badge">Source ativa: {{ $activeSource['name'] ?? 'repo local' }}</span></p>
+        <p><span class="badge">Perfil ativo: {{ $activeProfile['name'] ?? 'padrão' }}</span></p>
+        <p><span class="badge">Fonte ativa: {{ $activeSource['name'] ?? 'repositório local' }}</span></p>
         <div class="form-inline" style="margin-top:10px;">
-            <form method="POST" action="{{ route('updater.trigger.update') }}">@csrf <button class="btn btn-primary" type="submit">Executar update</button></form>
+            <form method="POST" action="{{ route('updater.trigger.update') }}">@csrf <button class="btn btn-primary" type="submit">Executar atualização</button></form>
             <form method="POST" action="{{ route('updater.trigger.rollback') }}">@csrf <button class="btn btn-danger" type="submit">Executar rollback</button></form>
         </div>
     </div>
@@ -21,7 +22,7 @@
 </div>
 
 <div class="card">
-    <h3>Histórico de runs</h3>
+    <h3>Histórico de execuções</h3>
     <div class="table-wrap">
         <table>
             <thead>
@@ -50,7 +51,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" class="muted">Nenhum run encontrado.</td>
+                    <td colspan="4" class="muted">Nenhuma execução encontrada.</td>
                 </tr>
             @endforelse
             </tbody>

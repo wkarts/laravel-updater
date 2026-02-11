@@ -16,8 +16,12 @@ class AuthController extends Controller
     {
     }
 
-    public function showLogin()
+    public function showLogin(Request $request)
     {
+        if ($this->isAuthenticated($request)) {
+            return redirect()->route('updater.index');
+        }
+
         return view('laravel-updater::login');
     }
 
@@ -26,6 +30,10 @@ class AuthController extends Controller
         $validated = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+        ], [
+            'email.required' => 'Informe o e-mail.',
+            'email.email' => 'Informe um e-mail válido.',
+            'password.required' => 'Informe a senha.',
         ]);
 
         $maxAttempts = (int) config('updater.ui.auth.rate_limit.max_attempts', 10);
@@ -76,7 +84,9 @@ class AuthController extends Controller
 
     public function verifyTwoFactor(Request $request): RedirectResponse
     {
-        $request->validate(['code' => ['required', 'string']]);
+        $request->validate(['code' => ['required', 'string']], [
+            'code.required' => 'Informe o código 2FA.',
+        ]);
         $pendingId = (int) $request->session()->get('updater_pending_user_id', 0);
         if ($pendingId <= 0) {
             return redirect()->route('updater.login');
@@ -143,17 +153,21 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'password' => ['required', 'string', 'min:6', 'confirmed'],
+        ], [
+            'password.required' => 'Informe a nova senha.',
+            'password.min' => 'A senha deve ter ao menos 6 caracteres.',
+            'password.confirmed' => 'A confirmação de senha não confere.',
         ]);
 
         $user = $this->currentUser($request);
         $this->authStore->updatePassword((int) $user['id'], $validated['password']);
 
-        return back()->with('status', 'Senha alterada com sucesso.');
+        return back()->with('status', 'Salvo com sucesso.');
     }
 
     public function enableTwoFactor(Request $request): RedirectResponse
     {
-        $request->validate(['code' => ['required', 'string']]);
+        $request->validate(['code' => ['required', 'string']], ['code.required' => 'Informe o código 2FA.']);
 
         $user = $this->currentUser($request);
         $secret = (string) $request->session()->get('updater_totp_secret', '');
@@ -163,13 +177,13 @@ class AuthController extends Controller
         }
 
         if (!$this->totp->verify($secret, (string) $request->input('code'))) {
-            return back()->withErrors(['code' => 'Código TOTP inválido para ativação.']);
+            return back()->withErrors(['code' => 'Código 2FA inválido.']);
         }
 
         $this->authStore->updateTotp((int) $user['id'], $secret, true);
         $request->session()->forget('updater_totp_secret');
 
-        return back()->with('status', '2FA ativado com sucesso.');
+        return back()->with('status', 'Salvo com sucesso.');
     }
 
     public function disableTwoFactor(Request $request): RedirectResponse
@@ -177,7 +191,7 @@ class AuthController extends Controller
         $user = $this->currentUser($request);
         $this->authStore->updateTotp((int) $user['id'], null, false);
 
-        return back()->with('status', '2FA desativado com sucesso.');
+        return back()->with('status', 'Salvo com sucesso.');
     }
 
     private function createAuthenticatedRedirect(Request $request, int $userId): RedirectResponse
@@ -198,6 +212,16 @@ class AuthController extends Controller
         ));
     }
 
+    private function isAuthenticated(Request $request): bool
+    {
+        $sessionId = (string) $request->cookie('updater_session', '');
+        if ($sessionId === '') {
+            return false;
+        }
+
+        return $this->authStore->findValidSession($sessionId) !== null;
+    }
+
     private function currentUser(Request $request): array
     {
         $user = $request->attributes->get('updater_user');
@@ -209,7 +233,7 @@ class AuthController extends Controller
         $session = $this->authStore->findValidSession($sessionId);
 
         if ($session === null) {
-            abort(401);
+            abort(401, 'Acesso negado.');
         }
 
         return [

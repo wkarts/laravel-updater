@@ -5,6 +5,7 @@
         'app_desc' => config('updater.app.desc', ''),
     ]
 )
+@php($user = request()->attributes->get('updater_user'))
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -17,7 +18,6 @@
     <link rel="stylesheet" href="{{ \Argws\LaravelUpdater\Support\UiAssets::cssUrl() }}">
 </head>
 <body>
-
 <div class="updater-app">
     <aside class="updater-sidebar" data-drawer>
         <div class="sidebar-brand">
@@ -35,16 +35,15 @@
         </div>
 
         <nav class="sidebar-nav">
-            <a class="{{ request()->routeIs('updater.index') ? 'active' : '' }}" href="{{ route('updater.index') }}">Dashboard</a>
-            <a class="{{ request()->route('section') === 'updates' ? 'active' : '' }}" href="{{ route('updater.section', 'updates') }}">Updates</a>
-            <a class="{{ request()->route('section') === 'runs' ? 'active' : '' }}" href="{{ route('updater.section', 'runs') }}">Runs</a>
-            <a class="{{ request()->route('section') === 'sources' ? 'active' : '' }}" href="{{ route('updater.section', 'sources') }}">Sources</a>
-            <a class="{{ request()->route('section') === 'profiles' ? 'active' : '' }}" href="{{ route('updater.section', 'profiles') }}">Profiles</a>
-            <a class="{{ request()->route('section') === 'backups' ? 'active' : '' }}" href="{{ route('updater.section', 'backups') }}">Backups</a>
-            <a class="{{ request()->route('section') === 'logs' ? 'active' : '' }}" href="{{ route('updater.section', 'logs') }}">Logs</a>
-            <a class="{{ request()->route('section') === 'security' ? 'active' : '' }}" href="{{ route('updater.section', 'security') }}">Security</a>
-            <a class="{{ request()->route('section') === 'admin-users' ? 'active' : '' }}" href="{{ route('updater.section', 'admin-users') }}">Admin Users</a>
-            <a class="{{ request()->route('section') === 'settings' ? 'active' : '' }}" href="{{ route('updater.section', 'settings') }}">Settings</a>
+            <a class="{{ request()->routeIs('updater.index') ? 'active' : '' }}" href="{{ route('updater.index') }}">▣ Dashboard</a>
+            <a class="{{ request()->route('section') === 'updates' ? 'active' : '' }}" href="{{ route('updater.section', 'updates') }}">↻ Atualizações</a>
+            <a class="{{ request()->route('section') === 'runs' ? 'active' : '' }}" href="{{ route('updater.section', 'runs') }}">◷ Execuções</a>
+            <a class="{{ request()->route('section') === 'sources' ? 'active' : '' }}" href="{{ route('updater.section', 'sources') }}">⌁ Fontes</a>
+            <a class="{{ request()->routeIs('updater.profiles.*') ? 'active' : '' }}" href="{{ route('updater.profiles.index') }}">⚙ Perfis</a>
+            <a class="{{ request()->route('section') === 'backups' ? 'active' : '' }}" href="{{ route('updater.section', 'backups') }}">⛁ Backups</a>
+            <a class="{{ request()->route('section') === 'logs' ? 'active' : '' }}" href="{{ route('updater.section', 'logs') }}">☰ Logs</a>
+            <a class="{{ request()->routeIs('updater.users.*') ? 'active' : '' }}" href="{{ route('updater.users.index') }}">👤 Usuários</a>
+            <a class="{{ request()->routeIs('updater.settings.*') ? 'active' : '' }}" href="{{ route('updater.settings.index') }}">✦ Configurações</a>
         </nav>
     </aside>
 
@@ -55,15 +54,14 @@
             <div class="topbar-left">
                 <button class="icon-btn" type="button" data-toggle-drawer aria-label="Abrir menu">☰</button>
                 <div>
-                    <h1>@yield('page_title', 'Updater Manager')</h1>
-                    <p class="muted">Gerenciamento de atualizações com segurança e rastreabilidade.</p>
+                    <h1>{{ $branding['app_name'] ?? 'Updater' }} {{ $branding['app_sufix_name'] ?? '' }}</h1>
+                    <p class="muted">@yield('page_title', 'Dashboard')</p>
                 </div>
             </div>
 
             <div class="topbar-actions">
-                <button class="btn btn-secondary" type="button" data-toggle-theme>Tema</button>
-
-                @if(config('updater.ui.auth.enabled', false) && request()->attributes->get('updater_user'))
+                @if(is_array($user))
+                    <span class="badge">{{ $user['email'] ?? '-' }}</span>
                     <a class="btn btn-ghost" href="{{ route('updater.profile') }}">Perfil</a>
                     <form method="POST" action="{{ route('updater.logout') }}">@csrf <button class="btn btn-secondary" type="submit">Sair</button></form>
                 @endif
@@ -71,12 +69,10 @@
         </header>
 
         <section class="updater-content">
-            <div class="breadcrumbs">Updater / @yield('page_title', 'Dashboard')</div>
+            <div class="breadcrumbs">Início / @yield('breadcrumbs', 'Dashboard')</div>
 
             @if(session('status'))
-                <div class="toast-wrap">
-                    <div class="toast">{{ session('status') }}</div>
-                </div>
+                <div class="toast-wrap"><div class="toast">{{ session('status') }}</div></div>
             @endif
 
             @if($errors->any())
