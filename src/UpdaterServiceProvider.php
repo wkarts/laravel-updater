@@ -132,6 +132,8 @@ class UpdaterServiceProvider extends ServiceProvider
             __DIR__ . '/../resources/assets/updater.js' => public_path('vendor/laravel-updater/updater.js'),
         ], 'updater-assets');
 
+        $this->syncAssetsIfNeeded();
+
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-updater');
         $this->loadRoutesFrom(__DIR__ . '/../routes/updater.php');
 
@@ -148,4 +150,30 @@ class UpdaterServiceProvider extends ServiceProvider
             ]);
         }
     }
+    private function syncAssetsIfNeeded(): void
+    {
+        $targetDir = public_path('vendor/laravel-updater');
+        $sourceCss = __DIR__ . '/../resources/assets/updater.css';
+        $sourceJs = __DIR__ . '/../resources/assets/updater.js';
+        $targetCss = $targetDir . '/updater.css';
+        $targetJs = $targetDir . '/updater.js';
+
+        if (!is_dir($targetDir)) {
+            @mkdir($targetDir, 0755, true);
+        }
+
+        $this->copyAssetIfStale($sourceCss, $targetCss);
+        $this->copyAssetIfStale($sourceJs, $targetJs);
+    }
+
+    private function copyAssetIfStale(string $source, string $target): void
+    {
+        $sourceMtime = @filemtime($source);
+        $targetMtime = @filemtime($target);
+
+        if (!is_file($target) || ($sourceMtime !== false && $targetMtime !== false && $sourceMtime > $targetMtime)) {
+            @copy($source, $target);
+        }
+    }
+
 }

@@ -12,8 +12,10 @@ Pacote Composer para autoatualização segura, idempotente e reversível de apli
 ```bash
 composer require argws/laravel-updater
 php artisan vendor:publish --tag=updater-config
-php artisan vendor:publish --tag=updater-assets
 ```
+
+> Os assets do updater são sincronizados automaticamente para `public/vendor/laravel-updater` durante o boot do pacote.
+> Assim, você não precisa rodar `php artisan vendor:publish --tag=updater-assets --force` a cada instalação/atualização.
 
 ## Rotas principais
 
