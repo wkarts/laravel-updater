@@ -1,0 +1,91 @@
+name: Release after CI
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-after-ci
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Só roda se o CI foi sucesso e o branch é main
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do commit que passou no CI
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Configurar Git para criar tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Descobrir última tag (v*)
+        id: lasttag
+        shell: bash
+        run: |
+          set -euo pipefail
+          LAST="$(git tag -l 'v*' --sort=-v:refname | head -n 1 || true)"
+          echo "last=${LAST}" >> $GITHUB_OUTPUT
+
+      - name: Calcular próxima versão (PATCH sempre)
+        id: nextver
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LAST="${{ steps.lasttag.outputs.last }}"
+          if [ -z "$LAST" ]; then
+            NEXT="v0.1.0"
+          else
+            VER="${LAST#v}"
+            IFS='.' read -r MA MI PA <<< "$VER"
+            PA=$((PA+1))
+            NEXT="v${MA}.${MI}.${PA}"
+          fi
+
+          echo "next=${NEXT}" >> $GITHUB_OUTPUT
+
+      - name: Criar tag e push
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.nextver.outputs.next }}"
+
+          # Evita falha se a tag já existir (ex.: rerun)
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag já existe: $TAG. Encerrando sem erro."
+            exit 0
+          fi
+
+          git tag "$TAG"
+          git push origin "$TAG"
+
+      - name: Criar GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.nextver.outputs.next }}
+          generate_release_notes: true
+
+      - name: Notify Packagist       
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+        run: |
+          curl -sS -X POST \
+            -H "Content-Type: application/json" \
+            "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_TOKEN}" \
+            -d '{"repository":{"url":"https://packagist.org/packages/argws/laravel-updater"}}'
+          
