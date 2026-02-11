@@ -3,8 +3,7 @@ name: Release after CI
 on:
   workflow_run:
     workflows: ["CI"]
-    types:
-      - completed
+    types: [completed]
 
 permissions:
   contents: write
@@ -15,58 +14,54 @@ concurrency:
 
 jobs:
   release:
-    # Só roda se o CI foi sucesso e o branch é main
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout do commit que passou no CI
+      - name: Checkout commit validado
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
-      - name: Configurar Git para criar tag
+      - name: Configurar git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Descobrir última tag (v*)
-        id: lasttag
-        shell: bash
+      - name: Descobrir última tag
+        id: last_tag
         run: |
-          set -euo pipefail
           LAST="$(git tag -l 'v*' --sort=-v:refname | head -n 1 || true)"
-          echo "last=${LAST}" >> $GITHUB_OUTPUT
+          echo "last=${LAST}" >> "$GITHUB_OUTPUT"
 
-      - name: Calcular próxima versão (PATCH sempre)
-        id: nextver
+      - name: Calcular próxima tag (patch)
+        id: next_tag
         shell: bash
         run: |
           set -euo pipefail
+          LAST="${{ steps.last_tag.outputs.last }}"
 
-          LAST="${{ steps.lasttag.outputs.last }}"
           if [ -z "$LAST" ]; then
             NEXT="v0.1.0"
           else
             VER="${LAST#v}"
             IFS='.' read -r MA MI PA <<< "$VER"
-            PA=$((PA+1))
-            NEXT="v${MA}.${MI}.${PA}"
+            NEXT="v${MA}.${MI}.$((PA+1))"
           fi
 
-          echo "next=${NEXT}" >> $GITHUB_OUTPUT
+          echo "next=${NEXT}" >> "$GITHUB_OUTPUT"
 
-      - name: Criar tag e push
+      - name: Criar tag e publicar
+        shell: bash
         run: |
           set -euo pipefail
-          TAG="${{ steps.nextver.outputs.next }}"
+          TAG="${{ steps.next_tag.outputs.next }}"
 
-          # Evita falha se a tag já existir (ex.: rerun)
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag já existe: $TAG. Encerrando sem erro."
+            echo "Tag já existe: $TAG"
             exit 0
           fi
 
@@ -76,10 +71,11 @@ jobs:
       - name: Criar GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.nextver.outputs.next }}
+          tag_name: ${{ steps.next_tag.outputs.next }}
           generate_release_notes: true
 
-      - name: Notify Packagist       
+      - name: Notify Packagist
+        if: ${{ secrets.PACKAGIST_USERNAME != '' && secrets.PACKAGIST_TOKEN != '' }}
         env:
           PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
           PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
@@ -87,5 +83,4 @@ jobs:
           curl -sS -X POST \
             -H "Content-Type: application/json" \
             "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_TOKEN}" \
-            -d '{"repository":{"url":"https://packagist.org/packages/argws/laravel-updater"}}'
-          
+            -d '{"repository":{"url":"https://github.com/wkarts/laravel-updater"}}'

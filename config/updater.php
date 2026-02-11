@@ -77,16 +77,20 @@ return [
         'prefix' => env('UPDATER_UI_PREFIX', '_updater'),
         'middleware' => ['web', 'auth'],
         'auth' => [
-            'enabled' => (bool) env('UPDATER_UI_AUTH_ENABLED', true),
-            'auto_provision_admin' => (bool) env('UPDATER_UI_AUTO_PROVISION_ADMIN', false),
+            'enabled' => (bool) env('UPDATER_UI_AUTH_ENABLED', false),
+            'auto_provision_admin' => (bool) env('UPDATER_UI_AUTO_PROVISION_ADMIN', true),
             'default_email' => env('UPDATER_UI_DEFAULT_EMAIL', 'admin@admin.com'),
             'default_password' => env('UPDATER_UI_DEFAULT_PASSWORD', '123456'),
-            'session_ttl' => (int) env('UPDATER_UI_SESSION_TTL', 120),
-        ],
-        'two_factor' => [
-            'enabled' => (bool) env('UPDATER_UI_2FA_ENABLED', false),
-            'required' => (bool) env('UPDATER_UI_2FA_REQUIRED', false),
-            'issuer' => env('UPDATER_UI_2FA_ISSUER', 'Argws Updater'),
+            'session_ttl_minutes' => (int) env('UPDATER_UI_SESSION_TTL', 120),
+            'rate_limit' => [
+                'max_attempts' => (int) env('UPDATER_UI_LOGIN_MAX_ATTEMPTS', 10),
+                'decay_minutes' => (int) env('UPDATER_UI_LOGIN_DECAY_MINUTES', 10),
+            ],
+            '2fa' => [
+                'enabled' => (bool) env('UPDATER_UI_2FA_ENABLED', true),
+                'required' => (bool) env('UPDATER_UI_2FA_REQUIRED', false),
+                'issuer' => env('UPDATER_UI_2FA_ISSUER', 'Argws Updater'),
+            ],
         ],
     ],
 

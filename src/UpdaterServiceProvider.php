@@ -14,7 +14,9 @@ use Argws\LaravelUpdater\Contracts\LockInterface;
 use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Drivers\MysqlBackupDriver;
 use Argws\LaravelUpdater\Drivers\PgsqlBackupDriver;
+use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthMiddleware;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
+use Argws\LaravelUpdater\Support\AuthStore;
 use Argws\LaravelUpdater\Support\CacheLock;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\FileLock;
@@ -23,8 +25,10 @@ use Argws\LaravelUpdater\Support\LoggerFactory;
 use Argws\LaravelUpdater\Support\PreflightChecker;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
+use Argws\LaravelUpdater\Support\Totp;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 use Psr\Log\LoggerInterface;
 
@@ -42,6 +46,8 @@ class UpdaterServiceProvider extends ServiceProvider
             $store->ensureSchema();
             return $store;
         });
+        $this->app->singleton(AuthStore::class, fn () => new AuthStore($this->app->make(StateStore::class)));
+        $this->app->singleton(Totp::class, fn () => new Totp());
 
         $this->app->singleton(LockInterface::class, function () {
             if ((string) config('updater.lock.driver', 'file') === 'cache') {
@@ -105,14 +111,24 @@ class UpdaterServiceProvider extends ServiceProvider
         });
     }
 
-    public function boot(): void
+    public function boot(Router $router): void
     {
+        $router->aliasMiddleware('updater.auth', UpdaterAuthMiddleware::class);
+
         $this->publishes([
             __DIR__ . '/../config/updater.php' => config_path('updater.php'),
         ], 'updater-config');
 
+        $this->publishes([
+            __DIR__ . '/../resources/assets/updater.css' => public_path('vendor/laravel-updater/updater.css'),
+        ], 'updater-assets');
+
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-updater');
         $this->loadRoutesFrom(__DIR__ . '/../routes/updater.php');
+
+        if ((bool) config('updater.ui.auth.enabled', false)) {
+            $this->app->make(AuthStore::class)->ensureDefaultAdmin();
+        }
 
         if ($this->app->runningInConsole()) {
             $this->commands([
