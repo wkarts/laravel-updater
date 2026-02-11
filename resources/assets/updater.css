@@ -380,6 +380,11 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         border-radius: 14px;
         padding: 16px;
     }
+}
+
+    .up-auth-title {
+        font-size: 18px;
+    }
 
     .up-auth-title {
         font-size: 18px;
