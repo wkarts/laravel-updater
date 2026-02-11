@@ -11,10 +11,10 @@ class UiAssets
         $publishedPath = public_path('vendor/laravel-updater/updater.css');
 
         if (is_file($publishedPath)) {
-            return asset('vendor/laravel-updater/updater.css');
+            return asset('vendor/laravel-updater/updater.css') . '?v=' . self::versionFromPath($publishedPath);
         }
 
-        return route('updater.asset.css');
+        return route('updater.asset.css', ['v' => self::versionFromPath(__DIR__ . '/../../resources/assets/updater.css')]);
     }
 
     public static function jsUrl(): string
@@ -22,10 +22,10 @@ class UiAssets
         $publishedPath = public_path('vendor/laravel-updater/updater.js');
 
         if (is_file($publishedPath)) {
-            return asset('vendor/laravel-updater/updater.js');
+            return asset('vendor/laravel-updater/updater.js') . '?v=' . self::versionFromPath($publishedPath);
         }
 
-        return route('updater.asset.js');
+        return route('updater.asset.js', ['v' => self::versionFromPath(__DIR__ . '/../../resources/assets/updater.js')]);
     }
 
     public static function brandingLogoUrl(): string
@@ -36,5 +36,12 @@ class UiAssets
     public static function faviconUrl(): string
     {
         return route('updater.branding.favicon');
+    }
+
+    private static function versionFromPath(string $path): string
+    {
+        $mtime = @filemtime($path);
+
+        return $mtime !== false ? (string) $mtime : '1';
     }
 }
