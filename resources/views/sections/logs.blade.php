@@ -1,0 +1,3 @@
+@extends('laravel-updater::layout')
+@section('page_title', 'Logs')
+@section('content')<div class="card"><form method="GET"><input name="run_id" placeholder="Run ID" value="{{ request('run_id') }}"><select name="level"><option value="">Todos</option><option>debug</option><option>info</option><option>warn</option><option>error</option></select><input name="q" placeholder="Buscar" value="{{ request('q') }}"><button>Filtrar</button></form><table><thead><tr><th>Data</th><th>Level</th><th>Mensagem</th></tr></thead><tbody>@foreach($logs as $log)<tr><td>{{ $log['created_at'] }}</td><td>{{ $log['level'] }}</td><td>{{ $log['message'] }}</td></tr>@endforeach</tbody></table></div>@endsection

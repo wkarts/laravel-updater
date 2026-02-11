@@ -3,11 +3,20 @@
 declare(strict_types=1);
 
 use Argws\LaravelUpdater\Http\Controllers\AuthController;
+use Argws\LaravelUpdater\Http\Controllers\ManagerController;
 use Argws\LaravelUpdater\Http\Controllers\UpdaterUiController;
 use Illuminate\Support\Facades\Route;
 
 if ((bool) config('updater.ui.enabled', true)) {
     $prefix = trim((string) config('updater.ui.prefix', '_updater'), '/');
+
+    Route::group(['prefix' => $prefix], function (): void {
+        Route::get('/assets/updater.css', [UpdaterUiController::class, 'assetCss'])->name('updater.asset.css');
+        Route::get('/assets/updater.js', [UpdaterUiController::class, 'assetJs'])->name('updater.asset.js');
+        Route::get('/assets/branding/logo', [UpdaterUiController::class, 'brandingLogo'])->name('updater.branding.logo');
+        Route::get('/assets/branding/favicon', [UpdaterUiController::class, 'brandingFavicon'])->name('updater.branding.favicon');
+        Route::post('/api/trigger', [UpdaterUiController::class, 'apiTrigger'])->name('updater.api.trigger');
+    });
 
     if ((bool) config('updater.ui.auth.enabled', false)) {
         Route::group([
@@ -30,6 +39,14 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/check', [UpdaterUiController::class, 'check'])->name('updater.check');
                 Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
                 Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
+
+                Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings'])->name('updater.section');
+                Route::post('/settings/branding', [ManagerController::class, 'saveBranding'])->name('updater.settings.branding.save');
+                Route::post('/settings/branding/reset', [ManagerController::class, 'resetBranding'])->name('updater.settings.branding.reset');
+                Route::post('/sources/save', [ManagerController::class, 'saveSource'])->name('updater.sources.save');
+                Route::post('/sources/{id}/activate', [ManagerController::class, 'activateSource'])->name('updater.sources.activate');
+                Route::post('/sources/test', [ManagerController::class, 'testSourceConnection'])->name('updater.sources.test');
+                Route::post('/profiles/save', [ManagerController::class, 'saveProfile'])->name('updater.profiles.save');
             });
         });
     } else {
@@ -42,6 +59,7 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/check', [UpdaterUiController::class, 'check'])->name('updater.check');
             Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
             Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
+            Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings'])->name('updater.section');
         });
     }
 }

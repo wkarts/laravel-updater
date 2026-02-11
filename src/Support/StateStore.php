@@ -50,6 +50,7 @@ class StateStore
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
+            name TEXT NULL,
             is_admin INTEGER NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
             totp_secret TEXT NULL,
@@ -76,8 +77,87 @@ class StateStore
             last_attempt_at TEXT NOT NULL
         )');
 
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NULL,
+            action TEXT NOT NULL,
+            meta_json TEXT NULL,
+            ip TEXT NULL,
+            user_agent TEXT NULL,
+            created_at TEXT NOT NULL
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_branding (
+            id INTEGER PRIMARY KEY,
+            app_name TEXT NULL,
+            app_sufix_name TEXT NULL,
+            app_desc TEXT NULL,
+            logo_path TEXT NULL,
+            favicon_path TEXT NULL,
+            primary_color TEXT NULL,
+            updated_at TEXT NOT NULL
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_sources (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            repo_url TEXT NOT NULL,
+            branch TEXT NULL,
+            auth_mode TEXT NOT NULL DEFAULT "none",
+            token_encrypted TEXT NULL,
+            ssh_private_key_path TEXT NULL,
+            active INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            backup_enabled INTEGER NOT NULL DEFAULT 1,
+            dry_run INTEGER NOT NULL DEFAULT 0,
+            force INTEGER NOT NULL DEFAULT 0,
+            composer_install INTEGER NOT NULL DEFAULT 1,
+            migrate INTEGER NOT NULL DEFAULT 1,
+            seed INTEGER NOT NULL DEFAULT 0,
+            build_assets INTEGER NOT NULL DEFAULT 0,
+            health_check INTEGER NOT NULL DEFAULT 1,
+            rollback_on_fail INTEGER NOT NULL DEFAULT 0,
+            retention_backups INTEGER NOT NULL DEFAULT 10,
+            active INTEGER NOT NULL DEFAULT 0
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_backups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            path TEXT NOT NULL,
+            size INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            profile_id INTEGER NULL,
+            run_id INTEGER NULL
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NULL,
+            level TEXT NOT NULL,
+            message TEXT NOT NULL,
+            context_json TEXT NULL,
+            created_at TEXT NOT NULL
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_api_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            token_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            revoked_at TEXT NULL
+        )');
+
         $this->connect()->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_updater_login_attempts_email_ip ON updater_login_attempts(email, ip)');
 
+        $this->ensureColumn('updater_users', 'name', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'last_login_at', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_secret', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');

@@ -16,8 +16,6 @@ class TriggerDispatcher
 
     public function triggerUpdate(array $options = []): void
     {
-        $this->store->createRun(array_merge($options, ['triggered_via' => 'http']));
-
         if ($this->driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunUpdateJob($options));
             return;
