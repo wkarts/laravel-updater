@@ -265,9 +265,15 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     padding: clamp(16px, 4vh, 32px) 16px;
 }
 
+.up-auth-wrap {
+    width: min(420px, calc(100vw - 32px));
+    margin: 0 auto;
+}
+
 .up-auth-card {
     width: 100%;
     max-width: 420px;
+    margin: 0 auto;
     border-radius: 18px;
     border-color: color-mix(in srgb, var(--line) 82%, transparent);
     padding: 22px;
@@ -365,12 +371,20 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         padding: 12px;
     }
 
+    .up-auth-wrap {
+        width: calc(100vw - 24px);
+    }
+
     .up-auth-card {
         max-width: 100%;
         border-radius: 14px;
         padding: 16px;
     }
 }
+
+    .up-auth-title {
+        font-size: 18px;
+    }
 
     .up-auth-title {
         font-size: 18px;

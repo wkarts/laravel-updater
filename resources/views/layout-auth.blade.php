@@ -9,9 +9,20 @@
         <link rel="icon" href="{{ \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() }}">
     @endif
     <link rel="stylesheet" href="{{ \Argws\LaravelUpdater\Support\UiAssets::cssUrl() }}">
+    <style>
+        /* Garantia de layout compacto mesmo com cache de CSS publicado */
+        .up-auth-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:clamp(16px,4vh,32px) 16px;}
+        .up-auth-wrap{width:min(420px, calc(100vw - 32px));margin:0 auto;}
+        .up-auth-card{width:100%!important;max-width:420px!important;margin:0 auto;}
+        @media (max-width: 640px){
+            .up-auth-wrap{width:calc(100vw - 24px);} 
+            .up-auth-card{max-width:100%!important;}
+        }
+    </style>
 </head>
 <body class="up-auth">
 <main class="up-auth-shell">
+    <div class="up-auth-wrap">
     <section class="up-auth-card card">
         <div class="up-auth-brand">
             @if(!empty($branding['logo_path'] ?? null))
@@ -35,6 +46,7 @@
 
         @yield('content')
     </section>
+    </div>
 </main>
 </body>
 </html>
