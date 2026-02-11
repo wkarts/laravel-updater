@@ -12,8 +12,10 @@ Pacote Composer para autoatualização segura, idempotente e reversível de apli
 ```bash
 composer require argws/laravel-updater
 php artisan vendor:publish --tag=updater-config
-php artisan vendor:publish --tag=updater-assets
 ```
+
+> A partir desta versão, os assets da UI são servidos por rota do pacote por padrão (`UPDATER_UI_ASSETS_STRATEGY=route`), então **não é mais obrigatório** rodar `vendor:publish --tag=updater-assets` a cada instalação/atualização.
+> Se quiser forçar assets publicados em `public/vendor/laravel-updater`, use `UPDATER_UI_ASSETS_STRATEGY=published` (ou `auto`).
 
 ## Rotas principais
 
@@ -29,6 +31,7 @@ php artisan vendor:publish --tag=updater-assets
 UPDATER_UI_ENABLED=true
 UPDATER_UI_PREFIX=_updater
 UPDATER_UI_AUTH_ENABLED=true
+UPDATER_UI_ASSETS_STRATEGY=route
 UPDATER_UI_AUTO_PROVISION_ADMIN=true
 UPDATER_UI_DEFAULT_EMAIL=admin@admin.com
 UPDATER_UI_DEFAULT_PASSWORD=123456
