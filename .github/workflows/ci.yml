@@ -8,14 +8,38 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        php: [8.2, 8.3]
+        php: ['8.2', '8.3', '8.4']
+        laravel: ['10', '11', '12']
+        exclude:
+          - php: '8.2'
+            laravel: '12'
     steps:
       - uses: actions/checkout@v4
+
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           coverage: none
-      - run: composer validate --strict
-      - run: composer install --no-interaction --prefer-dist
-      - run: ./vendor/bin/phpunit
+          tools: composer:v2
+
+      - name: Configurar platform PHP no Composer
+        run: composer config platform.php ${{ matrix.php }}
+
+      - name: Forçar componentes Illuminate da matrix
+        run: |
+          composer require --no-interaction --no-update \
+            "illuminate/support:^${{ matrix.laravel }}.0" \
+            "illuminate/console:^${{ matrix.laravel }}.0" \
+            "illuminate/contracts:^${{ matrix.laravel }}.0" \
+            "illuminate/filesystem:^${{ matrix.laravel }}.0"
+
+      - name: Validar composer.json
+        run: composer validate
+
+      - name: Atualizar dependências
+        run: composer update --prefer-dist --no-interaction
+
+      - name: Rodar testes
+        run: vendor/bin/phpunit

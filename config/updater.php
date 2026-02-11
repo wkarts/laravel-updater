@@ -76,6 +76,18 @@ return [
         'enabled' => (bool) env('UPDATER_UI_ENABLED', true),
         'prefix' => env('UPDATER_UI_PREFIX', '_updater'),
         'middleware' => ['web', 'auth'],
+        'auth' => [
+            'enabled' => (bool) env('UPDATER_UI_AUTH_ENABLED', true),
+            'auto_provision_admin' => (bool) env('UPDATER_UI_AUTO_PROVISION_ADMIN', false),
+            'default_email' => env('UPDATER_UI_DEFAULT_EMAIL', 'admin@admin.com'),
+            'default_password' => env('UPDATER_UI_DEFAULT_PASSWORD', '123456'),
+            'session_ttl' => (int) env('UPDATER_UI_SESSION_TTL', 120),
+        ],
+        'two_factor' => [
+            'enabled' => (bool) env('UPDATER_UI_2FA_ENABLED', false),
+            'required' => (bool) env('UPDATER_UI_2FA_REQUIRED', false),
+            'issuer' => env('UPDATER_UI_2FA_ISSUER', 'Argws Updater'),
+        ],
     ],
 
     'log' => [
