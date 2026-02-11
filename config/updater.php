@@ -89,12 +89,6 @@ return [
         'enabled' => (bool) env('UPDATER_UI_ENABLED', true),
         'prefix' => env('UPDATER_UI_PREFIX', '_updater'),
         'middleware' => ['web', 'auth'],
-        'assets' => [
-            // route: serve assets from package routes (não exige vendor:publish)
-            // auto: usa publicado se existir, senão rota
-            // published: força uso de public/vendor/laravel-updater
-            'strategy' => env('UPDATER_UI_ASSETS_STRATEGY', 'route'),
-        ],
         'auth' => [
             'enabled' => (bool) env('UPDATER_UI_AUTH_ENABLED', false),
             'auto_provision_admin' => (bool) env('UPDATER_UI_AUTO_PROVISION_ADMIN', true),
