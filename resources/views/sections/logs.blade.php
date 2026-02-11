@@ -1,3 +1,37 @@
 @extends('laravel-updater::layout')
 @section('page_title', 'Logs')
-@section('content')<div class="card"><form method="GET"><input name="run_id" placeholder="Run ID" value="{{ request('run_id') }}"><select name="level"><option value="">Todos</option><option>debug</option><option>info</option><option>warn</option><option>error</option></select><input name="q" placeholder="Buscar" value="{{ request('q') }}"><button>Filtrar</button></form><table><thead><tr><th>Data</th><th>Level</th><th>Mensagem</th></tr></thead><tbody>@foreach($logs as $log)<tr><td>{{ $log['created_at'] }}</td><td>{{ $log['level'] }}</td><td>{{ $log['message'] }}</td></tr>@endforeach</tbody></table></div>@endsection
+
+@section('content')
+<div class="card">
+    <h3>Viewer de logs</h3>
+
+    <form method="GET" class="form-inline" style="margin:10px 0 14px;">
+        <input name="run_id" placeholder="Run ID" value="{{ request('run_id') }}">
+        <select name="level">
+            <option value="">Todos os níveis</option>
+            @foreach(['debug','info','warn','error'] as $level)
+                <option value="{{ $level }}" @selected(request('level') === $level)>{{ strtoupper($level) }}</option>
+            @endforeach
+        </select>
+        <input name="q" placeholder="Buscar mensagem" value="{{ request('q') }}">
+        <button class="btn btn-primary" type="submit">Filtrar</button>
+    </form>
+
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Data</th><th>Nível</th><th>Mensagem</th></tr></thead>
+            <tbody>
+            @forelse($logs as $log)
+                <tr>
+                    <td>{{ $log['created_at'] }}</td>
+                    <td>{{ strtoupper($log['level']) }}</td>
+                    <td>{{ $log['message'] }}</td>
+                </tr>
+            @empty
+                <tr><td colspan="3" class="muted">Sem logs para os filtros selecionados.</td></tr>
+            @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+@endsection
