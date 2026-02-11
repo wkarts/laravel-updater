@@ -37,13 +37,14 @@ class AuthStore
         return $row ?: null;
     }
 
-    public function createUser(string $email, string $password, bool $isAdmin = false): int
+    public function createUser(string $email, string $password, bool $isAdmin = false, string $name = "Admin"): int
     {
-        $stmt = $this->pdo()->prepare('INSERT INTO updater_users (email, password_hash, is_admin, is_active, created_at, updated_at) VALUES (:email, :password_hash, :is_admin, 1, :created_at, :updated_at)');
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_users (email, password_hash, name, is_admin, is_active, created_at, updated_at) VALUES (:email, :password_hash, :name, :is_admin, 1, :created_at, :updated_at)');
         $now = date(DATE_ATOM);
         $stmt->execute([
             ':email' => mb_strtolower(trim($email)),
             ':password_hash' => password_hash($password, PASSWORD_BCRYPT),
+            ':name' => $name,
             ':is_admin' => $isAdmin ? 1 : 0,
             ':created_at' => $now,
             ':updated_at' => $now,
@@ -194,12 +195,13 @@ class AuthStore
 
         $email = (string) $this->cfg('updater.ui.auth.default_email', 'admin@admin.com');
         $password = (string) $this->cfg('updater.ui.auth.default_password', '123456');
+        $name = (string) $this->cfg('updater.ui.auth.default_name', 'Admin');
 
         if ($this->findUserByEmail($email) !== null) {
             return;
         }
 
-        $this->createUser($email, $password, true);
+        $this->createUser($email, $password, true, $name);
     }
 
     private function touchLastLogin(int $userId): void

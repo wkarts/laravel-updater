@@ -29,7 +29,8 @@ class AuthController extends Controller
         ]);
 
         $maxAttempts = (int) config('updater.ui.auth.rate_limit.max_attempts', 10);
-        $decayMinutes = (int) config('updater.ui.auth.rate_limit.decay_minutes', 10);
+        $windowSeconds = (int) config('updater.ui.auth.rate_limit.window_seconds', 600);
+        $decayMinutes = max(1, (int) ceil($windowSeconds / 60));
         $ip = $request->ip();
 
         if ($this->authStore->isRateLimited($validated['email'], $ip, $maxAttempts, $decayMinutes)) {

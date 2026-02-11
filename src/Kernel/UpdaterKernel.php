@@ -45,7 +45,7 @@ class UpdaterKernel
             new MaintenanceOnStep($services['shell']),
             new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
             new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot')),
-            new GitUpdateStep($services['code']),
+            new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
             new SeedStep($services['shell']),
