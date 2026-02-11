@@ -1,3 +1,10 @@
+@php(
+    $branding = $branding ?? [
+        'app_name' => config('updater.app.name', 'Updater'),
+        'app_sufix_name' => config('updater.app.sufix_name', ''),
+        'app_desc' => config('updater.app.desc', ''),
+    ]
+)
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -5,19 +12,18 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>@yield('title', 'Updater Manager')</title>
     @if(!empty($branding['favicon_path'] ?? null))
-        <link rel="icon" href="{{ route('updater.branding.favicon') }}">
+        <link rel="icon" href="{{ \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() }}">
     @endif
-    <link rel="stylesheet" href="{{ route('updater.asset.css') }}">
+    <link rel="stylesheet" href="{{ \Argws\LaravelUpdater\Support\UiAssets::cssUrl() }}">
 </head>
 <body>
-@php($branding = $branding ?? ['app_name' => config('updater.app.name','Updater'), 'app_sufix_name' => config('updater.app.sufix_name',''), 'app_desc' => config('updater.app.desc','')])
 
 <div class="updater-app">
     <aside class="updater-sidebar" data-drawer>
         <div class="sidebar-brand">
             <div class="sidebar-logo-wrap">
                 @if(!empty($branding['logo_path'] ?? null))
-                    <img src="{{ route('updater.branding.logo') }}" alt="Logo" class="sidebar-logo">
+                    <img src="{{ \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() }}" alt="Logo" class="sidebar-logo">
                 @else
                     <div class="sidebar-logo-fallback">UP</div>
                 @endif
@@ -89,6 +95,6 @@
     </main>
 </div>
 
-<script src="{{ route('updater.asset.js') }}"></script>
+<script src="{{ \Argws\LaravelUpdater\Support\UiAssets::jsUrl() }}"></script>
 </body>
 </html>
