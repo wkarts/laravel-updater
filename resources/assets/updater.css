@@ -262,16 +262,15 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 24px 16px;
+    padding: clamp(16px, 4vh, 32px) 16px;
 }
 
 .up-auth-card {
-    width: clamp(320px, 17vw, 460px);
-    min-height: 366px;
-    max-width: 100%;
+    width: 100%;
+    max-width: 420px;
     border-radius: 18px;
     border-color: color-mix(in srgb, var(--line) 82%, transparent);
-    padding: 24px;
+    padding: 22px;
 }
 
 .up-auth-brand {
@@ -357,8 +356,7 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 
 @media (max-width: 1024px) {
     .up-auth-card {
-        width: min(460px, 100%);
-        min-height: auto;
+        max-width: 400px;
     }
 }
 
@@ -368,16 +366,15 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     }
 
     .up-auth-card {
-        width: 100%;
-        min-height: auto;
+        max-width: 100%;
         border-radius: 14px;
         padding: 16px;
     }
+}
 
     .up-auth-title {
         font-size: 18px;
     }
-}
 
     .up-auth-subtitle {
         font-size: 13px;
