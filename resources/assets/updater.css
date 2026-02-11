@@ -266,8 +266,9 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 }
 
 .up-auth-card {
-    width: 100%;
-    max-width: 460px;
+    width: clamp(320px, 17vw, 460px);
+    min-height: 366px;
+    max-width: 100%;
     border-radius: 18px;
     border-color: color-mix(in srgb, var(--line) 82%, transparent);
     padding: 24px;
@@ -354,12 +355,21 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     color: color-mix(in srgb, var(--danger) 88%, #111827);
 }
 
+@media (max-width: 1024px) {
+    .up-auth-card {
+        width: min(460px, 100%);
+        min-height: auto;
+    }
+}
+
 @media (max-width: 640px) {
     .up-auth-shell {
         padding: 12px;
     }
 
     .up-auth-card {
+        width: 100%;
+        min-height: auto;
         border-radius: 14px;
         padding: 16px;
     }
@@ -367,19 +377,9 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     .up-auth-title {
         font-size: 18px;
     }
+}
 
     .up-auth-subtitle {
         font-size: 13px;
     }
-}
-
-/* Auth card */
-.up-auth-shell .up-auth-card{
- width:17%;
- height:366px;
- position:relative;
- top:181px;
- left:400px;
- right:-200px;
- transform:translatex(373px) translatey(86px);
 }
