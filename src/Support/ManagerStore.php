@@ -73,11 +73,107 @@ class ManagerStore
     }
 
     /** @return array<int,array<string,mixed>> */
+    public function users(): array
+    {
+        $stmt = $this->pdo()->query('SELECT id,email,name,is_admin,is_active,totp_enabled,last_login_at FROM updater_users ORDER BY id DESC');
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    public function findUser(int $id): ?array
+    {
+        $stmt = $this->pdo()->prepare('SELECT * FROM updater_users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
+    public function createUser(array $data): int
+    {
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_users (name, email, password_hash, is_admin, is_active, totp_enabled, created_at, updated_at) VALUES (:name, :email, :password_hash, :is_admin, :is_active, 0, :created_at, :updated_at)');
+        $now = date(DATE_ATOM);
+        $stmt->execute([
+            ':name' => $data['name'],
+            ':email' => mb_strtolower(trim((string) $data['email'])),
+            ':password_hash' => password_hash((string) $data['password'], PASSWORD_BCRYPT),
+            ':is_admin' => (int) ($data['is_admin'] ?? 0),
+            ':is_active' => (int) ($data['is_active'] ?? 1),
+            ':created_at' => $now,
+            ':updated_at' => $now,
+        ]);
+
+        return (int) $this->pdo()->lastInsertId();
+    }
+
+    public function updateUser(int $id, array $data): void
+    {
+        $fields = [
+            'name = :name',
+            'email = :email',
+            'is_admin = :is_admin',
+            'is_active = :is_active',
+            'updated_at = :updated_at',
+        ];
+
+        $payload = [
+            ':id' => $id,
+            ':name' => $data['name'],
+            ':email' => mb_strtolower(trim((string) $data['email'])),
+            ':is_admin' => (int) ($data['is_admin'] ?? 0),
+            ':is_active' => (int) ($data['is_active'] ?? 1),
+            ':updated_at' => date(DATE_ATOM),
+        ];
+
+        if (!empty($data['password'])) {
+            $fields[] = 'password_hash = :password_hash';
+            $payload[':password_hash'] = password_hash((string) $data['password'], PASSWORD_BCRYPT);
+        }
+
+        $stmt = $this->pdo()->prepare('UPDATE updater_users SET ' . implode(', ', $fields) . ' WHERE id = :id');
+        $stmt->execute($payload);
+    }
+
+    public function deleteUser(int $id): void
+    {
+        $stmt = $this->pdo()->prepare('DELETE FROM updater_users WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+        $stmt = $this->pdo()->prepare('DELETE FROM updater_sessions WHERE user_id = :id');
+        $stmt->execute([':id' => $id]);
+    }
+
+    public function resetUserTwoFactor(int $id): void
+    {
+        $stmt = $this->pdo()->prepare('UPDATE updater_users SET totp_secret = NULL, totp_enabled = 0, updated_at = :updated_at WHERE id = :id');
+        $stmt->execute([
+            ':id' => $id,
+            ':updated_at' => date(DATE_ATOM),
+        ]);
+    }
+
+    public function activeAdminCount(): int
+    {
+        $stmt = $this->pdo()->query('SELECT COUNT(*) FROM updater_users WHERE is_admin = 1 AND is_active = 1');
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    /** @return array<int,array<string,mixed>> */
     public function sources(): array
     {
         $stmt = $this->pdo()->query('SELECT * FROM updater_sources ORDER BY active DESC, id DESC');
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    public function findSource(int $id): ?array
+    {
+        $stmt = $this->pdo()->prepare('SELECT * FROM updater_sources WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
     }
 
     public function createOrUpdateSource(array $data, ?int $id = null): void
@@ -117,6 +213,12 @@ class ManagerStore
         $stmt->execute([':updated_at' => date(DATE_ATOM), ':id' => $id]);
     }
 
+    public function deleteSource(int $id): void
+    {
+        $stmt = $this->pdo()->prepare('DELETE FROM updater_sources WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+    }
+
     public function activeSource(): ?array
     {
         $stmt = $this->pdo()->query('SELECT * FROM updater_sources WHERE active = 1 ORDER BY id DESC LIMIT 1');
@@ -132,6 +234,15 @@ class ManagerStore
         $stmt = $this->pdo()->query('SELECT * FROM updater_profiles ORDER BY active DESC, id DESC');
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    public function findProfile(int $id): ?array
+    {
+        $stmt = $this->pdo()->prepare('SELECT * FROM updater_profiles WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
     }
 
     public function createOrUpdateProfile(array $data, ?int $id = null): void
@@ -169,6 +280,19 @@ class ManagerStore
             $payload[':id'] = $id;
         }
         $stmt->execute($payload);
+    }
+
+    public function activateProfile(int $id): void
+    {
+        $this->pdo()->exec('UPDATE updater_profiles SET active = 0');
+        $stmt = $this->pdo()->prepare('UPDATE updater_profiles SET active = 1 WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+    }
+
+    public function deleteProfile(int $id): void
+    {
+        $stmt = $this->pdo()->prepare('DELETE FROM updater_profiles WHERE id = :id');
+        $stmt->execute([':id' => $id]);
     }
 
     public function activeProfile(): ?array
@@ -209,6 +333,38 @@ class ManagerStore
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
+    public function generateApiToken(string $name): array
+    {
+        $plain = bin2hex(random_bytes(24));
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_api_tokens (name, token_hash, created_at, revoked_at) VALUES (:name, :token_hash, :created_at, NULL)');
+        $stmt->execute([
+            ':name' => $name,
+            ':token_hash' => password_hash($plain, PASSWORD_BCRYPT),
+            ':created_at' => date(DATE_ATOM),
+        ]);
+
+        return [
+            'id' => (int) $this->pdo()->lastInsertId(),
+            'token' => $plain,
+        ];
+    }
+
+    public function revokeApiToken(int $id): void
+    {
+        $stmt = $this->pdo()->prepare('UPDATE updater_api_tokens SET revoked_at = :revoked_at WHERE id = :id');
+        $stmt->execute([
+            ':id' => $id,
+            ':revoked_at' => date(DATE_ATOM),
+        ]);
+    }
+
+    public function apiTokens(): array
+    {
+        $stmt = $this->pdo()->query('SELECT id,name,created_at,revoked_at FROM updater_api_tokens ORDER BY id DESC');
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
     public function validateApiToken(string $token): bool
     {
         $envToken = (string) config('updater.sync_token', '');
@@ -225,6 +381,19 @@ class ManagerStore
         }
 
         return false;
+    }
+
+    public function addAuditLog(?int $userId, string $action, array $meta = [], ?string $ip = null, ?string $userAgent = null): void
+    {
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_audit_logs (user_id, action, meta_json, ip, user_agent, created_at) VALUES (:user_id, :action, :meta_json, :ip, :user_agent, :created_at)');
+        $stmt->execute([
+            ':user_id' => $userId,
+            ':action' => $action,
+            ':meta_json' => json_encode($meta, JSON_UNESCAPED_UNICODE),
+            ':ip' => $ip,
+            ':user_agent' => $userAgent,
+            ':created_at' => date(DATE_ATOM),
+        ]);
     }
 
     private function pdo(): PDO

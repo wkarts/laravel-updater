@@ -1,24 +1,20 @@
-@extends('laravel-updater::layout')
+@extends('laravel-updater::layout-auth')
 
-@section('title', 'Login Updater')
+@section('title', 'Entrar')
 
 @section('content')
-<div class="card" style="max-width:460px; margin: 0 auto;">
-    <h2>Entrar no Updater</h2>
-    <p class="muted">Autenticação independente do app hospedeiro.</p>
-    <form method="POST" action="{{ route('updater.login.submit') }}">
-        @csrf
-        <div>
-            <label for="email">E-mail</label>
-            <input id="email" type="email" name="email" value="{{ old('email') }}" required>
-        </div>
-        <div style="margin-top:10px;">
-            <label for="password">Senha</label>
-            <input id="password" type="password" name="password" required>
-        </div>
-        <div style="margin-top:14px;">
-            <button type="submit">Entrar</button>
-        </div>
-    </form>
-</div>
+<h2 class="auth-title">Entrar</h2>
+<p class="auth-subtitle">Acesse com suas credenciais administrativas para continuar.</p>
+<form method="POST" action="{{ route('updater.login.submit') }}" class="form-grid auth-form" style="margin-top: 14px;">
+    @csrf
+    <div>
+        <label for="email">E-mail</label>
+        <input id="email" type="email" name="email" value="{{ old('email') }}" autocomplete="email" required>
+    </div>
+    <div>
+        <label for="password">Senha</label>
+        <input id="password" type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn btn-primary auth-submit" type="submit">Entrar</button>
+</form>
 @endsection
