@@ -79,8 +79,7 @@ jobs:
           tag_name: ${{ steps.nextver.outputs.next }}
           generate_release_notes: true
 
-      - name: Notify Packagist
-        if: ${{ secrets.PACKAGIST_USERNAME != '' && secrets.PACKAGIST_TOKEN != '' }}
+      - name: Notify Packagist       
         env:
           PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
           PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
