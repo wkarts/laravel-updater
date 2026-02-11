@@ -13,8 +13,6 @@ jobs:
         php: [8.2, 8.3, 8.4]
         laravel: [10, 11, 12]
         exclude:
-          # Se quiser ser conservador: Laravel 10 pode não estar pronto pra PHP 8.4 em alguns ambientes
-          # Remova esta exclusão se você quiser forçar o teste mesmo assim
           - php: 8.4
             laravel: 10
 
@@ -26,15 +24,12 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
 
-      - name: Preparar versão Laravel/Testbench na matrix
+      - name: Preparar matrix Laravel/Testbench
         shell: bash
         run: |
           set -euo pipefail
 
-          # NÃO usar lock file em library
           rm -f composer.lock
-
-          # Força o resolver a respeitar a versão do PHP da matrix
           composer config platform.php ${{ matrix.php }}
 
           if [ "${{ matrix.laravel }}" = "10" ]; then
@@ -48,7 +43,6 @@ jobs:
             TB="^10.0"
           fi
 
-          # Ajusta dependências sem instalar ainda
           composer require --no-interaction --no-update \
             "illuminate/support:${ILL}" \
             "illuminate/console:${ILL}" \
@@ -56,7 +50,7 @@ jobs:
             "illuminate/filesystem:${ILL}" \
             "orchestra/testbench:${TB}"
 
-      - name: Composer validate (sem checar lock)
+      - name: Composer validate
         run: composer validate --strict --no-check-lock
 
       - name: Composer update

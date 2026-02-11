@@ -4,138 +4,83 @@ Pacote Composer para autoatualização segura, idempotente e reversível de apli
 
 ## Compatibilidade
 
-Compatibilidade alvo do pacote:
-
 - PHP: **8.2, 8.3, 8.4**
 - Laravel/Illuminate: **10, 11, 12**
 
-A matriz de compatibilidade é validada em CI no GitHub Actions.
+## CI e Release
+
+- CI valida matrix real: PHP 8.2/8.3/8.4 + Laravel 10/11/12 (com exclusão de 8.4 + 10).
+- Biblioteca **não versiona** `composer.lock`.
+- `release.yml` mantém publicação por tags `v*`.
+- `release-after-ci.yml` cria tag automática `vX.Y.Z` (incremento patch) após CI verde na `main`.
+- Notificação no Packagist ocorre somente se `PACKAGIST_USERNAME` e `PACKAGIST_TOKEN` estiverem configurados.
 
 ## Instalação
 
 ```bash
 composer require argws/laravel-updater
 php artisan vendor:publish --tag=updater-config
+php artisan vendor:publish --tag=updater-assets
 ```
 
-## Versionamento para Composer (VCS)
+## UI e autenticação independente
 
-Para consumo estável no Composer via repositório VCS, publique tags semânticas no formato:
+Quando `UPDATER_UI_AUTH_ENABLED=true`, a UI do updater usa autenticação própria em SQLite interno (StateStore), sem depender de guards/auth do app hospedeiro.
 
-- `vX.Y.Z` (ex.: `v1.0.0`)
+### Rotas no modo auth interno
 
-O workflow `release.yml` é disparado automaticamente em `push` de tags `v*`.
+- Públicas:
+  - `GET /_updater/login`
+  - `POST /_updater/login`
+  - `GET /_updater/2fa`
+  - `POST /_updater/2fa`
+  - `POST /_updater/logout`
+- Protegidas (`web` + `updater.auth`):
+  - `GET /_updater`
+  - `GET /_updater/profile`
+  - Demais endpoints de status/check/update/rollback
 
-## Configuração principal
+Quando `UPDATER_UI_AUTH_ENABLED=false`, o pacote mantém compatibilidade e usa `ui.middleware` legado (default `['web','auth']`).
 
-Arquivo `config/updater.php`:
-
-- Git (branch, remote, ff-only)
-- Backup (path, keep, compress)
-- Snapshot (path, keep)
-- SQLite interno (`storage/app/updater/updater.sqlite`)
-- UI (`/_updater`, middleware)
-- Trigger (`queue|process|exec`)
-- Preflight (git limpo, espaço em disco)
-- Paths excluídos do snapshot
-- Lock (`file|cache`)
-
-### Variáveis de UI/Autenticação/2FA
+### Variáveis de ambiente
 
 ```dotenv
 UPDATER_UI_ENABLED=true
-UPDATER_UI_PREFIX=/_updater
+UPDATER_UI_PREFIX=_updater
 
-UPDATER_UI_AUTH_ENABLED=true
+UPDATER_UI_AUTH_ENABLED=false
 UPDATER_UI_AUTO_PROVISION_ADMIN=true
 UPDATER_UI_DEFAULT_EMAIL=admin@admin.com
 UPDATER_UI_DEFAULT_PASSWORD=123456
 UPDATER_UI_SESSION_TTL=120
+UPDATER_UI_LOGIN_MAX_ATTEMPTS=10
+UPDATER_UI_LOGIN_DECAY_MINUTES=10
 
 UPDATER_UI_2FA_ENABLED=true
 UPDATER_UI_2FA_REQUIRED=false
 UPDATER_UI_2FA_ISSUER="Argws Updater"
 ```
 
-> Observação: os parâmetros acima já estão disponíveis em `config/updater.php` para integração gradual da autenticação própria da UI.
+## Segurança mínima implementada
+
+- Senha com `password_hash/password_verify` (bcrypt).
+- Sessão própria em `updater_sessions` com cookie `HttpOnly`, `SameSite=Lax`, `Secure` em HTTPS.
+- 2FA TOTP sem dependências externas obrigatórias.
+- Rate limit por email+IP em `updater_login_attempts`.
+
+## Tabelas SQLite internas
+
+Além de runs/patches/artifacts, o pacote cria de forma idempotente:
+
+- `updater_users`
+- `updater_sessions`
+- `updater_login_attempts`
 
 ## Comandos Artisan
 
 ```bash
 php artisan system:update:check
-php artisan system:update:check --allow-dirty
-
 php artisan system:update:run --force
-php artisan system:update:run --force --seed
-php artisan system:update:run --force --seeder=UsersSeeder --seeder=PermissionsSeeder
-php artisan system:update:run --force --seeders=UsersSeeder,PermissionsSeeder
-php artisan system:update:run --force --sql-path=database/updates
-php artisan system:update:run --force --no-backup --no-snapshot --no-build
-php artisan system:update:run --force --allow-dirty
-
-php artisan system:update:rollback
 php artisan system:update:rollback --force
 php artisan system:update:status
 ```
-
-## UI padrão
-
-A UI fica em `/_updater` (configurável), protegida por middleware padrão `web,auth`.
-
-Funcionalidades:
-
-- Status atual
-- Último run
-- Histórico de runs
-- Botões para:
-  - Checar atualizações
-  - Disparar atualização
-  - Disparar rollback
-
-## Endpoints
-
-- `GET /_updater/` UI
-- `GET /_updater/status` JSON
-- `POST /_updater/check` JSON
-- `POST /_updater/trigger-update` dispara atualização
-- `POST /_updater/trigger-rollback` dispara rollback
-
-> Os endpoints **não executam update pesado em request HTTP**. Eles apenas disparam job/processo em segundo plano.
-
-## SQLite interno do componente
-
-O pacote mantém estado próprio em SQLite (PDO), sem depender do banco da aplicação:
-
-- `runs`
-- `patches`
-- `artifacts`
-
-Isso permite rollback do último run sem parâmetros e deduplicação real de patches SQL por `sha256`.
-
-## Segurança
-
-- Execução via CLI no kernel
-- Lock de concorrência (file ou cache)
-- Preflight de binários, permissões e espaço
-- Verificação de git limpo (com override)
-- Backup com tratamento de credenciais:
-  - MySQL com `--defaults-extra-file` temporário 0600
-  - PostgreSQL com variável de ambiente `PGPASSWORD`
-
-## Troubleshooting
-
-1. Verifique `storage/logs/updater.log`
-2. Verifique sqlite em `storage/app/updater/updater.sqlite`
-3. Verifique lock ativo em `storage/framework/cache/updater.lock.*`
-4. Rode check:
-
-```bash
-php artisan system:update:check --allow-dirty
-```
-
-## Boas práticas
-
-- Executar primeiro em homologação
-- Manter `backup.enabled=true` e `snapshot.enabled=true`
-- Manter seeds idempotentes
-- Versionar patches SQL com ordem previsível

@@ -20,7 +20,7 @@ class UpdaterUiController extends Controller
         $lastRun = $store->lastRun();
         $runs = $store->recentRuns(20);
 
-        return view('laravel-updater::index', [
+        return view('laravel-updater::dashboard', [
             'status' => $kernel->status(),
             'lastRun' => $lastRun,
             'runs' => $runs,
