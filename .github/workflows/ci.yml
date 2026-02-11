@@ -10,11 +10,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.2', '8.3', '8.4']
-        laravel: ['10', '11', '12']
+        php: [8.2, 8.3, 8.4]
+        laravel: [10, 11, 12]
         exclude:
-          - php: '8.2'
-            laravel: '12'
+          # Se quiser ser conservador: Laravel 10 pode não estar pronto pra PHP 8.4 em alguns ambientes
+          # Remova esta exclusão se você quiser forçar o teste mesmo assim
+          - php: 8.4
+            laravel: 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,24 +25,46 @@ jobs:
         with:
           php-version: ${{ matrix.php }}
           coverage: none
-          tools: composer:v2
 
-      - name: Configurar platform PHP no Composer
-        run: composer config platform.php ${{ matrix.php }}
-
-      - name: Forçar componentes Illuminate da matrix
+      - name: Preparar versão Laravel/Testbench na matrix
+        shell: bash
         run: |
+          set -euo pipefail
+
+          # NÃO usar lock file em library
+          rm -f composer.lock
+
+          # Força o resolver a respeitar a versão do PHP da matrix
+          composer config platform.php ${{ matrix.php }}
+
+          if [ "${{ matrix.laravel }}" = "10" ]; then
+            ILL="^10.0"
+            TB="^8.0"
+          elif [ "${{ matrix.laravel }}" = "11" ]; then
+            ILL="^11.0"
+            TB="^9.0"
+          else
+            ILL="^12.0"
+            TB="^10.0"
+          fi
+
+          # Ajusta dependências sem instalar ainda
           composer require --no-interaction --no-update \
-            "illuminate/support:^${{ matrix.laravel }}.0" \
-            "illuminate/console:^${{ matrix.laravel }}.0" \
-            "illuminate/contracts:^${{ matrix.laravel }}.0" \
-            "illuminate/filesystem:^${{ matrix.laravel }}.0"
+            "illuminate/support:${ILL}" \
+            "illuminate/console:${ILL}" \
+            "illuminate/contracts:${ILL}" \
+            "illuminate/filesystem:${ILL}" \
+            "orchestra/testbench:${TB}"
 
-      - name: Validar composer.json
-        run: composer validate
+      - name: Composer validate (sem checar lock)
+        run: composer validate --strict --no-check-lock
 
-      - name: Atualizar dependências
-        run: composer update --prefer-dist --no-interaction
+      - name: Composer update
+        env:
+          COMPOSER_NO_INTERACTION: 1
+          COMPOSER_NO_AUDIT: 1
+          COMPOSER_PROCESS_TIMEOUT: 0
+        run: composer update --prefer-dist
 
-      - name: Rodar testes
-        run: vendor/bin/phpunit
+      - name: PHPUnit
+        run: ./vendor/bin/phpunit
