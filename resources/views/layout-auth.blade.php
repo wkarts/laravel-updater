@@ -9,59 +9,44 @@
         <link rel="icon" href="{{ \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() }}">
     @endif
     <link rel="stylesheet" href="{{ \Argws\LaravelUpdater\Support\UiAssets::cssUrl() }}">
+    <style>
+        /* Garantia de layout compacto mesmo com cache de CSS publicado */
+        .up-auth-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:clamp(16px,4vh,32px) 16px;}
+        .up-auth-wrap{width:min(420px, calc(100vw - 32px));margin:0 auto;}
+        .up-auth-card{width:100%!important;max-width:420px!important;margin:0 auto;}
+        @media (max-width: 640px){
+            .up-auth-wrap{width:calc(100vw - 24px);} 
+            .up-auth-card{max-width:100%!important;}
+        }
+    </style>
 </head>
-<body class="auth-page">
-<div class="auth-shell">
-    <section class="auth-showcase" aria-hidden="true">
-        <div class="auth-showcase-glow"></div>
-        <div class="auth-showcase-content">
-            <div class="auth-brand auth-brand-showcase">
-                @if(!empty($branding['logo_path'] ?? null))
-                    <img src="{{ \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() }}" alt="Logo" class="sidebar-logo">
-                @else
-                    <div class="sidebar-logo-fallback">UP</div>
-                @endif
-                <div>
-                    <strong>{{ $branding['app_name'] ?? 'Updater' }} {{ $branding['app_sufix_name'] ?? '' }}</strong>
-                    <small>{{ $branding['app_desc'] ?? 'Atualizações seguras e rastreáveis' }}</small>
-                </div>
-            </div>
-
-            <h1>Painel do Updater Manager</h1>
-            <p>Gerencie fontes, perfis e operações com segurança, histórico e controle administrativo em um único lugar.</p>
-            <ul>
-                <li>Ambiente seguro para operações críticas</li>
-                <li>Controle de acesso e autenticação em duas etapas</li>
-                <li>Auditoria de ações administrativas</li>
-            </ul>
-        </div>
-    </section>
-
-    <section class="auth-container">
-        <div class="auth-card card">
-            <div class="auth-brand auth-brand-form">
-                @if(!empty($branding['logo_path'] ?? null))
-                    <img src="{{ \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() }}" alt="Logo" class="sidebar-logo">
-                @else
-                    <div class="sidebar-logo-fallback">UP</div>
-                @endif
-                <div>
-                    <strong>{{ $branding['app_name'] ?? 'Updater' }}</strong>
-                    <small>Área restrita</small>
-                </div>
-            </div>
-
-            @if($errors->any())
-                <div class="auth-alert auth-alert-danger">
-                    @foreach($errors->all() as $error)
-                        <div>{{ $error }}</div>
-                    @endforeach
-                </div>
+<body class="up-auth">
+<main class="up-auth-shell">
+    <div class="up-auth-wrap">
+    <section class="up-auth-card card">
+        <div class="up-auth-brand">
+            @if(!empty($branding['logo_path'] ?? null))
+                <img src="{{ \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() }}" alt="Logo" class="up-auth-logo">
+            @else
+                <div class="up-auth-logo up-auth-logo-fallback">UP</div>
             @endif
-
-            @yield('content')
+            <div>
+                <strong class="up-auth-title-brand">{{ $branding['app_name'] ?? 'Updater' }}</strong>
+                <p class="up-auth-subtitle-brand">{{ $branding['app_desc'] ?? 'Área administrativa protegida' }}</p>
+            </div>
         </div>
+
+        @if($errors->any())
+            <div class="auth-alert auth-alert-danger">
+                @foreach($errors->all() as $error)
+                    <div>{{ $error }}</div>
+                @endforeach
+            </div>
+        @endif
+
+        @yield('content')
     </section>
-</div>
+    </div>
+</main>
 </body>
 </html>
