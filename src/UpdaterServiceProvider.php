@@ -22,6 +22,7 @@ use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\FileLock;
 use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\LoggerFactory;
+use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\PreflightChecker;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
@@ -47,6 +48,8 @@ class UpdaterServiceProvider extends ServiceProvider
             return $store;
         });
         $this->app->singleton(AuthStore::class, fn () => new AuthStore($this->app->make(StateStore::class)));
+        $this->app->singleton(ManagerStore::class, fn () => new ManagerStore($this->app->make(StateStore::class)));
+        $this->app->singleton('updater.store', fn () => $this->app->make(StateStore::class));
         $this->app->singleton(Totp::class, fn () => new Totp());
 
         $this->app->singleton(LockInterface::class, function () {
@@ -98,9 +101,10 @@ class UpdaterServiceProvider extends ServiceProvider
                 'code' => $this->app->make(CodeDriverInterface::class),
                 'logger' => $this->app->make(LoggerInterface::class),
                 'store' => $this->app->make(StateStore::class),
+                'manager_store' => $this->app->make(ManagerStore::class),
             ];
 
-            return new UpdaterKernel(
+            $kernel = new UpdaterKernel(
                 $this->app->make(EnvironmentDetector::class),
                 UpdaterKernel::makePipeline($services),
                 $services['code'],
@@ -108,6 +112,10 @@ class UpdaterServiceProvider extends ServiceProvider
                 $services['store'],
                 $services['logger']
             );
+
+            $this->app->instance('updater.kernel', $kernel);
+
+            return $kernel;
         });
     }
 
@@ -121,6 +129,7 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->publishes([
             __DIR__ . '/../resources/assets/updater.css' => public_path('vendor/laravel-updater/updater.css'),
+            __DIR__ . '/../resources/assets/updater.js' => public_path('vendor/laravel-updater/updater.js'),
         ], 'updater-assets');
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-updater');
