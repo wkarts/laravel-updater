@@ -75,12 +75,20 @@ jobs:
           generate_release_notes: true
 
       - name: Notify Packagist
-        if: ${{ secrets.PACKAGIST_USERNAME != '' && secrets.PACKAGIST_TOKEN != '' }}
         env:
           PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
           PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+        shell: bash
         run: |
+          set -euo pipefail
+
+          if [ -z "${PACKAGIST_USERNAME:-}" ] || [ -z "${PACKAGIST_TOKEN:-}" ]; then
+            echo "Secrets PACKAGIST_USERNAME/PACKAGIST_TOKEN não configurados. Pulando notify."
+            exit 0
+          fi
+
           curl -sS -X POST \
             -H "Content-Type: application/json" \
             "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_TOKEN}" \
             -d '{"repository":{"url":"https://github.com/wkarts/laravel-updater"}}'
+
