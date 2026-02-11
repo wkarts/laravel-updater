@@ -72,6 +72,19 @@ return [
         'timeout' => (int) env('UPDATER_HEALTHCHECK_TIMEOUT', 5),
     ],
 
+
+    'app' => [
+        'name' => env('UPDATER_APP_NAME', 'APP_NAME'),
+        'sufix_name' => env('UPDATER_APP_SUFIX_NAME', 'APP_SUFIX_NAME'),
+        'desc' => env('UPDATER_APP_DESC', 'APP_DESC'),
+    ],
+
+    'branding' => [
+        'max_upload_kb' => (int) env('UPDATER_BRANDING_MAX_UPLOAD_KB', 1024),
+    ],
+
+    'sync_token' => env('UPDATER_SYNC_TOKEN', ''),
+
     'ui' => [
         'enabled' => (bool) env('UPDATER_UI_ENABLED', true),
         'prefix' => env('UPDATER_UI_PREFIX', '_updater'),
@@ -81,10 +94,11 @@ return [
             'auto_provision_admin' => (bool) env('UPDATER_UI_AUTO_PROVISION_ADMIN', true),
             'default_email' => env('UPDATER_UI_DEFAULT_EMAIL', 'admin@admin.com'),
             'default_password' => env('UPDATER_UI_DEFAULT_PASSWORD', '123456'),
+            'default_name' => env('UPDATER_UI_DEFAULT_NAME', 'Admin'),
             'session_ttl_minutes' => (int) env('UPDATER_UI_SESSION_TTL', 120),
             'rate_limit' => [
-                'max_attempts' => (int) env('UPDATER_UI_LOGIN_MAX_ATTEMPTS', 10),
-                'decay_minutes' => (int) env('UPDATER_UI_LOGIN_DECAY_MINUTES', 10),
+                'max_attempts' => (int) env('UPDATER_UI_RATE_LIMIT_MAX', 10),
+                'window_seconds' => (int) env('UPDATER_UI_RATE_LIMIT_WINDOW', 600),
             ],
             '2fa' => [
                 'enabled' => (bool) env('UPDATER_UI_2FA_ENABLED', true),
