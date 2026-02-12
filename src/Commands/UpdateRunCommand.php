@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Commands;
 
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
+use Argws\LaravelUpdater\Support\ManagerStore;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -20,14 +21,39 @@ class UpdateRunCommand extends Command
         {--no-snapshot : Não executa snapshot}
         {--no-build : Não executa build de assets}
         {--allow-dirty : Permite git dirty}
-        {--dry-run : Executa apenas simulação (sem alterações)}';
+        {--dry-run : Executa apenas simulação (sem alterações)}
+        {--update-type= : Tipo de update (git_merge|git_ff_only|git_tag|zip_release)}
+        {--tag= : Tag alvo para update por tag}
+        {--source-id= : ID da fonte a ativar antes da execução}
+        {--profile-id= : ID do perfil a ativar antes da execução}';
     protected $description = 'Executa a atualização completa do sistema.';
 
-    public function handle(UpdaterKernel $kernel): int
+    public function handle(UpdaterKernel $kernel, ManagerStore $managerStore): int
     {
         if (!$this->option('force') && !$this->confirm('Confirma execução da atualização em produção?')) {
             $this->warn('Operação cancelada.');
+
             return self::INVALID;
+        }
+
+        $sourceId = (int) ($this->option('source-id') ?: 0);
+        if ($sourceId > 0) {
+            $managerStore->setActiveSource($sourceId);
+        }
+
+        $profileId = (int) ($this->option('profile-id') ?: 0);
+        if ($profileId > 0) {
+            $managerStore->activateProfile($profileId);
+        }
+
+        $updateType = (string) ($this->option('update-type') ?: '');
+        if ($updateType !== '') {
+            config(['updater.git.update_type' => $updateType]);
+        }
+
+        $tag = trim((string) ($this->option('tag') ?: ''));
+        if ($tag !== '') {
+            config(['updater.git.tag' => $tag]);
         }
 
         $seeders = (array) $this->option('seeder');
@@ -44,15 +70,21 @@ class UpdateRunCommand extends Command
             'no_build' => (bool) $this->option('no-build'),
             'allow_dirty' => (bool) $this->option('allow-dirty'),
             'dry_run' => (bool) $this->option('dry-run'),
+            'update_type' => $updateType,
+            'target_tag' => $tag,
+            'source_id' => $sourceId > 0 ? $sourceId : null,
+            'profile_id' => $profileId > 0 ? $profileId : null,
         ];
 
         try {
             $context = $kernel->run($options);
             $this->info('Atualização concluída com sucesso.');
             $this->line(json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+
             return self::SUCCESS;
         } catch (Throwable $throwable) {
             $this->error($throwable->getMessage());
+
             return self::FAILURE;
         }
     }

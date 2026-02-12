@@ -70,3 +70,23 @@ php artisan system:update:run --force
 php artisan system:update:rollback --force
 php artisan system:update:status
 ```
+
+## Notificação de nova atualização (tag/release)
+
+Habilite no `.env`:
+
+```dotenv
+UPDATER_NOTIFY_ENABLED=true
+UPDATER_NOTIFY_TO=devops@empresa.com
+UPDATER_TRIGGER_DRIVER=auto
+```
+
+Agende no `App\Console\Kernel` da aplicação host:
+
+```php
+$schedule->command('system:update:notify')->hourly();
+```
+
+## Regra de fonte/perfil ativo
+
+Você pode cadastrar várias fontes e perfis, mas apenas **UMA fonte ativa** e **UM perfil ativo** devem ficar selecionados por vez para evitar conflitos.

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Http\Controllers;
 
+use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
+use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
@@ -26,6 +28,9 @@ class ManagerController extends Controller
                 'activeProfile' => $this->managerStore->activeProfile(),
                 'sources' => $this->managerStore->sources(),
                 'activeSource' => $this->managerStore->activeSource(),
+                'statusCheck' => $this->buildUpdateStatusCheck(),
+                'availableTags' => $this->availableTags(),
+                'fullUpdateEnabled' => (bool) config('updater.full_update.enabled', false),
             ]),
             'runs' => view('laravel-updater::sections.runs', [
                 'runs' => app(UpdaterKernel::class)->stateStore()->recentRuns(100),
@@ -374,6 +379,35 @@ class ManagerController extends Controller
         }
 
         return $data;
+    }
+
+
+    private function buildUpdateStatusCheck(): array
+    {
+        try {
+            return app(UpdaterKernel::class)->check(false);
+        } catch (\Throwable $e) {
+            return [
+                'current_revision' => 'N/A',
+                'remote' => 'N/A',
+                'behind_by_commits' => 0,
+                'has_updates' => false,
+                'latest_tag' => null,
+                'has_update_by_tag' => false,
+                'warning' => 'Falha ao consultar atualizações: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /** @return array<int,string> */
+    private function availableTags(): array
+    {
+        $driver = app(CodeDriverInterface::class);
+        if (!$driver instanceof GitDriver) {
+            return [];
+        }
+
+        return $driver->listTags(30);
     }
 
     private function ensureAdmin(): array

@@ -14,45 +14,124 @@ class TriggerDispatcher
     {
     }
 
-    public function triggerUpdate(array $options = []): void
+    public function triggerUpdate(array $options = []): ?int
     {
-        if ($this->driver === 'queue' && function_exists('dispatch')) {
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunUpdateJob($options));
 
-            return;
+            return null;
         }
 
         $args = $this->buildUpdateCommandArgs($options);
 
-        if ($this->driver === 'process' && class_exists(Process::class)) {
-            $process = new Process($args);
+        if ($driver === 'sync') {
+            $before = (int) (($this->store->lastRun()['id'] ?? 0));
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->setTimeout(null);
+                $process->run();
+            } else {
+                exec(implode(' ', array_map('escapeshellarg', $args)));
+            }
+
+            $after = (int) (($this->store->lastRun()['id'] ?? 0));
+
+            return $after > $before ? $after : null;
+        }
+
+        if ($driver === 'process' && class_exists(Process::class)) {
+            $process = new Process($args, base_path());
             $process->disableOutput();
             $process->start();
 
-            return;
+            return null;
+        }
+
+        if ($this->isWindows()) {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->disableOutput();
+                $process->start();
+            }
+
+            return null;
         }
 
         $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 &';
         exec($cmd);
+
+        return null;
     }
 
     public function triggerRollback(): void
     {
-        if ($this->driver === 'queue' && function_exists('dispatch')) {
+        $driver = $this->resolveDriver();
+        if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunRollbackJob());
 
             return;
         }
 
-        if ($this->driver === 'process' && class_exists(Process::class)) {
-            $process = new Process(['php', 'artisan', 'system:update:rollback', '--force']);
+        $args = ['php', 'artisan', 'system:update:rollback', '--force'];
+
+        if ($driver === 'sync') {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->setTimeout(null);
+                $process->run();
+
+                return;
+            }
+
+            exec('php artisan system:update:rollback --force');
+
+            return;
+        }
+
+        if ($driver === 'process' && class_exists(Process::class)) {
+            $process = new Process($args, base_path());
             $process->disableOutput();
             $process->start();
 
             return;
         }
 
+        if ($this->isWindows()) {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->disableOutput();
+                $process->start();
+            }
+
+            return;
+        }
+
         exec('php artisan system:update:rollback --force > /dev/null 2>&1 &');
+    }
+
+    private function resolveDriver(): string
+    {
+        $configured = strtolower(trim($this->driver));
+        if ($configured === '' || $configured === 'auto') {
+            if ($this->isWindows()) {
+                return 'sync';
+            }
+
+            return 'background';
+        }
+
+        if ($this->isWindows() && in_array($configured, ['background', 'process'], true)) {
+            return 'sync';
+        }
+
+        return $configured;
+    }
+
+    private function isWindows(): bool
+    {
+        return PHP_OS_FAMILY === 'Windows';
     }
 
     private function buildUpdateCommandArgs(array $options): array
@@ -65,6 +144,22 @@ class TriggerDispatcher
 
         if ((bool) ($options['allow_dirty'] ?? false)) {
             $args[] = '--allow-dirty';
+        }
+
+        if (!empty($options['update_type'])) {
+            $args[] = '--update-type=' . (string) $options['update_type'];
+        }
+
+        if (!empty($options['target_tag'])) {
+            $args[] = '--tag=' . (string) $options['target_tag'];
+        }
+
+        if (!empty($options['source_id'])) {
+            $args[] = '--source-id=' . (int) $options['source_id'];
+        }
+
+        if (!empty($options['profile_id'])) {
+            $args[] = '--profile-id=' . (int) $options['profile_id'];
         }
 
         $seeders = $options['seeders'] ?? [];
