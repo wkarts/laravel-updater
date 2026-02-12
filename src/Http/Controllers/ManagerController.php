@@ -487,7 +487,25 @@ class ManagerController extends Controller
     private function buildUpdateStatusCheck(): array
     {
         try {
-            return app(UpdaterKernel::class)->check(false);
+            $status = app(UpdaterKernel::class)->check(false);
+            if (($status['current_revision'] ?? 'N/A') === 'N/A') {
+                /** @var ShellRunner $shell */
+                $shell = app(ShellRunner::class);
+                $git = $shell->run(['git', 'rev-parse', 'HEAD'], base_path());
+                if ((int) ($git['exit_code'] ?? 1) === 0 && trim((string) ($git['stdout'] ?? '')) !== '') {
+                    $status['current_revision'] = trim((string) $git['stdout']);
+                }
+            }
+
+            if (($status['current_revision'] ?? 'N/A') === 'N/A') {
+                $last = app(UpdaterKernel::class)->stateStore()->lastRun() ?? [];
+                $fallbackRevision = (string) ($last['revision_after'] ?? $last['revision_before'] ?? '');
+                if ($fallbackRevision !== '') {
+                    $status['current_revision'] = $fallbackRevision;
+                }
+            }
+
+            return $status;
         } catch (\Throwable $e) {
             return [
                 'current_revision' => 'N/A',

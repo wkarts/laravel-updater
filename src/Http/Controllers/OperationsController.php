@@ -57,14 +57,19 @@ class OperationsController extends Controller
         $shouldDryRunFirst = $action === 'simulate' || ($action === '' && (bool) $request->boolean('dry_run_before', true));
 
         if ($shouldDryRunFirst) {
-            $runId = $dispatcher->triggerUpdate([
-                'dry_run' => true,
-                'allow_dirty' => false,
-                'update_type' => $updateType,
-                'target_tag' => $targetTag,
-                'profile_id' => (int) $data['profile_id'],
-                'source_id' => (int) $data['source_id'],
-            ]);
+            try {
+                $runId = $dispatcher->triggerUpdate([
+                    'dry_run' => true,
+                    'allow_dirty' => false,
+                    'update_type' => $updateType,
+                    'target_tag' => $targetTag,
+                    'profile_id' => (int) $data['profile_id'],
+                    'source_id' => (int) $data['source_id'],
+                    'sync' => true,
+                ]);
+            } catch (\Throwable $e) {
+                return back()->withErrors(['update' => 'Falha ao executar dry-run: ' . $e->getMessage()])->withInput();
+            }
 
             if ($runId === null) {
                 return back()->with('status', 'Dry-run disparado. Aguarde e confira em Execuções para aprovar.');
@@ -83,14 +88,19 @@ class OperationsController extends Controller
 
         $this->performMandatoryFullBackup($request);
 
-        $runId = $dispatcher->triggerUpdate([
-            'allow_dirty' => false,
-            'dry_run' => false,
-            'update_type' => $updateType,
-            'target_tag' => $targetTag,
-            'profile_id' => (int) $data['profile_id'],
-            'source_id' => (int) $data['source_id'],
-        ]);
+        try {
+            $runId = $dispatcher->triggerUpdate([
+                'allow_dirty' => false,
+                'dry_run' => false,
+                'update_type' => $updateType,
+                'target_tag' => $targetTag,
+                'profile_id' => (int) $data['profile_id'],
+                'source_id' => (int) $data['source_id'],
+                'sync' => true,
+            ]);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['update' => 'Falha ao aplicar atualização: ' . $e->getMessage()])->withInput();
+        }
 
         if ($runId !== null) {
             return redirect()->route('updater.runs.show', ['id' => $runId])
@@ -121,14 +131,19 @@ class OperationsController extends Controller
 
         $this->performMandatoryFullBackup($request);
 
-        $runId = $dispatcher->triggerUpdate([
-            'allow_dirty' => false,
-            'dry_run' => false,
-            'update_type' => (string) ($pending['update_type'] ?? 'git_merge'),
-            'target_tag' => (string) ($pending['target_tag'] ?? ''),
-            'profile_id' => (int) ($pending['profile_id'] ?? 0),
-            'source_id' => (int) ($pending['source_id'] ?? 0),
-        ]);
+        try {
+            $runId = $dispatcher->triggerUpdate([
+                'allow_dirty' => false,
+                'dry_run' => false,
+                'update_type' => (string) ($pending['update_type'] ?? 'git_merge'),
+                'target_tag' => (string) ($pending['target_tag'] ?? ''),
+                'profile_id' => (int) ($pending['profile_id'] ?? 0),
+                'source_id' => (int) ($pending['source_id'] ?? 0),
+                'sync' => true,
+            ]);
+        } catch (\Throwable $e) {
+            return back()->withErrors(['update' => 'Falha ao executar atualização aprovada: ' . $e->getMessage()]);
+        }
 
         session()->forget('updater_pending_approval_' . $id);
 

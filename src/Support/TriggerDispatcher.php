@@ -16,7 +16,8 @@ class TriggerDispatcher
 
     public function triggerUpdate(array $options = []): ?int
     {
-        $driver = ((bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
+        $forceSync = (bool) ($options['sync'] ?? false);
+        $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
 
         if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunUpdateJob($options));
@@ -32,8 +33,15 @@ class TriggerDispatcher
                 $process = new Process($args, base_path());
                 $process->setTimeout(null);
                 $process->run();
+
+                if (!$process->isSuccessful()) {
+                    throw new \RuntimeException('Falha ao executar atualização: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                }
             } else {
-                exec(implode(' ', array_map('escapeshellarg', $args)));
+                exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+                if ((int) $exitCode !== 0) {
+                    throw new \RuntimeException('Falha ao executar atualização em modo sync.');
+                }
             }
 
             $after = (int) (($this->store->lastRun()['id'] ?? 0));
@@ -67,7 +75,7 @@ class TriggerDispatcher
 
     public function triggerRollback(): void
     {
-        $driver = ((bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
+        $driver = $this->resolveDriver();
         if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunRollbackJob());
 
@@ -81,6 +89,9 @@ class TriggerDispatcher
                 $process = new Process($args, base_path());
                 $process->setTimeout(null);
                 $process->run();
+                if (!$process->isSuccessful()) {
+                    throw new \RuntimeException('Falha ao executar rollback: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                }
 
                 return;
             }
