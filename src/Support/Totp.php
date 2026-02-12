@@ -6,6 +6,18 @@ namespace Argws\LaravelUpdater\Support;
 
 class Totp
 {
+    public function qrcodeDataUri(string $otpauthUri, int $size = 220): string
+    {
+        $url = 'https://chart.googleapis.com/chart?chs=' . $size . 'x' . $size . '&cht=qr&chl=' . rawurlencode($otpauthUri);
+        $png = @file_get_contents($url);
+
+        if ($png === false || $png === '') {
+            $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7pPjQAAAAASUVORK5CYII=') ?: '';
+        }
+
+        return 'data:image/png;base64,' . base64_encode((string) $png);
+    }
+
     public function generateSecret(int $bytes = 20): string
     {
         return Base32::encode(random_bytes($bytes));

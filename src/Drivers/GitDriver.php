@@ -56,9 +56,24 @@ class GitDriver implements CodeDriverInterface
     {
         $remote = $this->config['remote'];
         $branch = $this->config['branch'];
+        $updateType = (string) ($this->config['update_type'] ?? 'git_ff_only');
+
+        if ($updateType === 'git_tag' && !empty($this->config['tag'])) {
+            $result = $this->shellRunner->run(['git', 'fetch', '--tags', $remote]);
+            if ($result['exit_code'] !== 0) {
+                throw new GitException($result['stderr'] ?: 'Falha ao buscar tags.');
+            }
+            $result = $this->shellRunner->run(['git', 'checkout', 'tags/' . (string) $this->config['tag']]);
+            if ($result['exit_code'] !== 0) {
+                throw new GitException($result['stderr'] ?: 'Falha ao realizar checkout da tag.');
+            }
+
+            return $this->currentRevision();
+        }
+
         $args = ['git', 'pull', $remote, $branch];
 
-        if (($this->config['ff_only'] ?? false) === true) {
+        if ($updateType === 'git_ff_only' || (($this->config['ff_only'] ?? false) === true && $updateType !== 'git_merge')) {
             $args[] = '--ff-only';
         }
 

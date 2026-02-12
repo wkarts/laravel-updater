@@ -11,6 +11,8 @@ return [
         'remote' => env('UPDATER_GIT_REMOTE', 'origin'),
         'branch' => env('UPDATER_GIT_BRANCH', 'main'),
         'ff_only' => (bool) env('UPDATER_GIT_FF_ONLY', true),
+        'update_type' => env('UPDATER_GIT_UPDATE_TYPE', 'git_ff_only'),
+        'tag' => env('UPDATER_GIT_TAG', ''),
     ],
 
     'backup' => [
@@ -106,6 +108,14 @@ return [
                 'issuer' => env('UPDATER_UI_2FA_ISSUER', 'Argws Updater'),
             ],
         ],
+    ],
+
+    'report' => [
+        'enabled' => (bool) env('UPDATER_REPORT_ENABLED', false),
+        'on' => env('UPDATER_REPORT_ON', 'failure'),
+        'to' => env('UPDATER_REPORT_TO', ''),
+        'subject_prefix' => env('UPDATER_REPORT_SUBJECT_PREFIX', '[Updater]'),
+        'attach_logs' => (bool) env('UPDATER_REPORT_ATTACH_LOGS', false),
     ],
 
     'log' => [
