@@ -163,6 +163,14 @@ class StateStore
             used_at TEXT NULL
         )');
 
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id INTEGER NOT NULL,
+            profile_id INTEGER NOT NULL,
+            last_notified_key TEXT NOT NULL,
+            notified_at TEXT NOT NULL
+        )');
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_seed_registry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             seeder_class TEXT NOT NULL,
@@ -314,6 +322,27 @@ class StateStore
             ':file_path' => $path,
             ':created_at' => date(DATE_ATOM),
             ':metadata_json' => json_encode($metadata, JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
+
+    public function lastNotification(int $sourceId, int $profileId): ?array
+    {
+        $stmt = $this->connect()->prepare('SELECT * FROM updater_notifications WHERE source_id = :source_id AND profile_id = :profile_id ORDER BY id DESC LIMIT 1');
+        $stmt->execute([':source_id' => $sourceId, ':profile_id' => $profileId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
+    public function saveNotification(int $sourceId, int $profileId, string $key): void
+    {
+        $stmt = $this->connect()->prepare('INSERT INTO updater_notifications (source_id, profile_id, last_notified_key, notified_at) VALUES (:source_id, :profile_id, :last_notified_key, :notified_at)');
+        $stmt->execute([
+            ':source_id' => $sourceId,
+            ':profile_id' => $profileId,
+            ':last_notified_key' => $key,
+            ':notified_at' => date(DATE_ATOM),
         ]);
     }
 
