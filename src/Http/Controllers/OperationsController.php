@@ -50,6 +50,7 @@ class OperationsController extends Controller
     public function backupNow(string $type, Request $request): RedirectResponse
     {
         $runId = $this->stateStore->createRun(['manual_backup' => $type]);
+        $this->stateStore->addRunLog($runId, 'info', 'Iniciando backup manual.', ['tipo' => $type]);
 
         try {
             $created = match ($type) {
@@ -60,6 +61,11 @@ class OperationsController extends Controller
             };
 
             $this->stateStore->finishRun($runId, ['revision_before' => null, 'revision_after' => null]);
+            $this->stateStore->addRunLog($runId, 'info', 'Backup manual finalizado com sucesso.', [
+                'tipo' => $type,
+                'backup_id' => $created['id'],
+                'arquivo' => $created['path'],
+            ]);
             $this->managerStore->addAuditLog($this->actorId($request), 'backup', [
                 'tipo' => $type,
                 'run_id' => $runId,
@@ -69,6 +75,10 @@ class OperationsController extends Controller
             return back()->with('status', 'Backup manual gerado com sucesso.');
         } catch (\Throwable $e) {
             $this->stateStore->updateRunStatus($runId, 'failed', ['message' => $e->getMessage()]);
+            $this->stateStore->addRunLog($runId, 'error', 'Falha ao gerar backup manual.', [
+                'tipo' => $type,
+                'erro' => $e->getMessage(),
+            ]);
 
             return back()->withErrors(['backup' => 'Falha ao gerar backup: ' . $e->getMessage()]);
         }
@@ -172,24 +182,45 @@ class OperationsController extends Controller
 
     public function progressStatus(): JsonResponse
     {
-        $stmt = $this->stateStore->pdo()->prepare("SELECT * FROM runs WHERE options_json LIKE :q ORDER BY id DESC LIMIT 8");
-        $stmt->execute([':q' => '%manual_backup%']);
-        $runs = $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        $runningStmt = $this->stateStore->pdo()->prepare("SELECT * FROM runs WHERE options_json LIKE :q AND status = 'running' ORDER BY id DESC LIMIT 1");
+        $runningStmt->execute([':q' => '%manual_backup%']);
+        $runningRun = $runningStmt->fetch(\PDO::FETCH_ASSOC) ?: null;
 
-        $runIds = array_values(array_filter(array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $runs)));
+        $lastStmt = $this->stateStore->pdo()->prepare("SELECT * FROM runs WHERE options_json LIKE :q ORDER BY id DESC LIMIT 1");
+        $lastStmt->execute([':q' => '%manual_backup%']);
+        $lastRun = $lastStmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+
+        $targetRunId = (int) ($runningRun['id'] ?? $lastRun['id'] ?? 0);
         $logs = [];
-        if ($runIds !== []) {
-            $in = implode(',', array_fill(0, count($runIds), '?'));
-            $logStmt = $this->stateStore->pdo()->prepare('SELECT * FROM updater_logs WHERE run_id IN (' . $in . ') ORDER BY id DESC LIMIT 20');
-            foreach ($runIds as $idx => $id) {
-                $logStmt->bindValue($idx + 1, $id, \PDO::PARAM_INT);
-            }
-            $logStmt->execute();
+        if ($targetRunId > 0) {
+            $logStmt = $this->stateStore->pdo()->prepare('SELECT * FROM updater_logs WHERE run_id = :run_id ORDER BY id DESC LIMIT 20');
+            $logStmt->execute([':run_id' => $targetRunId]);
             $logs = $logStmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
         }
 
+        $active = $runningRun !== null;
+        $progress = 0;
+        $message = 'Sem backup em execução no momento.';
+
+        if ($active) {
+            $progress = 65;
+            $message = 'Executando run #' . (int) $runningRun['id'] . '...';
+        } elseif ($lastRun !== null) {
+            $status = strtolower((string) ($lastRun['status'] ?? ''));
+            if ($status === 'success') {
+                $progress = 100;
+                $message = 'Último backup concluído com sucesso (run #' . (int) $lastRun['id'] . ').';
+            } elseif ($status === 'failed') {
+                $progress = 100;
+                $message = 'Último backup falhou (run #' . (int) $lastRun['id'] . ').';
+            }
+        }
+
         return response()->json([
-            'runs' => $runs,
+            'active' => $active,
+            'progress' => $progress,
+            'message' => $message,
+            'run' => $runningRun ?? $lastRun,
             'logs' => $logs,
             'updated_at' => date(DATE_ATOM),
         ]);

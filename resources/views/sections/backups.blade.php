@@ -60,21 +60,14 @@ async function updaterBackupPoll() {
     try {
         const res = await fetch('{{ route('updater.backups.progress.status') }}', {headers: {'X-Requested-With': 'XMLHttpRequest'}});
         const data = await res.json();
-        const runs = data.runs || [];
         const logs = data.logs || [];
 
         const txt = document.getElementById('backup-progress-text');
         const bar = document.getElementById('backup-progress-bar');
-        if (runs.length > 0) {
-            const running = runs.find(r => (r.status || '').toLowerCase() === 'running');
-            if (running) {
-                txt.innerText = 'Executando run #' + running.id + '...';
-                bar.style.width = '65%';
-            } else {
-                txt.innerText = 'Última atualização: ' + (data.updated_at || '-');
-                bar.style.width = '100%';
-                setTimeout(() => bar.style.width = '0%', 1800);
-            }
+        if (txt) txt.innerText = data.message || 'Sem backup em execução no momento.';
+        if (bar) {
+            const progress = Number(data.progress || 0);
+            bar.style.width = Math.max(0, Math.min(100, progress)) + '%';
         }
 
         const ul = document.getElementById('backup-progress-logs');
