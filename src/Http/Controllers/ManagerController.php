@@ -40,6 +40,7 @@ class ManagerController extends Controller
                 ),
             ]),
             'security' => view('laravel-updater::sections.security'),
+            'seeds' => redirect()->route('updater.seeds.index'),
             'admin-users' => redirect()->route('updater.users.index'),
             'settings' => redirect()->route('updater.settings.index'),
             default => abort(404),
@@ -294,7 +295,7 @@ class ManagerController extends Controller
         $data = $request->validate([
             'id' => ['nullable', 'integer'],
             'name' => ['required', 'string', 'max:120'],
-            'type' => ['required', 'in:github,gitlab,bitbucket,git,zip'],
+            'type' => ['required', 'in:github,gitlab,bitbucket,git_ff_only,git_merge,git_tag,zip_release'],
             'repo_url' => ['required', 'string', 'max:255'],
             'branch' => ['nullable', 'string', 'max:120'],
             'auth_mode' => ['required', 'in:token,ssh,none'],

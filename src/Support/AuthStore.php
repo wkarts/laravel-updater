@@ -79,6 +79,56 @@ class AuthStore
         ]);
     }
 
+
+    public function replaceRecoveryCodes(int $userId, int $count = 10): array
+    {
+        $plainCodes = [];
+        $this->pdo()->prepare('DELETE FROM updater_recovery_codes WHERE user_id = :user_id')->execute([':user_id' => $userId]);
+
+        for ($i = 0; $i < $count; $i++) {
+            $code = strtoupper(substr(bin2hex(random_bytes(5)), 0, 10));
+            $plainCodes[] = $code;
+
+            $stmt = $this->pdo()->prepare('INSERT INTO updater_recovery_codes (user_id, code_hash, created_at, used_at) VALUES (:user_id, :code_hash, :created_at, NULL)');
+            $stmt->execute([
+                ':user_id' => $userId,
+                ':code_hash' => password_hash($code, PASSWORD_BCRYPT),
+                ':created_at' => date(DATE_ATOM),
+            ]);
+        }
+
+        return $plainCodes;
+    }
+
+    public function consumeRecoveryCode(int $userId, string $code): bool
+    {
+        $stmt = $this->pdo()->prepare('SELECT id, code_hash FROM updater_recovery_codes WHERE user_id = :user_id AND used_at IS NULL');
+        $stmt->execute([':user_id' => $userId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+        foreach ($rows as $row) {
+            if (password_verify(trim($code), (string) $row['code_hash'])) {
+                $update = $this->pdo()->prepare('UPDATE updater_recovery_codes SET used_at = :used_at WHERE id = :id');
+                $update->execute([':used_at' => date(DATE_ATOM), ':id' => $row['id']]);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function recoveryCodesSummary(int $userId): array
+    {
+        $stmt = $this->pdo()->prepare('SELECT COUNT(*) as total, SUM(CASE WHEN used_at IS NULL THEN 1 ELSE 0 END) as disponiveis FROM updater_recovery_codes WHERE user_id = :user_id');
+        $stmt->execute([':user_id' => $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+        return [
+            'total' => (int) ($row['total'] ?? 0),
+            'disponiveis' => (int) ($row['disponiveis'] ?? 0),
+        ];
+    }
+
     public function createSession(int $userId, ?string $ip, ?string $userAgent, int $ttlMinutes): string
     {
         $sessionId = bin2hex(random_bytes(32));
