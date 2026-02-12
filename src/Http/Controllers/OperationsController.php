@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Http\Controllers;
 
 use Argws\LaravelUpdater\Contracts\BackupDriverInterface;
+use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Storage;
 
 class OperationsController extends Controller
 {
@@ -21,7 +24,8 @@ class OperationsController extends Controller
         private readonly StateStore $stateStore,
         private readonly ShellRunner $shell,
         private readonly BackupDriverInterface $backupDriver,
-        private readonly FileManager $fileManager
+        private readonly FileManager $fileManager,
+        private readonly ArchiveManager $archiveManager
     ) {
     }
 
@@ -73,9 +77,27 @@ class OperationsController extends Controller
     public function downloadBackup(int $id)
     {
         $backup = $this->findBackup($id);
-        abort_if($backup === null || !is_file((string) $backup['path']), 404);
+        abort_if($backup === null, 404);
 
-        return response()->download((string) $backup['path'], basename((string) $backup['path']));
+        $path = (string) ($backup['path'] ?? '');
+        if (is_file($path)) {
+            return response()->download($path, basename($path));
+        }
+
+        $disk = (string) config('updater.backup.upload_disk', '');
+        $prefix = trim((string) config('updater.backup.upload_prefix', 'updater/backups'), '/');
+        $remote = $prefix . '/' . basename($path);
+        if ($disk !== '' && Storage::disk($disk)->exists($remote)) {
+            return response()->streamDownload(function () use ($disk, $remote): void {
+                $stream = Storage::disk($disk)->readStream($remote);
+                if (is_resource($stream)) {
+                    fpassthru($stream);
+                    fclose($stream);
+                }
+            }, basename($path));
+        }
+
+        abort(404);
     }
 
     public function downloadUpdaterLog()
@@ -122,7 +144,7 @@ class OperationsController extends Controller
             if ($type === 'database') {
                 $this->backupDriver->restore($path);
             } else {
-                $this->shell->runOrFail(['tar', '-xzf', $path, '-C', base_path()]);
+                $this->archiveManager->extractArchive($path, base_path());
             }
 
             $this->managerStore->addAuditLog((int) $actor['id'], 'restore', [
@@ -146,6 +168,18 @@ class OperationsController extends Controller
 
             return back()->withErrors(['restore' => 'Falha no restore: ' . $e->getMessage()]);
         }
+    }
+
+    public function progressStatus(): JsonResponse
+    {
+        $runs = $this->stateStore->recentRuns(8);
+        $logs = $this->managerStore->logs(null, null, 'backup');
+
+        return response()->json([
+            'runs' => $runs,
+            'logs' => array_slice($logs, 0, 20),
+            'updated_at' => date(DATE_ATOM),
+        ]);
     }
 
     public function seedsIndex()
@@ -180,11 +214,9 @@ class OperationsController extends Controller
         $snapshotPath = rtrim((string) config('updater.snapshot.path'), '/');
         $this->fileManager->ensureDirectory($snapshotPath);
 
-        $filePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His') . '.tar.gz';
+        $filePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His') . '.zip';
         $excludes = config('updater.paths.exclude_snapshot', []);
-        $excludeArgs = array_map(static fn (string $item): string => '--exclude=' . escapeshellarg($item), $excludes);
-        $command = sprintf('tar -czf %s %s .', escapeshellarg($filePath), implode(' ', $excludeArgs));
-        $this->shell->runOrFail(['bash', '-lc', $command]);
+        $this->archiveManager->createZipFromDirectory(base_path(), $filePath, $excludes);
 
         return $this->insertBackupRow('snapshot', $filePath, $runId);
     }
@@ -194,16 +226,11 @@ class OperationsController extends Controller
         $db = $this->createDatabaseBackup($runId);
         $snapshot = $this->createSnapshotBackup($runId);
 
-        $fullPath = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His') . '.tar.gz';
-        $command = sprintf(
-            'tar -czf %s -C %s %s -C %s %s',
-            escapeshellarg($fullPath),
-            escapeshellarg(dirname((string) $db['path'])),
-            escapeshellarg(basename((string) $db['path'])),
-            escapeshellarg(dirname((string) $snapshot['path'])),
-            escapeshellarg(basename((string) $snapshot['path']))
-        );
-        $this->shell->runOrFail(['bash', '-lc', $command]);
+        $fullPath = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His') . '.zip';
+        $this->archiveManager->createZipFromFiles([
+            (string) $db['path'] => 'database/' . basename((string) $db['path']),
+            (string) $snapshot['path'] => 'snapshot/' . basename((string) $snapshot['path']),
+        ], $fullPath);
 
         return $this->insertBackupRow('full', $fullPath, $runId);
     }
@@ -218,6 +245,17 @@ class OperationsController extends Controller
             ':created_at' => date(DATE_ATOM),
             ':run_id' => $runId,
         ]);
+
+        $disk = (string) config('updater.backup.upload_disk', '');
+        $prefix = trim((string) config('updater.backup.upload_prefix', 'updater/backups'), '/');
+        if ($disk !== '' && is_file($path)) {
+            $remote = $prefix . '/' . basename($path);
+            $stream = fopen($path, 'rb');
+            if (is_resource($stream)) {
+                Storage::disk($disk)->put($remote, $stream);
+                fclose($stream);
+            }
+        }
 
         return [
             'id' => (int) $this->stateStore->pdo()->lastInsertId(),

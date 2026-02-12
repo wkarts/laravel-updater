@@ -47,6 +47,7 @@ if ((bool) config('updater.ui.enabled', true)) {
 
                 Route::post('/backups/{type}/create', [OperationsController::class, 'backupNow'])->whereIn('type', ['database', 'snapshot', 'full'])->name('updater.backups.create');
                 Route::get('/backups/log/download', [OperationsController::class, 'downloadUpdaterLog'])->name('updater.backups.log.download');
+                Route::get('/backups/progress/status', [OperationsController::class, 'progressStatus'])->name('updater.backups.progress.status');
                 Route::get('/backups/{id}/download', [OperationsController::class, 'downloadBackup'])->whereNumber('id')->name('updater.backups.download');
                 Route::get('/backups/{id}/restore', [OperationsController::class, 'showRestoreForm'])->whereNumber('id')->name('updater.backups.restore.form');
                 Route::post('/backups/{id}/restore', [OperationsController::class, 'restoreBackup'])->whereNumber('id')->name('updater.backups.restore');

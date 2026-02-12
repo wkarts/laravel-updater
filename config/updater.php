@@ -20,6 +20,8 @@ return [
         'keep' => (int) env('UPDATER_BACKUP_KEEP', 10),
         'path' => env('UPDATER_BACKUP_PATH', storage_path('app/updater/backups')),
         'compress' => (bool) env('UPDATER_BACKUP_COMPRESS', true),
+        'upload_disk' => env('UPDATER_BACKUP_UPLOAD_DISK', ''),
+        'upload_prefix' => env('UPDATER_BACKUP_UPLOAD_PREFIX', 'updater/backups'),
     ],
 
     'snapshot' => [

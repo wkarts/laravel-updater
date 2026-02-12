@@ -237,6 +237,14 @@ class AuthStore
         ]);
     }
 
+
+    public function totalUsers(): int
+    {
+        $stmt = $this->pdo()->query('SELECT COUNT(*) FROM updater_users');
+
+        return (int) $stmt->fetchColumn();
+    }
+
     public function ensureDefaultAdmin(): void
     {
         if (!(bool) $this->cfg('updater.ui.auth.enabled', false) || !(bool) $this->cfg('updater.ui.auth.auto_provision_admin', true)) {
@@ -247,7 +255,7 @@ class AuthStore
         $password = (string) $this->cfg('updater.ui.auth.default_password', '123456');
         $name = (string) $this->cfg('updater.ui.auth.default_name', 'Admin');
 
-        if ($this->findUserByEmail($email) !== null) {
+        if ($this->totalUsers() > 0 || $this->findUserByEmail($email) !== null) {
             return;
         }
 

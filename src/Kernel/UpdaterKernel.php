@@ -46,7 +46,7 @@ class UpdaterKernel
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
             new MaintenanceOnStep($services['shell']),
             new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
-            new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot')),
+            new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot'), $services['archive'] ?? null),
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
