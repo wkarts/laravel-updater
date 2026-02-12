@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Http\Controllers;
 
+use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
+use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
-use Argws\LaravelUpdater\Support\TriggerDispatcher;
+use Argws\LaravelUpdater\Support\ShellRunner;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -26,11 +28,17 @@ class ManagerController extends Controller
                 'activeProfile' => $this->managerStore->activeProfile(),
                 'sources' => $this->managerStore->sources(),
                 'activeSource' => $this->managerStore->activeSource(),
+                'statusCheck' => $this->buildUpdateStatusCheck(),
+                'availableTags' => $this->availableTags(),
+                'fullUpdateEnabled' => (bool) config('updater.full_update.enabled', false),
             ]),
             'runs' => view('laravel-updater::sections.runs', [
                 'runs' => app(UpdaterKernel::class)->stateStore()->recentRuns(100),
             ]),
-            'sources' => view('laravel-updater::sections.sources', ['sources' => $this->managerStore->sources()]),
+            'sources' => view('laravel-updater::sections.sources', [
+                'sources' => $this->managerStore->sources(),
+                'editingSource' => $request->filled('edit') ? $this->managerStore->findSource((int) $request->input('edit')) : null,
+            ]),
             'profiles' => redirect()->route('updater.profiles.index'),
             'backups' => view('laravel-updater::sections.backups', ['backups' => $this->managerStore->backups()]),
             'logs' => view('laravel-updater::sections.logs', [
@@ -296,14 +304,26 @@ class ManagerController extends Controller
         $data = $request->validate([
             'id' => ['nullable', 'integer'],
             'name' => ['required', 'string', 'max:120'],
-            'type' => ['required', 'in:github,gitlab,bitbucket,git_ff_only,git_merge,git_tag,zip_release'],
+            'type' => ['required', 'in:github,gitlab,bitbucket,git,zip,git_ff_only,git_merge,git_tag,zip_release'],
             'repo_url' => ['required', 'string', 'max:255'],
             'branch' => ['nullable', 'string', 'max:120'],
             'auth_mode' => ['required', 'in:token,ssh,none'],
+            'auth_username' => ['nullable', 'string', 'max:120'],
+            'auth_password' => ['nullable', 'string', 'max:255'],
             'token_encrypted' => ['nullable', 'string', 'max:255'],
             'ssh_private_key_path' => ['nullable', 'string', 'max:255'],
             'active' => ['nullable', 'boolean'],
         ]);
+
+        $data['type'] = match ((string) $data['type']) {
+            'git' => 'git_merge',
+            'zip' => 'zip_release',
+            default => (string) $data['type'],
+        };
+
+        if (!empty($data['auth_password']) && empty($data['token_encrypted'])) {
+            $data['token_encrypted'] = $data['auth_password'];
+        }
 
         $id = isset($data['id']) ? (int) $data['id'] : null;
         $this->managerStore->createOrUpdateSource($data, $id);
@@ -328,9 +348,42 @@ class ManagerController extends Controller
         return back()->with('status', 'Registro removido com sucesso.');
     }
 
-    public function testSourceConnection(TriggerDispatcher $dispatcher)
+    public function testSourceConnection(Request $request, ShellRunner $shellRunner): RedirectResponse
     {
-        return back()->with('status', 'Teste de conexão executado (simulado). Driver: ' . get_class($dispatcher));
+        $data = $request->validate([
+            'source_id' => ['nullable', 'integer'],
+        ]);
+
+        $source = null;
+        if (!empty($data['source_id'])) {
+            $source = $this->managerStore->findSource((int) $data['source_id']);
+        }
+
+        if ($source === null) {
+            $source = $this->managerStore->activeSource();
+        }
+
+        if ($source === null) {
+            return back()->withErrors(['source' => 'Nenhuma fonte selecionada/ativa para testar.']);
+        }
+
+        $repoUrl = $this->buildAuthRepoUrl($source);
+        if ($repoUrl === '') {
+            return back()->withErrors(['source' => 'A fonte não possui URL de repositório válida.']);
+        }
+
+        $env = ['GIT_TERMINAL_PROMPT' => '0'];
+        $head = $shellRunner->run(['git', 'ls-remote', '--heads', $repoUrl], null, $env);
+        $tags = $shellRunner->run(['git', 'ls-remote', '--tags', '--refs', $repoUrl], null, $env);
+
+        if ($head['exit_code'] !== 0 && $tags['exit_code'] !== 0) {
+            return back()->withErrors(['source' => 'Falha ao conectar com a fonte: ' . ($head['stderr'] ?: $tags['stderr'] ?: 'erro desconhecido')]);
+        }
+
+        $versions = $this->parseRemoteVersions((string) ($tags['stdout'] ?? ''));
+        $preview = $versions !== [] ? implode(', ', array_slice($versions, 0, 10)) : 'Sem tags encontradas';
+
+        return back()->with('status', 'Conexão validada com sucesso. Versões encontradas: ' . $preview);
     }
 
     public function createApiToken(Request $request): RedirectResponse
@@ -374,6 +427,103 @@ class ManagerController extends Controller
         }
 
         return $data;
+    }
+
+
+
+    private function buildAuthRepoUrl(array $source): string
+    {
+        $repoUrl = trim((string) ($source['repo_url'] ?? ''));
+        if ($repoUrl === '') {
+            return '';
+        }
+
+        $authMode = (string) ($source['auth_mode'] ?? 'none');
+        $username = trim((string) ($source['auth_username'] ?? ''));
+        $password = trim((string) ($source['auth_password'] ?? $source['token_encrypted'] ?? ''));
+
+        if (!str_starts_with($repoUrl, 'https://')) {
+            return $repoUrl;
+        }
+
+        if ($authMode === 'token' && $password !== '') {
+            if ($username !== '') {
+                return preg_replace('#^https://#', 'https://' . rawurlencode($username) . ':' . rawurlencode($password) . '@', $repoUrl) ?: $repoUrl;
+            }
+
+            return preg_replace('#^https://#', 'https://' . rawurlencode($password) . '@', $repoUrl) ?: $repoUrl;
+        }
+
+        if ($authMode === 'ssh') {
+            return $repoUrl;
+        }
+
+        return $repoUrl;
+    }
+
+    /** @return array<int,string> */
+    private function parseRemoteVersions(string $stdout): array
+    {
+        $tags = [];
+        foreach (explode("\n", $stdout) as $line) {
+            $parts = preg_split('/\s+/', trim($line));
+            if (!is_array($parts) || count($parts) < 2) {
+                continue;
+            }
+
+            $ref = (string) $parts[1];
+            if (!str_starts_with($ref, 'refs/tags/')) {
+                continue;
+            }
+
+            $tags[] = str_replace('refs/tags/', '', $ref);
+        }
+
+        usort($tags, static fn (string $a, string $b): int => version_compare($b, $a));
+
+        return array_values(array_unique($tags));
+    }
+
+    private function buildUpdateStatusCheck(): array
+    {
+        try {
+            return app(UpdaterKernel::class)->check(false);
+        } catch (\Throwable $e) {
+            return [
+                'current_revision' => 'N/A',
+                'remote' => 'N/A',
+                'behind_by_commits' => 0,
+                'has_updates' => false,
+                'latest_tag' => null,
+                'has_update_by_tag' => false,
+                'warning' => 'Falha ao consultar atualizações: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /** @return array<int,string> */
+    private function availableTags(): array
+    {
+        $activeSource = $this->managerStore->activeSource();
+        if (is_array($activeSource) && !empty($activeSource['repo_url'])) {
+            /** @var ShellRunner $shellRunner */
+            $shellRunner = app(ShellRunner::class);
+            $repoUrl = $this->buildAuthRepoUrl($activeSource);
+            $result = $shellRunner->run(['git', 'ls-remote', '--tags', '--refs', $repoUrl], null, ['GIT_TERMINAL_PROMPT' => '0']);
+            if (($result['exit_code'] ?? 1) === 0) {
+                $tags = $this->parseRemoteVersions((string) ($result['stdout'] ?? ''));
+                if ($tags !== []) {
+                    return array_slice($tags, 0, 30);
+                }
+            }
+        }
+
+        $driver = app(CodeDriverInterface::class);
+        if (!$driver instanceof GitDriver) {
+            return [];
+        }
+
+        return $driver->listTags(30);
     }
 
     private function ensureAdmin(): array
