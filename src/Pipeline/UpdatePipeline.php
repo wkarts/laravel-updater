@@ -18,10 +18,13 @@ class UpdatePipeline
     /** @param array<int, PipelineStepInterface> $steps */
     public function __construct(private readonly array $steps, private readonly LoggerInterface $logger, private readonly StateStore $store)
     {
+        $this->store->ensureSchema();
     }
 
     public function run(array &$context): void
     {
+        $this->store->ensureSchema();
+
         foreach ($this->steps as $step) {
             if (!$step->shouldRun($context)) {
                 continue;
@@ -45,6 +48,8 @@ class UpdatePipeline
 
     public function rollback(array &$context): void
     {
+        $this->store->ensureSchema();
+
         foreach (array_reverse($this->executed) as $step) {
             try {
                 $step->rollback($context);
