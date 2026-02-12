@@ -16,6 +16,10 @@ class GitDriver implements CodeDriverInterface
 
     public function currentRevision(): string
     {
+        if (!$this->isGitRepository()) {
+            return 'N/A';
+        }
+
         return trim($this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD'])['stdout']);
     }
 
@@ -26,6 +30,16 @@ class GitDriver implements CodeDriverInterface
 
     public function statusUpdates(): array
     {
+        if (!$this->isGitRepository()) {
+            return [
+                'local' => 'N/A',
+                'remote' => 'N/A',
+                'behind_by_commits' => 0,
+                'ahead_by_commits' => 0,
+                'has_updates' => false,
+            ];
+        }
+
         $remote = $this->config['remote'];
         $branch = $this->config['branch'];
         $this->shellRunner->runOrFail(['git', 'fetch', $remote, $branch]);
@@ -47,6 +61,10 @@ class GitDriver implements CodeDriverInterface
 
     public function isWorkingTreeClean(): bool
     {
+        if (!$this->isGitRepository()) {
+            return true;
+        }
+
         $result = $this->shellRunner->runOrFail(['git', 'status', '--porcelain']);
 
         return trim($result['stdout']) === '';
@@ -54,6 +72,10 @@ class GitDriver implements CodeDriverInterface
 
     public function update(): string
     {
+        if (!$this->isGitRepository()) {
+            throw new GitException('Diretório atual não é um repositório git válido.');
+        }
+
         $remote = $this->config['remote'];
         $branch = $this->config['branch'];
         $updateType = (string) ($this->config['update_type'] ?? 'git_ff_only');
@@ -87,9 +109,20 @@ class GitDriver implements CodeDriverInterface
 
     public function rollback(string $revision): void
     {
+        if (!$this->isGitRepository()) {
+            throw new GitException('Diretório atual não é um repositório git válido.');
+        }
+
         $result = $this->shellRunner->run(['git', 'reset', '--hard', $revision]);
         if ($result['exit_code'] !== 0) {
             throw new GitException($result['stderr'] ?: 'Falha no rollback de código via git.');
         }
+    }
+
+    private function isGitRepository(): bool
+    {
+        $result = $this->shellRunner->run(['git', 'rev-parse', '--is-inside-work-tree']);
+
+        return $result['exit_code'] === 0 && trim((string) $result['stdout']) === 'true';
     }
 }

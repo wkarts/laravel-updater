@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class UpdaterUiController extends Controller
 {
@@ -26,8 +27,21 @@ class UpdaterUiController extends Controller
         $lastRun = $store->lastRun();
         $runs = $store->recentRuns(20);
 
+        try {
+            $status = $kernel->status();
+        } catch (Throwable $e) {
+            $status = [
+                'enabled' => (bool) config('updater.enabled', true),
+                'mode' => (string) config('updater.mode', 'inplace'),
+                'channel' => (string) config('updater.channel', 'stable'),
+                'revision' => 'N/A',
+                'last_run' => $lastRun,
+                'warning' => 'Não foi possível carregar status completo: ' . $e->getMessage(),
+            ];
+        }
+
         return view('laravel-updater::dashboard', [
-            'status' => $kernel->status(),
+            'status' => $status,
             'lastRun' => $lastRun,
             'runs' => $runs,
             'branding' => $this->managerStore->resolvedBranding(),
