@@ -46,8 +46,10 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->name('updater.runs.show');
 
                 Route::post('/backups/{type}/create', [OperationsController::class, 'backupNow'])->whereIn('type', ['database', 'snapshot', 'full'])->name('updater.backups.create');
-                Route::get('/backups/{id}/download', [OperationsController::class, 'downloadBackup'])->name('updater.backups.download');
-                Route::post('/backups/{id}/restore', [OperationsController::class, 'restoreBackup'])->name('updater.backups.restore');
+                Route::get('/backups/log/download', [OperationsController::class, 'downloadUpdaterLog'])->name('updater.backups.log.download');
+                Route::get('/backups/{id}/download', [OperationsController::class, 'downloadBackup'])->whereNumber('id')->name('updater.backups.download');
+                Route::get('/backups/{id}/restore', [OperationsController::class, 'showRestoreForm'])->whereNumber('id')->name('updater.backups.restore.form');
+                Route::post('/backups/{id}/restore', [OperationsController::class, 'restoreBackup'])->whereNumber('id')->name('updater.backups.restore');
 
                 Route::get('/seeds', [OperationsController::class, 'seedsIndex'])->name('updater.seeds.index');
                 Route::post('/seeds/reapply', [OperationsController::class, 'reapplySeed'])->name('updater.seeds.reapply');

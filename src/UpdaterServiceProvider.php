@@ -121,6 +121,8 @@ class UpdaterServiceProvider extends ServiceProvider
 
             return $kernel;
         });
+
+        $this->app->alias(UpdaterKernel::class, 'updater.kernel');
     }
 
     public function boot(Router $router): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Http\Controllers;
 
+use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Illuminate\Http\RedirectResponse;
@@ -27,7 +28,7 @@ class ManagerController extends Controller
                 'activeSource' => $this->managerStore->activeSource(),
             ]),
             'runs' => view('laravel-updater::sections.runs', [
-                'runs' => app('updater.kernel')->stateStore()->recentRuns(100),
+                'runs' => app(UpdaterKernel::class)->stateStore()->recentRuns(100),
             ]),
             'sources' => view('laravel-updater::sections.sources', ['sources' => $this->managerStore->sources()]),
             'profiles' => redirect()->route('updater.profiles.index'),
