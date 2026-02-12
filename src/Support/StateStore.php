@@ -155,6 +155,23 @@ class StateStore
             revoked_at TEXT NULL
         )');
 
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_recovery_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            code_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            used_at TEXT NULL
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_seed_registry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seeder_class TEXT NOT NULL,
+            checksum TEXT NOT NULL,
+            applied_at TEXT NOT NULL,
+            app_revision TEXT NULL,
+            notes TEXT NULL
+        )');
+
         $this->connect()->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_updater_login_attempts_email_ip ON updater_login_attempts(email, ip)');
 
         $this->ensureColumn('updater_users', 'name', 'TEXT NULL');
@@ -190,6 +207,38 @@ class StateStore
         ]);
     }
 
+    public function updateRunStatus(int $runId, string $status, ?array $error = null): void
+    {
+        $stmt = $this->connect()->prepare('UPDATE runs SET finished_at=:finished_at, status=:status, error_json=:error_json WHERE id=:id');
+        $stmt->execute([
+            ':finished_at' => date(DATE_ATOM),
+            ':status' => $status,
+            ':error_json' => $error ? json_encode($error, JSON_UNESCAPED_UNICODE) : null,
+            ':id' => $runId,
+        ]);
+    }
+
+    public function findRun(int $runId): ?array
+    {
+        $stmt = $this->connect()->prepare('SELECT * FROM runs WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $runId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
+    public function addRunLog(?int $runId, string $level, string $message, array $context = []): void
+    {
+        $stmt = $this->connect()->prepare('INSERT INTO updater_logs (run_id, level, message, context_json, created_at) VALUES (:run_id, :level, :message, :context_json, :created_at)');
+        $stmt->execute([
+            ':run_id' => $runId,
+            ':level' => $level,
+            ':message' => $message,
+            ':context_json' => json_encode($context, JSON_UNESCAPED_UNICODE),
+            ':created_at' => date(DATE_ATOM),
+        ]);
+    }
+
     public function lastRun(): ?array
     {
         $stmt = $this->connect()->query('SELECT * FROM runs ORDER BY id DESC LIMIT 1');
@@ -205,6 +254,34 @@ class StateStore
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+
+    public function hasSeedApplied(string $seederClass, string $checksum): bool
+    {
+        $stmt = $this->connect()->prepare('SELECT COUNT(*) FROM updater_seed_registry WHERE seeder_class = :seeder_class AND checksum = :checksum');
+        $stmt->execute([':seeder_class' => $seederClass, ':checksum' => $checksum]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    public function registerSeed(string $seederClass, string $checksum, ?string $appRevision = null, ?string $notes = null): void
+    {
+        $stmt = $this->connect()->prepare('INSERT INTO updater_seed_registry (seeder_class, checksum, applied_at, app_revision, notes) VALUES (:seeder_class, :checksum, :applied_at, :app_revision, :notes)');
+        $stmt->execute([
+            ':seeder_class' => $seederClass,
+            ':checksum' => $checksum,
+            ':applied_at' => date(DATE_ATOM),
+            ':app_revision' => $appRevision,
+            ':notes' => $notes,
+        ]);
+    }
+
+    public function listSeedRegistry(): array
+    {
+        $stmt = $this->connect()->query('SELECT * FROM updater_seed_registry ORDER BY id DESC');
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }

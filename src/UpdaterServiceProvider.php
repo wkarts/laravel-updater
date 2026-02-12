@@ -16,6 +16,7 @@ use Argws\LaravelUpdater\Drivers\MysqlBackupDriver;
 use Argws\LaravelUpdater\Drivers\PgsqlBackupDriver;
 use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthMiddleware;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
+use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\AuthStore;
 use Argws\LaravelUpdater\Support\CacheLock;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
@@ -24,6 +25,7 @@ use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\LoggerFactory;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\PreflightChecker;
+use Argws\LaravelUpdater\Support\RunReportMailer;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\Totp;
@@ -41,6 +43,7 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->app->singleton(ShellRunner::class, fn () => new ShellRunner());
         $this->app->singleton(FileManager::class, fn () => new FileManager(new Filesystem()));
+        $this->app->singleton(ArchiveManager::class, fn () => new ArchiveManager());
         $this->app->singleton(EnvironmentDetector::class, fn () => new EnvironmentDetector());
         $this->app->singleton(StateStore::class, function () {
             $store = new StateStore((string) config('updater.sqlite.path'));
@@ -88,6 +91,8 @@ class UpdaterServiceProvider extends ServiceProvider
             );
         });
 
+        $this->app->singleton(RunReportMailer::class, fn () => new RunReportMailer());
+
         $this->app->singleton(TriggerDispatcher::class, function () {
             return new TriggerDispatcher((string) config('updater.trigger.driver', 'queue'), $this->app->make(StateStore::class));
         });
@@ -98,6 +103,7 @@ class UpdaterServiceProvider extends ServiceProvider
                 'shell' => $this->app->make(ShellRunner::class),
                 'backup' => $this->app->make(BackupDriverInterface::class),
                 'files' => $this->app->make(FileManager::class),
+                'archive' => $this->app->make(ArchiveManager::class),
                 'code' => $this->app->make(CodeDriverInterface::class),
                 'logger' => $this->app->make(LoggerInterface::class),
                 'store' => $this->app->make(StateStore::class),
@@ -110,13 +116,16 @@ class UpdaterServiceProvider extends ServiceProvider
                 $services['code'],
                 $this->app->make(PreflightChecker::class),
                 $services['store'],
-                $services['logger']
+                $services['logger'],
+                $this->app->make(RunReportMailer::class)
             );
 
             $this->app->instance('updater.kernel', $kernel);
 
             return $kernel;
         });
+
+        $this->app->alias(UpdaterKernel::class, 'updater.kernel');
     }
 
     public function boot(Router $router): void

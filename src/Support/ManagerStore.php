@@ -330,7 +330,12 @@ class ManagerStore
         $stmt = $this->pdo()->prepare($sql);
         $stmt->execute($params);
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        if ($rows !== []) {
+            return $rows;
+        }
+
+        return $this->readFallbackLogs($level, $q);
     }
 
     public function generateApiToken(string $name): array
@@ -394,6 +399,52 @@ class ManagerStore
             ':user_agent' => $userAgent,
             ':created_at' => date(DATE_ATOM),
         ]);
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    private function readFallbackLogs(?string $level = null, ?string $q = null): array
+    {
+        $path = (string) config('updater.log.path', storage_path('logs/updater.log'));
+        if (!is_file($path) || !is_readable($path)) {
+            return [];
+        }
+
+        $lines = @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (!is_array($lines) || $lines === []) {
+            return [];
+        }
+
+        $output = [];
+        foreach (array_reverse($lines) as $line) {
+            if (count($output) >= 200) {
+                break;
+            }
+
+            $decoded = json_decode($line, true);
+            if (!is_array($decoded)) {
+                continue;
+            }
+
+            $logLevel = strtolower((string) ($decoded['level_name'] ?? 'info'));
+            $message = (string) ($decoded['message'] ?? '');
+
+            if ($level !== null && $level !== '' && $logLevel !== strtolower($level) && !str_contains($logLevel, strtolower($level))) {
+                continue;
+            }
+
+            if ($q !== null && $q !== '' && !str_contains(strtolower($message), strtolower($q))) {
+                continue;
+            }
+
+            $output[] = [
+                'created_at' => (string) ($decoded['datetime'] ?? date(DATE_ATOM)),
+                'level' => $logLevel,
+                'message' => $message,
+                'run_id' => null,
+            ];
+        }
+
+        return $output;
     }
 
     private function pdo(): PDO

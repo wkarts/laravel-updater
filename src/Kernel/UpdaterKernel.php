@@ -22,6 +22,7 @@ use Argws\LaravelUpdater\Pipeline\Steps\SnapshotCodeStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SqlPatchStep;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\PreflightChecker;
+use Argws\LaravelUpdater\Support\RunReportMailer;
 use Argws\LaravelUpdater\Support\StateStore;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -34,7 +35,8 @@ class UpdaterKernel
         private readonly CodeDriverInterface $codeDriver,
         private readonly PreflightChecker $preflight,
         private readonly StateStore $store,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly RunReportMailer $reportMailer
     ) {
     }
 
@@ -44,11 +46,11 @@ class UpdaterKernel
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
             new MaintenanceOnStep($services['shell']),
             new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
-            new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot')),
+            new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot'), $services['archive'] ?? null),
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
-            new SeedStep($services['shell']),
+            new SeedStep($services['shell'], $services['store']),
             new SqlPatchStep((string) config('updater.patches.path'), $services['store']),
             new BuildAssetsStep($services['shell'], (bool) config('updater.build_assets', false)),
             new CacheClearStep($services['shell']),
@@ -74,7 +76,10 @@ class UpdaterKernel
     {
         $this->environmentDetector->ensureCli();
         $this->store->ensureSchema();
-        $this->preflight->validate($options);
+        $isDryRun = (bool) ($options['dry_run'] ?? false);
+        if (!$isDryRun) {
+            $this->preflight->validate($options);
+        }
 
         $runId = $this->store->createRun($options);
         $context = [
@@ -85,16 +90,40 @@ class UpdaterKernel
         ];
 
         try {
-            $this->pipeline->run($context);
-            $context['status'] = 'success';
-            $this->store->finishRun($runId, $context);
+            if ($isDryRun) {
+                $status = $this->codeDriver->statusUpdates();
+                $context['dry_run_plan'] = [
+                    'versao_atual' => $this->codeDriver->currentRevision(),
+                    'versao_alvo' => $status['remote'] ?? null,
+                    'diff_commits' => $status['behind_by_commits'] ?? 0,
+                    'steps' => ['lock','maintenance_on','backup_database','snapshot_code','git_update','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','health_check','maintenance_off'],
+                    'comandos_simulados' => [
+                        'git fetch origin <branch>',
+                        'git rev-list --count HEAD..origin/<branch>',
+                        'composer install --no-interaction --prefer-dist',
+                        'php artisan migrate --force',
+                        'php artisan db:seed --force',
+                    ],
+                    'preflight' => $this->preflight->report($options),
+                ];
+                $context['status'] = 'DRY_RUN';
+                $this->store->finishRun($runId, $context);
+                $this->store->updateRunStatus($runId, 'DRY_RUN');
+                $this->store->addRunLog($runId, 'info', 'Plano de dry-run gerado.', $context['dry_run_plan']);
+            } else {
+                $this->pipeline->run($context);
+                $context['status'] = 'success';
+                $this->store->finishRun($runId, $context);
+            }
             $this->logger->info('updater.run.success', $context);
+            $this->reportMailer->sendIfEnabled($context, (string) $context['status']);
             return $context;
         } catch (Throwable $throwable) {
             $context['status'] = 'failed';
             $context['error'] = $throwable->getMessage();
             $this->store->finishRun($runId, $context, ['message' => mb_substr($throwable->getMessage(), 0, 1000)]);
             $this->logger->error('updater.run.failed', $context);
+            $this->reportMailer->sendIfEnabled($context, 'failed');
             throw $throwable;
         }
     }

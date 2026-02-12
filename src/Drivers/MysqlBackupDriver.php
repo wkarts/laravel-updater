@@ -21,29 +21,40 @@ class MysqlBackupDriver implements BackupDriverInterface
 
     public function backup(string $name): string
     {
-        $path = rtrim($this->backupConfig['path'], '/');
+        $path = rtrim((string) $this->backupConfig['path'], '/\\');
         $this->files->ensureDirectory($path);
 
-        $file = $path . '/' . $name . '.sql';
-        $cnf = tempnam(sys_get_temp_dir(), 'updater_mysql_');
-        if ($cnf === false) {
-            throw new BackupException('Falha ao criar arquivo temporário de credenciais MySQL.');
+        $file = $path . DIRECTORY_SEPARATOR . $name . '.sql';
+        $binary = $this->resolveBinary('mysqldump');
+
+        $args = [
+            $binary,
+            '--host=' . (string) ($this->dbConfig['host'] ?? '127.0.0.1'),
+            '--port=' . (string) ($this->dbConfig['port'] ?? '3306'),
+            '--user=' . (string) ($this->dbConfig['username'] ?? ''),
+            '--result-file=' . $file,
+            (string) ($this->dbConfig['database'] ?? ''),
+        ];
+
+        $env = [];
+        if (!empty($this->dbConfig['password'])) {
+            $env['MYSQL_PWD'] = (string) $this->dbConfig['password'];
         }
 
-        file_put_contents($cnf, "[client]\nuser={$this->dbConfig['username']}\npassword={$this->dbConfig['password']}\nhost={$this->dbConfig['host']}\nport={$this->dbConfig['port']}\n");
-        chmod($cnf, 0600);
+        $result = $this->shellRunner->run($args, null, $env);
 
-        $command = sprintf('mysqldump --defaults-extra-file=%s %s > %s', escapeshellarg($cnf), escapeshellarg((string) $this->dbConfig['database']), escapeshellarg($file));
-        $result = $this->shellRunner->run(['bash', '-lc', $command]);
-        @unlink($cnf);
-
-        if ($result['exit_code'] !== 0) {
-            throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup MySQL.');
+        if ($result['exit_code'] !== 0 || !is_file($file)) {
+            throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup MySQL. Verifique caminho do mysqldump (UPDATER_MYSQLDUMP_BINARY).');
         }
 
-        if ((bool) ($this->backupConfig['compress'] ?? false)) {
-            $this->shellRunner->runOrFail(['gzip', '-f', $file]);
-            $file .= '.gz';
+        if ((bool) ($this->backupConfig['compress'] ?? false) && function_exists('gzencode')) {
+            $compressed = $file . '.gz';
+            $content = file_get_contents($file);
+            if ($content !== false) {
+                file_put_contents($compressed, gzencode($content, 9));
+                @unlink($file);
+                $file = $compressed;
+            }
         }
 
         $this->files->deleteOldFiles($path, (int) ($this->backupConfig['keep'] ?? 10));
@@ -55,19 +66,37 @@ class MysqlBackupDriver implements BackupDriverInterface
     {
         $source = $filePath;
         if (str_ends_with($filePath, '.gz')) {
-            $tmp = tempnam(sys_get_temp_dir(), 'updater_restore_') . '.sql';
-            $this->shellRunner->runOrFail(['bash', '-lc', sprintf('gunzip -c %s > %s', escapeshellarg($filePath), escapeshellarg($tmp))]);
+            $tmp = tempnam(sys_get_temp_dir(), 'updater_restore_');
+            if ($tmp === false) {
+                throw new BackupException('Falha ao criar arquivo temporário de restore.');
+            }
+
+            $raw = file_get_contents($filePath);
+            $decoded = $raw !== false ? gzdecode($raw) : false;
+            if ($decoded === false) {
+                throw new BackupException('Falha ao descompactar backup MySQL.');
+            }
+            file_put_contents($tmp, $decoded);
             $source = $tmp;
         }
 
-        $cnf = tempnam(sys_get_temp_dir(), 'updater_mysql_');
-        file_put_contents($cnf, "[client]\nuser={$this->dbConfig['username']}\npassword={$this->dbConfig['password']}\nhost={$this->dbConfig['host']}\nport={$this->dbConfig['port']}\n");
-        chmod($cnf, 0600);
+        $binary = $this->resolveBinary('mysql');
+        $args = [
+            $binary,
+            '--host=' . (string) ($this->dbConfig['host'] ?? '127.0.0.1'),
+            '--port=' . (string) ($this->dbConfig['port'] ?? '3306'),
+            '--user=' . (string) ($this->dbConfig['username'] ?? ''),
+            '--execute=source ' . $source,
+            (string) ($this->dbConfig['database'] ?? ''),
+        ];
 
-        $command = sprintf('mysql --defaults-extra-file=%s %s < %s', escapeshellarg($cnf), escapeshellarg((string) $this->dbConfig['database']), escapeshellarg($source));
-        $result = $this->shellRunner->run(['bash', '-lc', $command]);
+        $env = [];
+        if (!empty($this->dbConfig['password'])) {
+            $env['MYSQL_PWD'] = (string) $this->dbConfig['password'];
+        }
 
-        @unlink($cnf);
+        $result = $this->shellRunner->run($args, null, $env);
+
         if ($source !== $filePath) {
             @unlink($source);
         }
@@ -75,5 +104,26 @@ class MysqlBackupDriver implements BackupDriverInterface
         if ($result['exit_code'] !== 0) {
             throw new BackupException($result['stderr'] ?: 'Falha ao restaurar backup MySQL.');
         }
+    }
+
+    private function resolveBinary(string $default): string
+    {
+        $custom = (string) config('updater.backup.' . $default . '_binary', '');
+        if ($custom !== '') {
+            return $custom;
+        }
+
+        $candidates = [$default];
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $candidates[] = $default . '.exe';
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($this->shellRunner->binaryExists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $default;
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Pipeline\Steps;
 
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
+use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
@@ -15,7 +16,8 @@ class SnapshotCodeStep implements PipelineStepInterface
         private readonly ShellRunner $shellRunner,
         private readonly FileManager $fileManager,
         private readonly StateStore $store,
-        private readonly array $config
+        private readonly array $config,
+        private readonly ?ArchiveManager $archiveManager = null
     ) {
     }
 
@@ -24,20 +26,24 @@ class SnapshotCodeStep implements PipelineStepInterface
     public function shouldRun(array $context): bool
     {
         $enabled = (bool) ($this->config['enabled'] ?? false);
+
         return $enabled && !(bool) ($context['options']['no_snapshot'] ?? false);
     }
 
     public function handle(array &$context): void
     {
-        $path = rtrim($this->config['path'], '/');
+        $path = rtrim((string) ($this->config['path'] ?? storage_path('app/updater/snapshots')), '/');
         $this->fileManager->ensureDirectory($path);
-        $snapshot = $path . '/snapshot_' . date('Ymd_His') . '.tar.gz';
+        $snapshot = $path . '/snapshot_' . date('Ymd_His') . '.zip';
 
         $excludes = config('updater.paths.exclude_snapshot', []);
-        $excludeArgs = array_map(static fn (string $item): string => '--exclude=' . escapeshellarg($item), $excludes);
-        $command = sprintf('tar -czf %s %s .', escapeshellarg($snapshot), implode(' ', $excludeArgs));
+        if ($this->archiveManager !== null) {
+            $this->archiveManager->createZipFromDirectory(base_path(), $snapshot, $excludes);
+        } else {
+            $context['snapshot_warning'] = 'ArchiveManager não disponível para snapshot.';
+            return;
+        }
 
-        $this->shellRunner->runOrFail(['bash', '-lc', $command]);
         $context['snapshot_file'] = $snapshot;
         $this->store->registerArtifact('snapshot', $snapshot, ['run_id' => $context['run_id'] ?? null]);
         $this->fileManager->deleteOldFiles($path, (int) ($this->config['keep'] ?? 10));
@@ -45,12 +51,10 @@ class SnapshotCodeStep implements PipelineStepInterface
 
     public function rollback(array &$context): void
     {
-        if (empty($context['snapshot_file']) && !empty($context['revision_before'])) {
+        if (empty($context['snapshot_file']) || $this->archiveManager === null) {
             return;
         }
 
-        if (!empty($context['snapshot_file'])) {
-            $this->shellRunner->runOrFail(['tar', '-xzf', $context['snapshot_file'], '-C', base_path()]);
-        }
+        $this->archiveManager->extractArchive((string) $context['snapshot_file'], base_path());
     }
 }
