@@ -16,6 +16,30 @@ class PreflightChecker
     ) {
     }
 
+    public function report(array $options = []): array
+    {
+        $report = ['binaries' => [], 'paths' => [], 'disk' => [], 'git_clean' => true];
+
+        $binaries = ['git', 'php', 'composer', 'tar', 'gzip'];
+        foreach ($binaries as $binary) {
+            $report['binaries'][$binary] = $this->shell->binaryExists($binary);
+        }
+
+        $requireClean = (bool) ($this->config['require_clean_git'] ?? true);
+        $allowDirty = (bool) ($options['allow_dirty'] ?? false);
+        $report['git_clean'] = !$requireClean || $allowDirty || $this->git->isWorkingTreeClean();
+
+        $minFree = (int) ($this->config['min_free_disk_mb'] ?? 200);
+        $free = (int) floor((disk_free_space(base_path()) ?: 0) / 1024 / 1024);
+        $report['disk'] = ['free_mb' => $free, 'min_mb' => $minFree, 'ok' => $free >= $minFree];
+
+        foreach ([config('updater.backup.path'), config('updater.snapshot.path'), dirname((string) config('updater.sqlite.path'))] as $path) {
+            $report['paths'][] = ['path' => (string) $path, 'writable' => is_dir($path) ? is_writable($path) : is_writable(dirname((string) $path))];
+        }
+
+        return $report;
+    }
+
     public function validate(array $options = []): void
     {
         $binaries = ['git', 'php', 'composer', 'tar', 'gzip'];
