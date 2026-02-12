@@ -70,3 +70,65 @@ php artisan system:update:run --force
 php artisan system:update:rollback --force
 php artisan system:update:status
 ```
+
+## Notificação de nova atualização (tag/release)
+
+Habilite no `.env`:
+
+```dotenv
+UPDATER_NOTIFY_ENABLED=true
+UPDATER_NOTIFY_TO=devops@empresa.com
+UPDATER_TRIGGER_DRIVER=auto
+```
+
+Agende no `App\Console\Kernel` da aplicação host:
+
+```php
+$schedule->command('system:update:notify')->hourly();
+```
+
+## Regra de fonte/perfil ativo
+
+Você pode cadastrar várias fontes e perfis, mas apenas **UMA fonte ativa** e **UM perfil ativo** devem ficar selecionados por vez para evitar conflitos.
+
+## Guia rápido de uso de fontes de atualização
+
+### 1) Cadastrar fonte
+Na tela **Fontes** (`/_updater/sources`):
+- Informe nome, tipo, URL e branch.
+- Escolha autenticação (`none`, `token`, `ssh`).
+- Marque **Definir como fonte ativa** se quiser usar imediatamente.
+
+> Você pode cadastrar várias fontes, mas apenas **uma** fica ativa por vez.
+
+### 2) Editar e excluir fonte
+Na listagem de fontes:
+- Botão **Editar** abre a própria tela com os campos preenchidos.
+- Botão **Excluir** remove a fonte após confirmação.
+
+### 3) Testar conexão real
+Na tela de fontes, use **Testar conexão real da fonte**.
+O teste executa `git ls-remote` para validar acesso e listar versões/tags remotas.
+
+## Guia de atualização (fluxo recomendado)
+
+1. Vá em **Atualizações** (`/_updater/updates`).
+2. Selecione o perfil e a fonte.
+3. Escolha o modo (`merge`, `ff-only`, `tag`, `full update` se habilitado).
+4. Mantenha **Dry-run antes** marcado (padrão).
+5. Clique em **Simular (Dry-run)**.
+6. Na tela da execução, clique em **Aprovar e executar** e informe a senha de admin.
+
+> O backup FULL é obrigatório antes da atualização real via UI.
+
+## Notificações de atualização (opcional)
+
+As notificações são opcionais e aceitam múltiplos destinatários:
+
+```dotenv
+UPDATER_NOTIFY_ENABLED=true
+UPDATER_NOTIFY_TO=devops@empresa.com,ti@empresa.com,owner@empresa.com
+UPDATER_TRIGGER_DRIVER=auto
+```
+
+Também é aceito `;` como separador de e-mails.
