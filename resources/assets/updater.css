@@ -390,3 +390,23 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         font-size: 13px;
     }
 }
+
+
+.source-actions > * {
+    min-width: 180px;
+}
+
+.source-row-actions {
+    gap: 6px;
+}
+
+.source-row-actions .btn {
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .source-actions > *,
+    .source-row-actions > * {
+        min-width: 100%;
+    }
+}

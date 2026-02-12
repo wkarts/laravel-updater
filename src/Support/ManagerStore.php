@@ -184,6 +184,8 @@ class ManagerStore
             ':repo_url' => $data['repo_url'],
             ':branch' => $data['branch'] ?? 'main',
             ':auth_mode' => $data['auth_mode'] ?? 'none',
+            ':auth_username' => $data['auth_username'] ?? null,
+            ':auth_password' => $data['auth_password'] ?? null,
             ':token_encrypted' => $data['token_encrypted'] ?? null,
             ':ssh_private_key_path' => $data['ssh_private_key_path'] ?? null,
             ':active' => (int) ($data['active'] ?? 0),
@@ -195,11 +197,11 @@ class ManagerStore
         }
 
         if ($id === null) {
-            $stmt = $this->pdo()->prepare('INSERT INTO updater_sources (name, type, repo_url, branch, auth_mode, token_encrypted, ssh_private_key_path, active, created_at, updated_at)
-            VALUES (:name, :type, :repo_url, :branch, :auth_mode, :token_encrypted, :ssh_private_key_path, :active, :created_at, :updated_at)');
+            $stmt = $this->pdo()->prepare('INSERT INTO updater_sources (name, type, repo_url, branch, auth_mode, auth_username, auth_password, token_encrypted, ssh_private_key_path, active, created_at, updated_at)
+            VALUES (:name, :type, :repo_url, :branch, :auth_mode, :auth_username, :auth_password, :token_encrypted, :ssh_private_key_path, :active, :created_at, :updated_at)');
             $payload[':created_at'] = date(DATE_ATOM);
         } else {
-            $stmt = $this->pdo()->prepare('UPDATE updater_sources SET name=:name, type=:type, repo_url=:repo_url, branch=:branch, auth_mode=:auth_mode, token_encrypted=:token_encrypted, ssh_private_key_path=:ssh_private_key_path, active=:active, updated_at=:updated_at WHERE id=:id');
+            $stmt = $this->pdo()->prepare('UPDATE updater_sources SET name=:name, type=:type, repo_url=:repo_url, branch=:branch, auth_mode=:auth_mode, auth_username=:auth_username, auth_password=:auth_password, token_encrypted=:token_encrypted, ssh_private_key_path=:ssh_private_key_path, active=:active, updated_at=:updated_at WHERE id=:id');
             $payload[':id'] = $id;
         }
 
