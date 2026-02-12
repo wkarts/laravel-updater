@@ -1,10 +1,4 @@
-@php(
-    $branding = $branding ?? [
-        'app_name' => config('updater.app.name', 'Updater'),
-        'app_sufix_name' => config('updater.app.sufix_name', ''),
-        'app_desc' => config('updater.app.desc', ''),
-    ]
-)
+@php($branding = $branding ?? app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding())
 @php($user = request()->attributes->get('updater_user'))
 <!doctype html>
 <html lang="pt-BR">

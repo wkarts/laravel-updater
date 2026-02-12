@@ -54,7 +54,14 @@ class ShellRunner
 
     public function binaryExists(string $binary): bool
     {
-        $result = $this->run(['bash', '-lc', 'command -v ' . escapeshellarg($binary) . ' >/dev/null 2>&1']);
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $result = $this->run(['where', $binary]);
+
+            return $result['exit_code'] === 0;
+        }
+
+        $result = $this->run(['which', $binary]);
+
         return $result['exit_code'] === 0;
     }
 }
