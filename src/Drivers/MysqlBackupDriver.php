@@ -25,9 +25,10 @@ class MysqlBackupDriver implements BackupDriverInterface
         $this->files->ensureDirectory($path);
 
         $file = $path . DIRECTORY_SEPARATOR . $name . '.sql';
+        $binary = $this->resolveBinary('mysqldump');
 
         $args = [
-            'mysqldump',
+            $binary,
             '--host=' . (string) ($this->dbConfig['host'] ?? '127.0.0.1'),
             '--port=' . (string) ($this->dbConfig['port'] ?? '3306'),
             '--user=' . (string) ($this->dbConfig['username'] ?? ''),
@@ -43,7 +44,7 @@ class MysqlBackupDriver implements BackupDriverInterface
         $result = $this->shellRunner->run($args, null, $env);
 
         if ($result['exit_code'] !== 0 || !is_file($file)) {
-            throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup MySQL.');
+            throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup MySQL. Verifique caminho do mysqldump (UPDATER_MYSQLDUMP_BINARY).');
         }
 
         if ((bool) ($this->backupConfig['compress'] ?? false) && function_exists('gzencode')) {
@@ -79,8 +80,9 @@ class MysqlBackupDriver implements BackupDriverInterface
             $source = $tmp;
         }
 
+        $binary = $this->resolveBinary('mysql');
         $args = [
-            'mysql',
+            $binary,
             '--host=' . (string) ($this->dbConfig['host'] ?? '127.0.0.1'),
             '--port=' . (string) ($this->dbConfig['port'] ?? '3306'),
             '--user=' . (string) ($this->dbConfig['username'] ?? ''),
@@ -102,5 +104,26 @@ class MysqlBackupDriver implements BackupDriverInterface
         if ($result['exit_code'] !== 0) {
             throw new BackupException($result['stderr'] ?: 'Falha ao restaurar backup MySQL.');
         }
+    }
+
+    private function resolveBinary(string $default): string
+    {
+        $custom = (string) config('updater.backup.' . $default . '_binary', '');
+        if ($custom !== '') {
+            return $custom;
+        }
+
+        $candidates = [$default];
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $candidates[] = $default . '.exe';
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($this->shellRunner->binaryExists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $default;
     }
 }

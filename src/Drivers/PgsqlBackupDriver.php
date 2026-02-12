@@ -25,8 +25,9 @@ class PgsqlBackupDriver implements BackupDriverInterface
         $this->files->ensureDirectory($path);
 
         $file = $path . DIRECTORY_SEPARATOR . $name . '.dump';
+        $binary = $this->resolveBinary('pg_dump');
         $args = [
-            'pg_dump',
+            $binary,
             '--host=' . (string) ($this->dbConfig['host'] ?? '127.0.0.1'),
             '--port=' . (string) ($this->dbConfig['port'] ?? '5432'),
             '--username=' . (string) ($this->dbConfig['username'] ?? ''),
@@ -38,7 +39,7 @@ class PgsqlBackupDriver implements BackupDriverInterface
         $result = $this->shellRunner->run($args, null, ['PGPASSWORD' => (string) ($this->dbConfig['password'] ?? '')]);
 
         if ($result['exit_code'] !== 0 || !is_file($file)) {
-            throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup PostgreSQL.');
+            throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup PostgreSQL. Verifique caminho do pg_dump (UPDATER_PG_DUMP_BINARY).');
         }
 
         if ((bool) ($this->backupConfig['compress'] ?? false) && function_exists('gzencode')) {
@@ -74,8 +75,9 @@ class PgsqlBackupDriver implements BackupDriverInterface
             $source = $tmp;
         }
 
+        $binary = $this->resolveBinary('pg_restore');
         $args = [
-            'pg_restore',
+            $binary,
             '--clean',
             '--if-exists',
             '--host=' . (string) ($this->dbConfig['host'] ?? '127.0.0.1'),
@@ -94,5 +96,26 @@ class PgsqlBackupDriver implements BackupDriverInterface
         if ($result['exit_code'] !== 0) {
             throw new BackupException($result['stderr'] ?: 'Falha ao restaurar backup PostgreSQL.');
         }
+    }
+
+    private function resolveBinary(string $default): string
+    {
+        $custom = (string) config('updater.backup.' . $default . '_binary', '');
+        if ($custom !== '') {
+            return $custom;
+        }
+
+        $candidates = [$default];
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $candidates[] = $default . '.exe';
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($this->shellRunner->binaryExists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $default;
     }
 }

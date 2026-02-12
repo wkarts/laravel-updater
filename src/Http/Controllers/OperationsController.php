@@ -172,12 +172,25 @@ class OperationsController extends Controller
 
     public function progressStatus(): JsonResponse
     {
-        $runs = $this->stateStore->recentRuns(8);
-        $logs = $this->managerStore->logs(null, null, 'backup');
+        $stmt = $this->stateStore->pdo()->prepare("SELECT * FROM runs WHERE options_json LIKE :q ORDER BY id DESC LIMIT 8");
+        $stmt->execute([':q' => '%manual_backup%']);
+        $runs = $stmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+
+        $runIds = array_values(array_filter(array_map(static fn (array $row): int => (int) ($row['id'] ?? 0), $runs)));
+        $logs = [];
+        if ($runIds !== []) {
+            $in = implode(',', array_fill(0, count($runIds), '?'));
+            $logStmt = $this->stateStore->pdo()->prepare('SELECT * FROM updater_logs WHERE run_id IN (' . $in . ') ORDER BY id DESC LIMIT 20');
+            foreach ($runIds as $idx => $id) {
+                $logStmt->bindValue($idx + 1, $id, \PDO::PARAM_INT);
+            }
+            $logStmt->execute();
+            $logs = $logStmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        }
 
         return response()->json([
             'runs' => $runs,
-            'logs' => array_slice($logs, 0, 20),
+            'logs' => $logs,
             'updated_at' => date(DATE_ATOM),
         ]);
     }

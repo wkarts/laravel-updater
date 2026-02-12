@@ -15,12 +15,10 @@ class ShellRunner
             throw new UpdaterException('Comando inválido: vazio.');
         }
 
-        $escaped = array_map(static fn (string $part): string => escapeshellarg($part), $command);
-        $fullCommand = implode(' ', $escaped);
-
         $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
         $workingDirectory = $cwd ?? getcwd();
-        $process = proc_open($fullCommand, $descriptor, $pipes, $workingDirectory ?: '.', $env === [] ? null : $env);
+
+        $process = proc_open($command, $descriptor, $pipes, $workingDirectory ?: '.', $env === [] ? null : $env);
 
         if (!is_resource($process)) {
             throw new UpdaterException('Falha ao iniciar comando de sistema.');
@@ -34,7 +32,7 @@ class ShellRunner
         $exitCode = proc_close($process);
 
         return [
-            'command' => $fullCommand,
+            'command' => implode(' ', $command),
             'stdout' => trim($stdout),
             'stderr' => trim($stderr),
             'exit_code' => $exitCode,

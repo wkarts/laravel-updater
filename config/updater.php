@@ -22,6 +22,10 @@ return [
         'compress' => (bool) env('UPDATER_BACKUP_COMPRESS', true),
         'upload_disk' => env('UPDATER_BACKUP_UPLOAD_DISK', ''),
         'upload_prefix' => env('UPDATER_BACKUP_UPLOAD_PREFIX', 'updater/backups'),
+        'mysqldump_binary' => env('UPDATER_MYSQLDUMP_BINARY', ''),
+        'mysql_binary' => env('UPDATER_MYSQL_BINARY', ''),
+        'pg_dump_binary' => env('UPDATER_PG_DUMP_BINARY', ''),
+        'pg_restore_binary' => env('UPDATER_PG_RESTORE_BINARY', ''),
     ],
 
     'snapshot' => [
