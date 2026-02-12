@@ -56,9 +56,6 @@ class GitDriver implements CodeDriverInterface
         $latestTag = $this->resolveRemoteTagLatest();
         $currentTag = $this->currentTag();
 
-        $latestTag = $this->resolveRemoteTagLatest();
-        $currentTag = $this->currentTag();
-
         return [
             'local' => $local,
             'remote' => $remoteHead,

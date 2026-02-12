@@ -46,6 +46,7 @@ if ((bool) config('updater.ui.enabled', true)) {
 
                 Route::post('/updates/execute', [OperationsController::class, 'executeUpdate'])->name('updater.updates.execute');
                 Route::post('/runs/{id}/approve', [OperationsController::class, 'approveAndExecute'])->whereNumber('id')->name('updater.runs.approve');
+                Route::get('/updates/progress/status', [OperationsController::class, 'updateProgressStatus'])->name('updater.updates.progress.status');
 
                 Route::post('/backups/{type}/create', [OperationsController::class, 'backupNow'])->whereIn('type', ['database', 'snapshot', 'full'])->name('updater.backups.create');
                 Route::get('/backups/log/download', [OperationsController::class, 'downloadUpdaterLog'])->name('updater.backups.log.download');

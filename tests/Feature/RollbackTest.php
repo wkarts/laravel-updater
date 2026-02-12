@@ -6,6 +6,7 @@ namespace Argws\LaravelUpdater\Tests\Feature;
 
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
 use Argws\LaravelUpdater\Pipeline\UpdatePipeline;
+use Argws\LaravelUpdater\Support\StateStore;
 use Monolog\Logger;
 use PHPUnit\Framework\TestCase;
 
@@ -29,7 +30,7 @@ class RollbackTest extends TestCase
             public function rollback(array &$context): void { $context['rollback2'] = true; }
         };
 
-        $pipeline = new UpdatePipeline([$okStep, $failStep], new Logger('test'));
+        $pipeline = new UpdatePipeline([$okStep, $failStep], new Logger('test'), new StateStore(sys_get_temp_dir() . '/updater-test-' . uniqid() . '-2.sqlite'));
 
         $this->expectException(\Throwable::class);
         try {

@@ -11,7 +11,7 @@
         <p><span class="badge">Perfil ativo: {{ $activeProfile['name'] ?? 'padrão' }}</span></p>
         <p><span class="badge">Fonte ativa: {{ $activeSource['name'] ?? 'repositório local' }}</span></p>
         <div class="form-inline" style="margin-top:10px;">
-            <form method="POST" action="{{ route('updater.trigger.update') }}">@csrf <button class="btn btn-primary" type="submit">Executar atualização</button></form>
+            <form method="POST" action="{{ route('updater.trigger.update') }}">@csrf <button class="btn btn-primary" data-update-action="1" type="submit">Executar atualização</button></form>
             <form method="POST" action="{{ route('updater.trigger.rollback') }}">@csrf <button class="btn btn-danger" type="submit">Executar rollback</button></form>
         </div>
     </div>
@@ -19,6 +19,13 @@
         <h3>Status do sistema</h3>
         <pre class="muted" style="white-space: pre-wrap;">{{ json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
     </div>
+</div>
+
+<div class="card" id="update-progress-card">
+    <h3>Andamento da atualização</h3>
+    <div class="progress-track"><div class="progress-fill" id="update-progress-fill" style="width:0%"></div></div>
+    <p id="update-progress-message" class="muted">Aguardando execução.</p>
+    <ul id="update-progress-logs" class="muted" style="margin:0; padding-left:18px;"></ul>
 </div>
 
 <div class="card">

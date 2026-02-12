@@ -54,7 +54,7 @@ class OperationsController extends Controller
         }
 
         $action = (string) $request->input('action', 'apply');
-        $shouldDryRunFirst = $action === 'simulate' || (bool) $request->boolean('dry_run_before', true);
+        $shouldDryRunFirst = $action === 'simulate' || ($action === '' && (bool) $request->boolean('dry_run_before', true));
 
         if ($shouldDryRunFirst) {
             $runId = $dispatcher->triggerUpdate([
@@ -284,6 +284,49 @@ class OperationsController extends Controller
 
             return back()->withErrors(['restore' => 'Falha no restore: ' . $e->getMessage()]);
         }
+    }
+
+
+    public function updateProgressStatus(): JsonResponse
+    {
+        $runningStmt = $this->stateStore->pdo()->query("SELECT * FROM runs WHERE status = 'running' ORDER BY id DESC LIMIT 1");
+        $runningRun = $runningStmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+
+        $lastRun = $this->stateStore->lastRun();
+        $targetRunId = (int) ($runningRun['id'] ?? $lastRun['id'] ?? 0);
+
+        $logs = [];
+        if ($targetRunId > 0) {
+            $logStmt = $this->stateStore->pdo()->prepare('SELECT * FROM updater_logs WHERE run_id = :run_id ORDER BY id DESC LIMIT 30');
+            $logStmt->execute([':run_id' => $targetRunId]);
+            $logs = array_reverse($logStmt->fetchAll(\PDO::FETCH_ASSOC) ?: []);
+        }
+
+        $progress = 0;
+        $message = 'Aguardando execução.';
+
+        if ($runningRun !== null) {
+            $progress = min(95, 20 + (count($logs) * 7));
+            $message = 'Atualização em andamento (run #' . (int) $runningRun['id'] . ').';
+        } elseif (is_array($lastRun)) {
+            $status = (string) ($lastRun['status'] ?? '');
+            if ($status === 'success' || $status === 'DRY_RUN') {
+                $progress = 100;
+                $message = $status === 'DRY_RUN' ? 'Dry-run concluído.' : 'Atualização concluída com sucesso.';
+            } elseif ($status === 'failed') {
+                $progress = 100;
+                $message = 'Atualização falhou. Verifique os detalhes.';
+            }
+        }
+
+        return response()->json([
+            'active' => $runningRun !== null,
+            'progress' => $progress,
+            'message' => $message,
+            'run' => $runningRun ?? $lastRun,
+            'logs' => $logs,
+            'updated_at' => date(DATE_ATOM),
+        ]);
     }
 
     public function progressStatus(): JsonResponse

@@ -81,9 +81,16 @@
         <div class="muted">Backup FULL é obrigatório e sempre será executado antes da atualização real.</div>
 
         <div class="form-inline">
-            <button class="btn" type="submit" name="action" value="simulate">Simular (Dry-run)</button>
-            <button class="btn btn-primary" type="submit" name="action" value="apply">Aplicar atualização</button>
+            <button class="btn" data-update-action="1" type="submit" name="action" value="simulate">Simular (Dry-run)</button>
+            <button class="btn btn-primary" data-update-action="1" type="submit" name="action" value="apply">Aplicar atualização</button>
         </div>
     </form>
 </div>
 @endsection
+
+<div class="card" id="update-progress-card" style="margin-top:14px;">
+    <h3>Progresso da atualização/rollback</h3>
+    <div class="progress-track"><div class="progress-fill" id="update-progress-fill" style="width:0%"></div></div>
+    <p id="update-progress-message" class="muted">Aguardando execução.</p>
+    <ul id="update-progress-logs" class="muted" style="margin:0; padding-left:18px;"></ul>
+</div>
