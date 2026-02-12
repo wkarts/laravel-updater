@@ -21,20 +21,35 @@ class PgsqlBackupDriver implements BackupDriverInterface
 
     public function backup(string $name): string
     {
-        $path = rtrim($this->backupConfig['path'], '/');
+        $path = rtrim((string) $this->backupConfig['path'], '/\\');
         $this->files->ensureDirectory($path);
 
-        $file = $path . '/' . $name . '.dump';
-        $cmd = sprintf('pg_dump --host=%s --port=%s --username=%s --dbname=%s --format=c --file=%s', escapeshellarg((string) $this->dbConfig['host']), escapeshellarg((string) $this->dbConfig['port']), escapeshellarg((string) $this->dbConfig['username']), escapeshellarg((string) $this->dbConfig['database']), escapeshellarg($file));
-        $result = $this->shellRunner->run(['bash', '-lc', $cmd], null, ['PGPASSWORD' => (string) ($this->dbConfig['password'] ?? '')]);
+        $file = $path . DIRECTORY_SEPARATOR . $name . '.dump';
+        $binary = $this->resolveBinary('pg_dump');
+        $args = [
+            $binary,
+            '--host=' . (string) ($this->dbConfig['host'] ?? '127.0.0.1'),
+            '--port=' . (string) ($this->dbConfig['port'] ?? '5432'),
+            '--username=' . (string) ($this->dbConfig['username'] ?? ''),
+            '--dbname=' . (string) ($this->dbConfig['database'] ?? ''),
+            '--format=c',
+            '--file=' . $file,
+        ];
 
-        if ($result['exit_code'] !== 0) {
-            throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup PostgreSQL.');
+        $result = $this->shellRunner->run($args, null, ['PGPASSWORD' => (string) ($this->dbConfig['password'] ?? '')]);
+
+        if ($result['exit_code'] !== 0 || !is_file($file)) {
+            throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup PostgreSQL. Verifique caminho do pg_dump (UPDATER_PG_DUMP_BINARY).');
         }
 
-        if ((bool) ($this->backupConfig['compress'] ?? false)) {
-            $this->shellRunner->runOrFail(['gzip', '-f', $file]);
-            $file .= '.gz';
+        if ((bool) ($this->backupConfig['compress'] ?? false) && function_exists('gzencode')) {
+            $compressed = $file . '.gz';
+            $content = file_get_contents($file);
+            if ($content !== false) {
+                file_put_contents($compressed, gzencode($content, 9));
+                @unlink($file);
+                $file = $compressed;
+            }
         }
 
         $this->files->deleteOldFiles($path, (int) ($this->backupConfig['keep'] ?? 10));
@@ -46,13 +61,33 @@ class PgsqlBackupDriver implements BackupDriverInterface
     {
         $source = $filePath;
         if (str_ends_with($filePath, '.gz')) {
-            $tmp = tempnam(sys_get_temp_dir(), 'updater_restore_') . '.dump';
-            $this->shellRunner->runOrFail(['bash', '-lc', sprintf('gunzip -c %s > %s', escapeshellarg($filePath), escapeshellarg($tmp))]);
+            $tmp = tempnam(sys_get_temp_dir(), 'updater_restore_');
+            if ($tmp === false) {
+                throw new BackupException('Falha ao criar arquivo temporário de restore.');
+            }
+
+            $raw = file_get_contents($filePath);
+            $decoded = $raw !== false ? gzdecode($raw) : false;
+            if ($decoded === false) {
+                throw new BackupException('Falha ao descompactar backup PostgreSQL.');
+            }
+            file_put_contents($tmp, $decoded);
             $source = $tmp;
         }
 
-        $cmd = sprintf('pg_restore --clean --if-exists --host=%s --port=%s --username=%s --dbname=%s %s', escapeshellarg((string) $this->dbConfig['host']), escapeshellarg((string) $this->dbConfig['port']), escapeshellarg((string) $this->dbConfig['username']), escapeshellarg((string) $this->dbConfig['database']), escapeshellarg($source));
-        $result = $this->shellRunner->run(['bash', '-lc', $cmd], null, ['PGPASSWORD' => (string) ($this->dbConfig['password'] ?? '')]);
+        $binary = $this->resolveBinary('pg_restore');
+        $args = [
+            $binary,
+            '--clean',
+            '--if-exists',
+            '--host=' . (string) ($this->dbConfig['host'] ?? '127.0.0.1'),
+            '--port=' . (string) ($this->dbConfig['port'] ?? '5432'),
+            '--username=' . (string) ($this->dbConfig['username'] ?? ''),
+            '--dbname=' . (string) ($this->dbConfig['database'] ?? ''),
+            $source,
+        ];
+
+        $result = $this->shellRunner->run($args, null, ['PGPASSWORD' => (string) ($this->dbConfig['password'] ?? '')]);
 
         if ($source !== $filePath) {
             @unlink($source);
@@ -61,5 +96,26 @@ class PgsqlBackupDriver implements BackupDriverInterface
         if ($result['exit_code'] !== 0) {
             throw new BackupException($result['stderr'] ?: 'Falha ao restaurar backup PostgreSQL.');
         }
+    }
+
+    private function resolveBinary(string $default): string
+    {
+        $custom = (string) config('updater.backup.' . $default . '_binary', '');
+        if ($custom !== '') {
+            return $custom;
+        }
+
+        $candidates = [$default];
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $candidates[] = $default . '.exe';
+        }
+
+        foreach ($candidates as $candidate) {
+            if ($this->shellRunner->binaryExists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $default;
     }
 }

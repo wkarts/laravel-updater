@@ -18,17 +18,21 @@ class TriggerDispatcher
     {
         if ($this->driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunUpdateJob($options));
+
             return;
         }
+
+        $args = $this->buildUpdateCommandArgs($options);
 
         if ($this->driver === 'process' && class_exists(Process::class)) {
-            $process = new Process(['php', 'artisan', 'system:update:run', '--force']);
+            $process = new Process($args);
             $process->disableOutput();
             $process->start();
+
             return;
         }
 
-        $cmd = 'php artisan system:update:run --force > /dev/null 2>&1 &';
+        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 &';
         exec($cmd);
     }
 
@@ -36,6 +40,7 @@ class TriggerDispatcher
     {
         if ($this->driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunRollbackJob());
+
             return;
         }
 
@@ -43,9 +48,34 @@ class TriggerDispatcher
             $process = new Process(['php', 'artisan', 'system:update:rollback', '--force']);
             $process->disableOutput();
             $process->start();
+
             return;
         }
 
         exec('php artisan system:update:rollback --force > /dev/null 2>&1 &');
+    }
+
+    private function buildUpdateCommandArgs(array $options): array
+    {
+        $args = ['php', 'artisan', 'system:update:run', '--force'];
+
+        if ((bool) ($options['dry_run'] ?? false)) {
+            $args[] = '--dry-run';
+        }
+
+        if ((bool) ($options['allow_dirty'] ?? false)) {
+            $args[] = '--allow-dirty';
+        }
+
+        $seeders = $options['seeders'] ?? [];
+        foreach ((array) $seeders as $seeder) {
+            $args[] = '--seeder=' . (string) $seeder;
+        }
+
+        if ((bool) ($options['seed'] ?? false)) {
+            $args[] = '--seed';
+        }
+
+        return $args;
     }
 }
