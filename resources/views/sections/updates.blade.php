@@ -81,8 +81,8 @@
         <div class="muted">Backup FULL é obrigatório e sempre será executado antes da atualização real.</div>
 
         <div class="form-inline">
-            <button class="btn" type="submit" name="dry_run_before" value="1">Simular (Dry-run)</button>
-            <button class="btn btn-primary" type="submit">Aplicar atualização</button>
+            <button class="btn" type="submit" name="action" value="simulate">Simular (Dry-run)</button>
+            <button class="btn btn-primary" type="submit" name="action" value="apply">Aplicar atualização</button>
         </div>
     </form>
 </div>

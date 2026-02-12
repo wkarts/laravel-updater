@@ -53,7 +53,10 @@ class OperationsController extends Controller
             return back()->withErrors(['target_tag' => 'Selecione uma tag para atualizar por tag.'])->withInput();
         }
 
-        if ((bool) $request->boolean('dry_run_before', true)) {
+        $action = (string) $request->input('action', 'apply');
+        $shouldDryRunFirst = $action === 'simulate' || (bool) $request->boolean('dry_run_before', true);
+
+        if ($shouldDryRunFirst) {
             $runId = $dispatcher->triggerUpdate([
                 'dry_run' => true,
                 'allow_dirty' => false,

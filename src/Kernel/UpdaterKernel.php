@@ -61,7 +61,6 @@ class UpdaterKernel
 
     public function check(bool $allowDirty = false): array
     {
-        $this->environmentDetector->ensureCli();
         $this->store->ensureSchema();
         $this->preflight->validate(['allow_dirty' => $allowDirty]);
 

@@ -16,7 +16,7 @@ class TriggerDispatcher
 
     public function triggerUpdate(array $options = []): ?int
     {
-        $driver = $this->resolveDriver();
+        $driver = ((bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
 
         if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunUpdateJob($options));
@@ -67,7 +67,7 @@ class TriggerDispatcher
 
     public function triggerRollback(): void
     {
-        $driver = $this->resolveDriver();
+        $driver = ((bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
         if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunRollbackJob());
 
