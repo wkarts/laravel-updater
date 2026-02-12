@@ -41,6 +41,52 @@
         }
     });
 
+    const progressFill = document.getElementById('update-progress-fill');
+    const progressMessage = document.getElementById('update-progress-message');
+    const progressLogs = document.getElementById('update-progress-logs');
+    const updateButtons = document.querySelectorAll('[data-update-action="1"]');
+
+    function toggleUpdateButtons(disabled) {
+        updateButtons.forEach(function (btn) {
+            btn.disabled = disabled;
+            btn.style.opacity = disabled ? '0.65' : '1';
+            btn.style.pointerEvents = disabled ? 'none' : 'auto';
+        });
+    }
+
+    function renderLogs(logs) {
+        if (!progressLogs) {
+            return;
+        }
+
+        progressLogs.innerHTML = '';
+        (logs || []).slice(-8).forEach(function (log) {
+            const li = document.createElement('li');
+            li.textContent = '[' + (log.level || 'info') + '] ' + (log.message || '');
+            progressLogs.appendChild(li);
+        });
+    }
+
+    function pollProgress() {
+        if (!progressFill || !progressMessage) {
+            return;
+        }
+
+        fetch(window.location.origin + '/' + (window.UPDATER_PREFIX || '_updater') + '/updates/progress/status', { credentials: 'same-origin' })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                const progress = Number(data.progress || 0);
+                progressFill.style.width = Math.max(0, Math.min(100, progress)) + '%';
+                progressMessage.textContent = data.message || 'Aguardando execução.';
+                renderLogs(data.logs || []);
+                toggleUpdateButtons(Boolean(data.active));
+            })
+            .catch(function () {});
+    }
+
+    pollProgress();
+    window.setInterval(pollProgress, 3000);
+
     window.setTimeout(function () {
         document.querySelectorAll('.toast').forEach(function (toast) {
             toast.style.opacity = '0';

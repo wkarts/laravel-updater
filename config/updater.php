@@ -64,7 +64,7 @@ return [
     ],
 
     'trigger' => [
-        'driver' => env('UPDATER_TRIGGER_DRIVER', 'queue'),
+        'driver' => env('UPDATER_TRIGGER_DRIVER', 'auto'),
     ],
 
     'preflight' => [
@@ -114,6 +114,12 @@ return [
                 'issuer' => env('UPDATER_UI_2FA_ISSUER', 'Argws Updater'),
             ],
         ],
+    ],
+
+
+    'notify' => [
+        'enabled' => (bool) env('UPDATER_NOTIFY_ENABLED', false),
+        'to' => env('UPDATER_NOTIFY_TO', env('UPDATER_REPORT_TO', '')),
     ],
 
     'report' => [
