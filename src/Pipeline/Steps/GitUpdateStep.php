@@ -31,11 +31,21 @@ class GitUpdateStep implements PipelineStepInterface
             $url = (string) ($activeSource['repo_url'] ?? '');
             $branch = (string) ($activeSource['branch'] ?? config('updater.git.branch', 'main'));
             if ($url !== '' && !$isDryRun) {
-                if (($activeSource['auth_mode'] ?? 'none') === 'token' && !empty($activeSource['token_encrypted']) && str_starts_with($url, 'https://')) {
-                    $url = preg_replace('#^https://#', 'https://' . rawurlencode((string) $activeSource['token_encrypted']) . '@', $url) ?: $url;
+                $authMode = (string) ($activeSource['auth_mode'] ?? 'none');
+                $username = trim((string) ($activeSource['auth_username'] ?? ''));
+                $password = trim((string) ($activeSource['auth_password'] ?? $activeSource['token_encrypted'] ?? ''));
+
+                if ($authMode === 'token' && $password !== '' && str_starts_with($url, 'https://')) {
+                    if ($username !== '') {
+                        $url = preg_replace('#^https://#', 'https://' . rawurlencode($username) . ':' . rawurlencode($password) . '@', $url) ?: $url;
+                    } else {
+                        $url = preg_replace('#^https://#', 'https://' . rawurlencode($password) . '@', $url) ?: $url;
+                    }
                 }
-                $this->shellRunner->run(['git', 'remote', 'set-url', 'origin', $url]);
-                $this->shellRunner->run(['git', 'fetch', 'origin', $branch]);
+
+                $env = ['GIT_TERMINAL_PROMPT' => '0'];
+                $this->shellRunner->run(['git', 'remote', 'set-url', 'origin', $url], null, $env);
+                $this->shellRunner->run(['git', 'fetch', 'origin', $branch], null, $env);
             }
 
             $context['source_id'] = (int) $activeSource['id'];
