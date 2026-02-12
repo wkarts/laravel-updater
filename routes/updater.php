@@ -42,8 +42,11 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
                 Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
 
-                Route::post('/updates/dry-run', [OperationsController::class, 'triggerDryRun'])->name('updater.trigger.dryrun');
                 Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->name('updater.runs.show');
+
+                Route::post('/updates/execute', [OperationsController::class, 'executeUpdate'])->name('updater.updates.execute');
+                Route::post('/runs/{id}/approve', [OperationsController::class, 'approveAndExecute'])->whereNumber('id')->name('updater.runs.approve');
+                Route::get('/updates/progress/status', [OperationsController::class, 'updateProgressStatus'])->name('updater.updates.progress.status');
 
                 Route::post('/backups/{type}/create', [OperationsController::class, 'backupNow'])->whereIn('type', ['database', 'snapshot', 'full'])->name('updater.backups.create');
                 Route::get('/backups/log/download', [OperationsController::class, 'downloadUpdaterLog'])->name('updater.backups.log.download');
