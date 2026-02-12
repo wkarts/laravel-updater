@@ -52,9 +52,11 @@ class UpdateNotifyCommand extends Command
             return self::SUCCESS;
         }
 
-        $to = (string) (env('UPDATER_NOTIFY_TO') ?: env('UPDATER_REPORT_TO', ''));
-        if ($to === '') {
-            $this->error('Defina UPDATER_NOTIFY_TO ou UPDATER_REPORT_TO para envio.');
+        $rawRecipients = (string) (config('updater.notify.to', '') ?: env('UPDATER_NOTIFY_TO') ?: env('UPDATER_REPORT_TO', ''));
+        $recipients = array_values(array_filter(array_map(static fn (string $mail): string => trim($mail), preg_split('/[,;]+/', $rawRecipients) ?: [])));
+
+        if ($recipients === []) {
+            $this->error('Defina UPDATER_NOTIFY_TO (aceita múltiplos e-mails separados por vírgula) ou UPDATER_REPORT_TO.');
 
             return self::FAILURE;
         }
@@ -72,12 +74,12 @@ class UpdateNotifyCommand extends Command
             'Acesse a UI do updater para revisar e executar: ' . url((string) config('updater.ui.prefix', '_updater')),
         ]);
 
-        Mail::raw($body, function ($message) use ($to, $subject): void {
-            $message->to($to)->subject($subject);
+        Mail::raw($body, function ($message) use ($recipients, $subject): void {
+            $message->to($recipients)->subject($subject);
         });
 
         $store->saveNotification((int) $activeSource['id'], (int) $activeProfile['id'], $notifyKey);
-        $this->info('Notificação enviada para ' . $to);
+        $this->info('Notificação enviada para: ' . implode(', ', $recipients));
 
         return self::SUCCESS;
     }
