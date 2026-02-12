@@ -97,6 +97,11 @@ Você pode cadastrar várias fontes e perfis, mas apenas **UMA fonte ativa** e *
 Na tela **Fontes** (`/_updater/sources`):
 - Informe nome, tipo, URL e branch.
 - Escolha autenticação (`none`, `token`, `ssh`).
+
+- Para GitHub HTTPS privado, use autenticação com:
+  - `auth_mode=token`
+  - **Usuário**: `x-access-token` (ou seu usuário Git)
+  - **Senha/Token**: seu PAT do GitHub
 - Marque **Definir como fonte ativa** se quiser usar imediatamente.
 
 > Você pode cadastrar várias fontes, mas apenas **uma** fica ativa por vez.

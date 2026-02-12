@@ -308,6 +308,8 @@ class ManagerController extends Controller
             'repo_url' => ['required', 'string', 'max:255'],
             'branch' => ['nullable', 'string', 'max:120'],
             'auth_mode' => ['required', 'in:token,ssh,none'],
+            'auth_username' => ['nullable', 'string', 'max:120'],
+            'auth_password' => ['nullable', 'string', 'max:255'],
             'token_encrypted' => ['nullable', 'string', 'max:255'],
             'ssh_private_key_path' => ['nullable', 'string', 'max:255'],
             'active' => ['nullable', 'boolean'],
@@ -318,6 +320,10 @@ class ManagerController extends Controller
             'zip' => 'zip_release',
             default => (string) $data['type'],
         };
+
+        if (!empty($data['auth_password']) && empty($data['token_encrypted'])) {
+            $data['token_encrypted'] = $data['auth_password'];
+        }
 
         $id = isset($data['id']) ? (int) $data['id'] : null;
         $this->managerStore->createOrUpdateSource($data, $id);
@@ -361,13 +367,14 @@ class ManagerController extends Controller
             return back()->withErrors(['source' => 'Nenhuma fonte selecionada/ativa para testar.']);
         }
 
-        $repoUrl = trim((string) ($source['repo_url'] ?? ''));
+        $repoUrl = $this->buildAuthRepoUrl($source);
         if ($repoUrl === '') {
             return back()->withErrors(['source' => 'A fonte não possui URL de repositório válida.']);
         }
 
-        $head = $shellRunner->run(['git', 'ls-remote', '--heads', $repoUrl]);
-        $tags = $shellRunner->run(['git', 'ls-remote', '--tags', '--refs', $repoUrl]);
+        $env = ['GIT_TERMINAL_PROMPT' => '0'];
+        $head = $shellRunner->run(['git', 'ls-remote', '--heads', $repoUrl], null, $env);
+        $tags = $shellRunner->run(['git', 'ls-remote', '--tags', '--refs', $repoUrl], null, $env);
 
         if ($head['exit_code'] !== 0 && $tags['exit_code'] !== 0) {
             return back()->withErrors(['source' => 'Falha ao conectar com a fonte: ' . ($head['stderr'] ?: $tags['stderr'] ?: 'erro desconhecido')]);
@@ -424,6 +431,36 @@ class ManagerController extends Controller
 
 
 
+    private function buildAuthRepoUrl(array $source): string
+    {
+        $repoUrl = trim((string) ($source['repo_url'] ?? ''));
+        if ($repoUrl === '') {
+            return '';
+        }
+
+        $authMode = (string) ($source['auth_mode'] ?? 'none');
+        $username = trim((string) ($source['auth_username'] ?? ''));
+        $password = trim((string) ($source['auth_password'] ?? $source['token_encrypted'] ?? ''));
+
+        if (!str_starts_with($repoUrl, 'https://')) {
+            return $repoUrl;
+        }
+
+        if ($authMode === 'token' && $password !== '') {
+            if ($username !== '') {
+                return preg_replace('#^https://#', 'https://' . rawurlencode($username) . ':' . rawurlencode($password) . '@', $repoUrl) ?: $repoUrl;
+            }
+
+            return preg_replace('#^https://#', 'https://' . rawurlencode($password) . '@', $repoUrl) ?: $repoUrl;
+        }
+
+        if ($authMode === 'ssh') {
+            return $repoUrl;
+        }
+
+        return $repoUrl;
+    }
+
     /** @return array<int,string> */
     private function parseRemoteVersions(string $stdout): array
     {
@@ -471,7 +508,8 @@ class ManagerController extends Controller
         if (is_array($activeSource) && !empty($activeSource['repo_url'])) {
             /** @var ShellRunner $shellRunner */
             $shellRunner = app(ShellRunner::class);
-            $result = $shellRunner->run(['git', 'ls-remote', '--tags', '--refs', (string) $activeSource['repo_url']]);
+            $repoUrl = $this->buildAuthRepoUrl($activeSource);
+            $result = $shellRunner->run(['git', 'ls-remote', '--tags', '--refs', $repoUrl], null, ['GIT_TERMINAL_PROMPT' => '0']);
             if (($result['exit_code'] ?? 1) === 0) {
                 $tags = $this->parseRemoteVersions((string) ($result['stdout'] ?? ''));
                 if ($tags !== []) {

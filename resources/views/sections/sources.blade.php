@@ -51,6 +51,16 @@
             </div>
 
             <div>
+                <label for="auth_username">Usuário de autenticação (opcional)</label>
+                <input id="auth_username" name="auth_username" value="{{ old('auth_username', $editingSource['auth_username'] ?? '') }}" placeholder="Ex.: x-access-token, seu_usuario">
+            </div>
+
+            <div>
+                <label for="auth_password">Senha/Token de autenticação (opcional)</label>
+                <input id="auth_password" name="auth_password" value="{{ old('auth_password', $editingSource['auth_password'] ?? $editingSource['token_encrypted'] ?? '') }}" placeholder="Token GitHub/GitLab ou senha">
+            </div>
+
+            <div>
                 <label for="token_encrypted">Token (opcional)</label>
                 <input id="token_encrypted" name="token_encrypted" value="{{ old('token_encrypted', $editingSource['token_encrypted'] ?? '') }}">
             </div>
@@ -66,7 +76,7 @@
                 <span>Definir como fonte ativa</span>
             </label>
 
-            <div class="form-inline">
+            <div class="form-inline source-actions">
                 <button class="btn btn-primary" type="submit">{{ is_array($editingSource ?? null) ? 'Atualizar fonte' : 'Salvar fonte' }}</button>
                 @if(is_array($editingSource ?? null))
                     <a class="btn btn-secondary" href="{{ route('updater.section', ['section' => 'sources']) }}">Cancelar edição</a>
@@ -94,7 +104,7 @@
                         <td>{{ $source['branch'] ?: '-' }}</td>
                         <td>{{ (int) $source['active'] === 1 ? 'Sim' : 'Não' }}</td>
                         <td>
-                            <div class="form-inline">
+                            <div class="form-inline source-actions">
                                 <form method="POST" action="{{ route('updater.sources.activate', $source['id']) }}">@csrf <button class="btn btn-secondary" type="submit">Ativar</button></form>
                                 <a class="btn btn-secondary" href="{{ route('updater.section', ['section' => 'sources', 'edit' => $source['id']]) }}">Editar</a>
                                 <form method="POST" action="{{ route('updater.sources.delete', $source['id']) }}" onsubmit="return confirm('Confirma excluir esta fonte?');">

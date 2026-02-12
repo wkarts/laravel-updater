@@ -105,6 +105,8 @@ class StateStore
             repo_url TEXT NOT NULL,
             branch TEXT NULL,
             auth_mode TEXT NOT NULL DEFAULT "none",
+            auth_username TEXT NULL,
+            auth_password TEXT NULL,
             token_encrypted TEXT NULL,
             ssh_private_key_path TEXT NULL,
             active INTEGER NOT NULL DEFAULT 0,
@@ -186,6 +188,8 @@ class StateStore
         $this->ensureColumn('updater_users', 'last_login_at', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_secret', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
+        $this->ensureColumn('updater_sources', 'auth_username', 'TEXT NULL');
+        $this->ensureColumn('updater_sources', 'auth_password', 'TEXT NULL');
     }
 
     public function createRun(array $options): int
