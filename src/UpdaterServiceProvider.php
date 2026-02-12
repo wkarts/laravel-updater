@@ -24,6 +24,7 @@ use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\LoggerFactory;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\PreflightChecker;
+use Argws\LaravelUpdater\Support\RunReportMailer;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\Totp;
@@ -88,6 +89,8 @@ class UpdaterServiceProvider extends ServiceProvider
             );
         });
 
+        $this->app->singleton(RunReportMailer::class, fn () => new RunReportMailer());
+
         $this->app->singleton(TriggerDispatcher::class, function () {
             return new TriggerDispatcher((string) config('updater.trigger.driver', 'queue'), $this->app->make(StateStore::class));
         });
@@ -110,13 +113,16 @@ class UpdaterServiceProvider extends ServiceProvider
                 $services['code'],
                 $this->app->make(PreflightChecker::class),
                 $services['store'],
-                $services['logger']
+                $services['logger'],
+                $this->app->make(RunReportMailer::class)
             );
 
             $this->app->instance('updater.kernel', $kernel);
 
             return $kernel;
         });
+
+        $this->app->alias(UpdaterKernel::class, 'updater.kernel');
     }
 
     public function boot(Router $router): void

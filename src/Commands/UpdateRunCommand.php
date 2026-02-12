@@ -19,7 +19,8 @@ class UpdateRunCommand extends Command
         {--no-backup : Não executa backup}
         {--no-snapshot : Não executa snapshot}
         {--no-build : Não executa build de assets}
-        {--allow-dirty : Permite git dirty}';
+        {--allow-dirty : Permite git dirty}
+        {--dry-run : Executa apenas simulação (sem alterações)}';
     protected $description = 'Executa a atualização completa do sistema.';
 
     public function handle(UpdaterKernel $kernel): int
@@ -42,6 +43,7 @@ class UpdateRunCommand extends Command
             'no_snapshot' => (bool) $this->option('no-snapshot'),
             'no_build' => (bool) $this->option('no-build'),
             'allow_dirty' => (bool) $this->option('allow-dirty'),
+            'dry_run' => (bool) $this->option('dry-run'),
         ];
 
         try {
