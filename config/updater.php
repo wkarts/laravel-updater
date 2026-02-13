@@ -2,6 +2,16 @@
 
 declare(strict_types=1);
 
+$uiRateLimitMaxAttempts = env('UPDATER_UI_RATE_LIMIT_MAX');
+if ($uiRateLimitMaxAttempts === null) {
+    $uiRateLimitMaxAttempts = env('UPDATER_UI_LOGIN_MAX_ATTEMPTS', 10);
+}
+
+$uiRateLimitWindowSeconds = env('UPDATER_UI_RATE_LIMIT_WINDOW');
+if ($uiRateLimitWindowSeconds === null) {
+    $uiRateLimitWindowSeconds = (int) env('UPDATER_UI_LOGIN_DECAY_MINUTES', 10) * 60;
+}
+
 return [
     'enabled' => env('UPDATER_ENABLED', true),
     'mode' => env('UPDATER_MODE', 'inplace'),
@@ -114,8 +124,8 @@ return [
             'default_name' => env('UPDATER_UI_DEFAULT_NAME', 'Admin'),
             'session_ttl_minutes' => (int) env('UPDATER_UI_SESSION_TTL', 120),
             'rate_limit' => [
-                'max_attempts' => (int) env('UPDATER_UI_RATE_LIMIT_MAX', 10),
-                'window_seconds' => (int) env('UPDATER_UI_RATE_LIMIT_WINDOW', 600),
+                'max_attempts' => (int) $uiRateLimitMaxAttempts,
+                'window_seconds' => (int) $uiRateLimitWindowSeconds,
             ],
             '2fa' => [
                 'enabled' => (bool) env('UPDATER_UI_2FA_ENABLED', true),

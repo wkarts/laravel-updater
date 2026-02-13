@@ -60,6 +60,64 @@ UPDATER_APP_DESC=APP_DESC
 UPDATER_SYNC_TOKEN=
 ```
 
+
+## Padrão recomendado de `.env` por cenário
+
+> **Importante:** após qualquer alteração no `.env`, execute `php artisan config:clear`.
+
+### 1) Produção (recomendado)
+
+```dotenv
+UPDATER_TRIGGER_DRIVER=queue
+UPDATER_UI_FORCE_SYNC=false
+
+UPDATER_GIT_PATH=/var/www/sua-aplicacao
+UPDATER_GIT_REMOTE=origin
+UPDATER_GIT_BRANCH=main
+UPDATER_GIT_FF_ONLY=true
+UPDATER_GIT_AUTO_INIT=false
+UPDATER_GIT_DEFAULT_UPDATE_MODE=ff-only
+```
+
+Quando usar:
+- aplicação com worker de fila ativo;
+- deploy previsível e com menor bloqueio da requisição HTTP.
+
+### 2) Homologação / teste manual pelo painel
+
+```dotenv
+UPDATER_TRIGGER_DRIVER=sync
+UPDATER_UI_FORCE_SYNC=true
+
+UPDATER_GIT_PATH=/home/seu-usuario/htdocs/seu-projeto
+UPDATER_GIT_REMOTE=origin
+UPDATER_GIT_BRANCH=main
+UPDATER_GIT_AUTO_INIT=true
+UPDATER_GIT_REMOTE_URL=https://github.com/wkarts/seu-repo.git
+UPDATER_GIT_DEFAULT_UPDATE_MODE=tag
+```
+
+Quando usar:
+- você quer ver resultado imediato no painel;
+- ambiente com menor volume de acesso;
+- diretório pode precisar de bootstrap git automático.
+
+### 3) Compatibilidade de variáveis antigas de login
+
+O updater aceita os dois formatos abaixo para rate limit do login UI:
+
+```dotenv
+# formato novo (preferencial)
+UPDATER_UI_RATE_LIMIT_MAX=10
+UPDATER_UI_RATE_LIMIT_WINDOW=600
+
+# formato legado (compatível)
+UPDATER_UI_LOGIN_MAX_ATTEMPTS=10
+UPDATER_UI_LOGIN_DECAY_MINUTES=10
+```
+
+Se ambos existirem, o formato novo (`UPDATER_UI_RATE_LIMIT_*`) tem prioridade.
+
 ## CI e release
 
 - CI valida matrix real: PHP 8.2/8.3/8.4 + Laravel 10/11/12.
@@ -148,6 +206,44 @@ UPDATER_TRIGGER_DRIVER=auto
 ```
 
 Também é aceito `;` como separador de e-mails.
+
+
+## Troubleshooting (erros mais comuns)
+
+### Erro: `Falha ao aplicar atualização: O updater só pode ser executado via CLI.`
+
+Causa comum:
+- execução sincronizada disparada pela UI sem permitir contexto HTTP.
+
+Como resolver:
+1. Atualize para a versão mais recente do pacote (esta versão já trata o fluxo UI com `--allow-http`).
+2. Confirme `UPDATER_TRIGGER_DRIVER=sync` (homologação) ou `queue` (produção).
+3. Rode:
+
+```bash
+php artisan config:clear
+php artisan cache:clear
+```
+
+### Erro: `.git` não é criado automaticamente
+
+Checklist:
+1. `UPDATER_GIT_AUTO_INIT=true`
+2. `UPDATER_GIT_REMOTE_URL` preenchida e acessível
+3. `UPDATER_GIT_PATH` aponta para a pasta correta e com permissão de escrita do usuário do PHP
+4. `git` disponível no servidor (`git --version`)
+
+### Não aparecem atualizações disponíveis, mas o teste de conexão da fonte funciona
+
+Isso normalmente indica divergência entre:
+- a **fonte ativa no painel** (usada no teste de conexão), e
+- `UPDATER_GIT_PATH` local (usado para calcular revisão local/remota).
+
+Valide:
+1. pasta de `UPDATER_GIT_PATH` é o mesmo projeto conectado à fonte ativa;
+2. branch da fonte ativa bate com `UPDATER_GIT_BRANCH`;
+3. repositório local possui upstream correto (`origin/main` por exemplo);
+4. execute `php artisan system:update:check` para comparar com o status da UI.
 
 ### Solução para erro “Diretório atual não é um repositório git válido”
 
