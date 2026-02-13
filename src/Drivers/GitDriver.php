@@ -211,25 +211,40 @@ class GitDriver implements CodeDriverInterface
             return false;
         }
 
-        $init = $this->shellRunner->run(['git', 'init'], $cwd);
+        $env = ['GIT_TERMINAL_PROMPT' => '0'];
+
+        $init = $this->shellRunner->run(['git', 'init'], $cwd, $env);
         if ($init['exit_code'] !== 0) {
             return false;
         }
 
-        $this->shellRunner->run(['git', 'remote', 'remove', $remote], $cwd);
-        $setRemote = $this->shellRunner->run(['git', 'remote', 'add', $remote, $remoteUrl], $cwd);
+        $this->shellRunner->run(['git', 'remote', 'remove', $remote], $cwd, $env);
+        $setRemote = $this->shellRunner->run(['git', 'remote', 'add', $remote, $remoteUrl], $cwd, $env);
         if ($setRemote['exit_code'] !== 0) {
             return false;
         }
 
-        $fetch = $this->shellRunner->run(['git', 'fetch', $remote, $branch], $cwd);
+        $fetch = $this->shellRunner->run(['git', 'fetch', '--depth=1', $remote, $branch], $cwd, $env);
         if ($fetch['exit_code'] !== 0) {
+            $fetch = $this->shellRunner->run(['git', 'fetch', $remote, $branch], $cwd, $env);
+            if ($fetch['exit_code'] !== 0) {
+                return false;
+            }
+        }
+
+        $checkout = $this->shellRunner->run(['git', 'checkout', '-B', $branch], $cwd, $env);
+        if ($checkout['exit_code'] !== 0) {
             return false;
         }
 
-        $checkout = $this->shellRunner->run(['git', 'checkout', '-B', $branch, $remote . '/' . $branch], $cwd);
+        $reset = $this->shellRunner->run(['git', 'reset', '--hard', 'FETCH_HEAD'], $cwd, $env);
+        if ($reset['exit_code'] !== 0) {
+            return false;
+        }
 
-        return $checkout['exit_code'] === 0 && $this->isGitRepository();
+        $this->shellRunner->run(['git', 'branch', '--set-upstream-to=' . $remote . '/' . $branch, $branch], $cwd, $env);
+
+        return $this->isGitRepository();
     }
 }
 

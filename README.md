@@ -167,6 +167,8 @@ UPDATER_GIT_REMOTE_URL=https://github.com/org/repositorio.git
 
 > Recomendado para produção: manter `UPDATER_GIT_AUTO_INIT=false` e usar um diretório já versionado.
 
+> Quando houver uma **fonte ativa** no painel, o updater usa automaticamente a URL/branch dessa fonte para bootstrap git (com `UPDATER_GIT_AUTO_INIT=true`), sem exigir `UPDATER_GIT_REMOTE_URL` manualmente.
+
 Após alterar variáveis do updater em produção, execute também:
 
 ```bash
