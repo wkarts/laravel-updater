@@ -54,11 +54,11 @@
         <div>
             <label for="update_mode">Modo de atualização</label>
             <select id="update_mode" name="update_mode" required onchange="document.getElementById('tag-wrapper').style.display = this.value === 'tag' ? 'block' : 'none';">
-                <option value="merge" @selected(old('update_mode', 'merge') === 'merge')>merge (prioridade)</option>
-                <option value="ff-only" @selected(old('update_mode') === 'ff-only')>ff-only</option>
-                <option value="tag" @selected(old('update_mode') === 'tag')>tag</option>
+                <option value="merge" @selected(old('update_mode', $defaultUpdateMode ?? 'merge') === 'merge')>merge (prioridade)</option>
+                <option value="ff-only" @selected(old('update_mode', $defaultUpdateMode ?? 'merge') === 'ff-only')>ff-only</option>
+                <option value="tag" @selected(old('update_mode', $defaultUpdateMode ?? 'merge') === 'tag')>tag</option>
                 @if($fullUpdateEnabled)
-                    <option value="full-update" @selected(old('update_mode') === 'full-update')>full update</option>
+                    <option value="full-update" @selected(old('update_mode', $defaultUpdateMode ?? 'merge') === 'full-update')>full update</option>
                 @endif
             </select>
         </div>

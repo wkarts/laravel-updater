@@ -31,6 +31,7 @@ class ManagerController extends Controller
                 'statusCheck' => $this->buildUpdateStatusCheck(),
                 'availableTags' => $this->availableTags(),
                 'fullUpdateEnabled' => (bool) config('updater.full_update.enabled', false),
+                'defaultUpdateMode' => $this->defaultUpdateMode(),
             ]),
             'runs' => view('laravel-updater::sections.runs', [
                 'runs' => app(UpdaterKernel::class)->stateStore()->recentRuns(100),
@@ -38,6 +39,7 @@ class ManagerController extends Controller
             'sources' => view('laravel-updater::sections.sources', [
                 'sources' => $this->managerStore->sources(),
                 'editingSource' => $request->filled('edit') ? $this->managerStore->findSource((int) $request->input('edit')) : null,
+                'allowMultipleSources' => (bool) config('updater.sources.allow_multiple', false),
             ]),
             'profiles' => redirect()->route('updater.profiles.index'),
             'backups' => view('laravel-updater::sections.backups', ['backups' => $this->managerStore->backups()]),
@@ -326,6 +328,15 @@ class ManagerController extends Controller
         }
 
         $id = isset($data['id']) ? (int) $data['id'] : null;
+        $allowMultipleSources = (bool) config('updater.sources.allow_multiple', false);
+        if (!$allowMultipleSources && $id === null && count($this->managerStore->sources()) > 0) {
+            return back()->withErrors(['source' => 'Cadastro de múltiplas fontes está bloqueado. Para habilitar, defina UPDATER_SOURCES_ALLOW_MULTIPLE=true.'])->withInput();
+        }
+
+        if (!$allowMultipleSources) {
+            $data['active'] = 1;
+        }
+
         $this->managerStore->createOrUpdateSource($data, $id);
         $this->audit($request, $this->actorId($request), 'Fonte de atualização salva.', ['fonte_id' => $id]);
 
@@ -542,6 +553,14 @@ class ManagerController extends Controller
         }
 
         return $driver->listTags(30);
+    }
+
+
+    private function defaultUpdateMode(): string
+    {
+        $mode = strtolower(trim((string) config('updater.git.default_update_mode', 'merge')));
+
+        return in_array($mode, ['merge', 'ff-only', 'tag', 'full-update'], true) ? $mode : 'merge';
     }
 
     private function ensureAdmin(): array

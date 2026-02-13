@@ -2,11 +2,18 @@
 @section('page_title', 'Fontes')
 
 @section('content')
+@php($allowMultipleSources = (bool) ($allowMultipleSources ?? false))
+@php($canCreateSource = $allowMultipleSources || is_array($editingSource ?? null) || count($sources ?? []) === 0)
 <div class="grid">
     <div class="card">
         <h3>{{ is_array($editingSource ?? null) ? 'Editar fonte' : 'Nova fonte' }}</h3>
-        <p class="muted" style="margin-bottom:10px;">Você pode cadastrar várias fontes, mas apenas <strong>UMA</strong> deve ficar ativa por vez para evitar conflitos.</p>
+        @if($allowMultipleSources)
+            <p class="muted" style="margin-bottom:10px;">Múltiplas fontes habilitadas. Ainda assim, mantenha apenas <strong>UMA</strong> fonte ativa por vez para evitar conflitos.</p>
+        @else
+            <p class="muted" style="margin-bottom:10px;">Cadastro de múltiplas fontes está <strong>bloqueado por padrão</strong>. Para habilitar, use <code>UPDATER_SOURCES_ALLOW_MULTIPLE=true</code>.</p>
+        @endif
 
+        @if($canCreateSource)
         <form method="POST" action="{{ route('updater.sources.save') }}" class="form-grid">
             @csrf
             <input type="hidden" name="id" value="{{ $editingSource['id'] ?? '' }}">
@@ -83,6 +90,12 @@
                 @endif
             </div>
         </form>
+        @else
+            <div class="card card-danger" style="padding:12px; margin:10px 0;">
+                <strong>Nova fonte bloqueada.</strong>
+                <p class="muted" style="margin-top:8px;">Já existe uma fonte cadastrada. Edite a fonte existente ou habilite <code>UPDATER_SOURCES_ALLOW_MULTIPLE=true</code>.</p>
+            </div>
+        @endif
 
         <form method="POST" action="{{ route('updater.sources.test') }}" style="margin-top:10px" class="form-grid">
             @csrf

@@ -16,6 +16,7 @@ return [
         'update_type' => env('UPDATER_GIT_UPDATE_TYPE', 'git_ff_only'),
         'tag' => env('UPDATER_GIT_TAG', ''),
         'auto_init' => (bool) env('UPDATER_GIT_AUTO_INIT', false),
+        'default_update_mode' => env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge'),
     ],
 
     'backup' => [
@@ -95,6 +96,10 @@ return [
     ],
 
     'sync_token' => env('UPDATER_SYNC_TOKEN', ''),
+
+    'sources' => [
+        'allow_multiple' => (bool) env('UPDATER_SOURCES_ALLOW_MULTIPLE', false),
+    ],
 
     'ui' => [
         'enabled' => (bool) env('UPDATER_UI_ENABLED', true),
