@@ -100,6 +100,7 @@ return [
         'enabled' => (bool) env('UPDATER_UI_ENABLED', true),
         'prefix' => env('UPDATER_UI_PREFIX', '_updater'),
         'middleware' => ['web', 'auth'],
+        'force_sync' => (bool) env('UPDATER_UI_FORCE_SYNC', false),
         'auth' => [
             'enabled' => (bool) env('UPDATER_UI_AUTH_ENABLED', false),
             'auto_provision_admin' => (bool) env('UPDATER_UI_AUTO_PROVISION_ADMIN', true),

@@ -111,7 +111,8 @@ class GitDriver implements CodeDriverInterface
 
         if (!$this->isGitRepository()) {
             if (!$this->tryInitRepository($config, $remote, $branch)) {
-                throw new GitException('Diretório atual não é um repositório git válido. Defina updater.git.path apontando para o projeto versionado ou habilite auto_init com remote_url.');
+                $cwd = $this->cwd();
+                throw new GitException('Diretório atual não é um repositório git válido: ' . $cwd . '. Defina UPDATER_GIT_PATH corretamente, limpe o cache de configuração (php artisan config:clear) e confirme permissões do usuário do PHP.');
             }
         }
 
@@ -177,6 +178,10 @@ class GitDriver implements CodeDriverInterface
     {
         $config = $this->runtimeConfig();
         $configuredPath = trim((string) ($config['path'] ?? ''));
+        if ($configuredPath === '') {
+            $configuredPath = trim((string) env('UPDATER_GIT_PATH', ''));
+        }
+
         if ($configuredPath !== '') {
             return $configuredPath;
         }

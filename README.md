@@ -166,3 +166,10 @@ UPDATER_GIT_REMOTE_URL=https://github.com/org/repositorio.git
 ```
 
 > Recomendado para produção: manter `UPDATER_GIT_AUTO_INIT=false` e usar um diretório já versionado.
+
+Após alterar variáveis do updater em produção, execute também:
+
+```bash
+php artisan config:clear
+php artisan cache:clear
+```
