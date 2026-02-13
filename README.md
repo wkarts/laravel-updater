@@ -43,6 +43,14 @@ UPDATER_UI_2FA_ENABLED=true
 UPDATER_UI_2FA_REQUIRED=false
 UPDATER_UI_2FA_ISSUER="Argws Updater"
 
+UPDATER_GIT_PATH=/var/www/seu-projeto
+UPDATER_GIT_REMOTE=origin
+UPDATER_GIT_BRANCH=main
+UPDATER_GIT_FF_ONLY=true
+# opcional para bootstrap automático quando a pasta ainda não é git
+UPDATER_GIT_AUTO_INIT=false
+UPDATER_GIT_REMOTE_URL=
+
 UPDATER_APP_NAME=APP_NAME
 UPDATER_APP_SUFIX_NAME=APP_SUFIX_NAME
 UPDATER_APP_DESC=APP_DESC
@@ -137,3 +145,24 @@ UPDATER_TRIGGER_DRIVER=auto
 ```
 
 Também é aceito `;` como separador de e-mails.
+
+### Solução para erro “Diretório atual não é um repositório git válido”
+
+Se a aplicação não estiver na mesma pasta do updater, configure `UPDATER_GIT_PATH` com o diretório real do projeto Laravel versionado em Git.
+
+Exemplo:
+
+```dotenv
+UPDATER_GIT_PATH=/home/seu-usuario/htdocs/seu-projeto
+UPDATER_GIT_REMOTE=origin
+UPDATER_GIT_BRANCH=main
+```
+
+Se você quer inicializar um diretório vazio automaticamente (cenário avançado), habilite:
+
+```dotenv
+UPDATER_GIT_AUTO_INIT=true
+UPDATER_GIT_REMOTE_URL=https://github.com/org/repositorio.git
+```
+
+> Recomendado para produção: manter `UPDATER_GIT_AUTO_INIT=false` e usar um diretório já versionado.

@@ -8,11 +8,14 @@ return [
     'channel' => env('UPDATER_CHANNEL', 'stable'),
 
     'git' => [
+        'path' => env('UPDATER_GIT_PATH', base_path()),
         'remote' => env('UPDATER_GIT_REMOTE', 'origin'),
+        'remote_url' => env('UPDATER_GIT_REMOTE_URL', ''),
         'branch' => env('UPDATER_GIT_BRANCH', 'main'),
         'ff_only' => (bool) env('UPDATER_GIT_FF_ONLY', true),
         'update_type' => env('UPDATER_GIT_UPDATE_TYPE', 'git_ff_only'),
         'tag' => env('UPDATER_GIT_TAG', ''),
+        'auto_init' => (bool) env('UPDATER_GIT_AUTO_INIT', false),
     ],
 
     'backup' => [
