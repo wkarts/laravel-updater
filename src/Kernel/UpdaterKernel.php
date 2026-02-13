@@ -44,9 +44,9 @@ class UpdaterKernel
     {
         return new UpdatePipeline([
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
-            new MaintenanceOnStep($services['shell']),
             new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
             new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot'), $services['archive'] ?? null),
+            new MaintenanceOnStep($services['shell']),
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
@@ -78,6 +78,11 @@ class UpdaterKernel
         $isDryRun = (bool) ($options['dry_run'] ?? false);
         if (!$isDryRun) {
             $this->preflight->validate($options);
+
+            $canAutoInit = (bool) config('updater.git.auto_init', false) || (bool) env('UPDATER_GIT_AUTO_INIT', false);
+            if (!$canAutoInit && $this->codeDriver->currentRevision() === 'N/A') {
+                throw new \RuntimeException('Repositório Git inválido antes de iniciar pipeline. Ajuste UPDATER_GIT_PATH para a raiz do projeto versionado e rode php artisan config:clear.');
+            }
         }
 
         $runId = $this->store->createRun($options);
@@ -95,7 +100,7 @@ class UpdaterKernel
                     'versao_atual' => $this->codeDriver->currentRevision(),
                     'versao_alvo' => $status['remote'] ?? null,
                     'diff_commits' => $status['behind_by_commits'] ?? 0,
-                    'steps' => ['lock','maintenance_on','backup_database','snapshot_code','git_update','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','health_check','maintenance_off'],
+                    'steps' => ['lock','backup_database','snapshot_code','maintenance_on','git_update','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','health_check','maintenance_off'],
                     'comandos_simulados' => [
                         'git fetch origin <branch>',
                         'git rev-list --count HEAD..origin/<branch>',
