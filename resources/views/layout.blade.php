@@ -85,6 +85,10 @@
     </main>
 </div>
 
+<script>
+window.UPDATER_PREFIX = @json(trim((string) config('updater.ui.prefix', '_updater'), '/'));
+window.UPDATER_UPDATE_PROGRESS_URL = @json(\Illuminate\Support\Facades\Route::has('updater.updates.progress.status') ? route('updater.updates.progress.status') : null);
+</script>
 <script src="{{ \Argws\LaravelUpdater\Support\UiAssets::jsUrl() }}"></script>
 </body>
 </html>
