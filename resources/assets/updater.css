@@ -461,3 +461,21 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     background: linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 70%, white));
     transition: width .4s ease;
 }
+
+.update-status-grid {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    margin-bottom: 10px;
+}
+
+.update-progress-logs {
+    max-height: 220px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    word-break: break-word;
+}
+
+.update-progress-logs li {
+    margin-bottom: 4px;
+}

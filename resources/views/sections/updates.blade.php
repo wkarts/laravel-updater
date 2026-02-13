@@ -4,10 +4,12 @@
 @section('content')
 <div class="card">
     <h3>Status de atualização</h3>
-    <p><strong>Revisão atual:</strong> {{ $statusCheck['current_revision'] ?? '-' }}</p>
-    <p><strong>Revisão remota:</strong> {{ $statusCheck['remote'] ?? '-' }}</p>
-    <p><strong>Commits pendentes:</strong> {{ (int) ($statusCheck['behind_by_commits'] ?? 0) }}</p>
-    <p><strong>Última tag remota:</strong> {{ $statusCheck['latest_tag'] ?? '-' }}</p>
+    <div class="update-status-grid">
+        <p><strong>Revisão atual:</strong> {{ $statusCheck['current_revision'] ?? '-' }}</p>
+        <p><strong>Revisão remota:</strong> {{ $statusCheck['remote'] ?? '-' }}</p>
+        <p><strong>Commits pendentes:</strong> {{ (int) ($statusCheck['behind_by_commits'] ?? 0) }}</p>
+        <p><strong>Última tag remota:</strong> {{ $statusCheck['latest_tag'] ?? '-' }}</p>
+    </div>
     <p><strong>Update disponível:</strong>
         @if((bool) ($statusCheck['has_updates'] ?? false) || (bool) ($statusCheck['has_update_by_tag'] ?? false))
             <span style="color:#16a34a;font-weight:700;">SIM</span>
@@ -86,17 +88,11 @@
         </div>
     </form>
 </div>
-<div class="card" id="update-progress-card" style="margin-top:14px;">
-    <h3>Progresso da atualização/rollback</h3>
-    <div class="progress-track"><div class="progress-fill" id="update-progress-fill" style="width:0%"></div></div>
-    <p id="update-progress-message" class="muted">Aguardando execução.</p>
-    <ul id="update-progress-logs" class="muted" style="margin:0; padding-left:18px;"></ul>
-</div>
-@endsection
 
 <div class="card" id="update-progress-card" style="margin-top:14px;">
     <h3>Progresso da atualização/rollback</h3>
     <div class="progress-track"><div class="progress-fill" id="update-progress-fill" style="width:0%"></div></div>
     <p id="update-progress-message" class="muted">Aguardando execução.</p>
-    <ul id="update-progress-logs" class="muted" style="margin:0; padding-left:18px;"></ul>
+    <ul id="update-progress-logs" class="muted update-progress-logs" style="margin:0; padding-left:18px;"></ul>
 </div>
+@endsection

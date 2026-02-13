@@ -67,13 +67,33 @@
         });
     }
 
+    function resolveProgressUrl() {
+        if (typeof window.UPDATER_UPDATE_PROGRESS_URL === 'string' && window.UPDATER_UPDATE_PROGRESS_URL !== '') {
+            return window.UPDATER_UPDATE_PROGRESS_URL;
+        }
+
+        const prefix = (window.UPDATER_PREFIX || '_updater').replace(/^\/+|\/+$/g, '');
+        return window.location.origin + '/' + prefix + '/updates/progress/status';
+    }
+
     function pollProgress() {
         if (!progressFill || !progressMessage) {
             return;
         }
 
-        fetch(window.location.origin + '/' + (window.UPDATER_PREFIX || '_updater') + '/updates/progress/status', { credentials: 'same-origin' })
-            .then(function (res) { return res.json(); })
+        const progressUrl = resolveProgressUrl();
+        if (!progressUrl) {
+            return;
+        }
+
+        fetch(progressUrl, { credentials: 'same-origin' })
+            .then(function (res) {
+                if (!res.ok) {
+                    throw new Error('Falha ao consultar progresso');
+                }
+
+                return res.json();
+            })
             .then(function (data) {
                 const progress = Number(data.progress || 0);
                 progressFill.style.width = Math.max(0, Math.min(100, progress)) + '%';
@@ -84,8 +104,10 @@
             .catch(function () {});
     }
 
-    pollProgress();
-    window.setInterval(pollProgress, 3000);
+    if (progressFill && progressMessage) {
+        pollProgress();
+        window.setInterval(pollProgress, 3000);
+    }
 
     window.setTimeout(function () {
         document.querySelectorAll('.toast').forEach(function (toast) {
