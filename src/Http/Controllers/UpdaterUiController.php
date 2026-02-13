@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class UpdaterUiController extends Controller
 {
@@ -26,8 +27,21 @@ class UpdaterUiController extends Controller
         $lastRun = $store->lastRun();
         $runs = $store->recentRuns(20);
 
+        try {
+            $status = $kernel->status();
+        } catch (Throwable $e) {
+            $status = [
+                'enabled' => (bool) config('updater.enabled', true),
+                'mode' => (string) config('updater.mode', 'inplace'),
+                'channel' => (string) config('updater.channel', 'stable'),
+                'revision' => 'N/A',
+                'last_run' => $lastRun,
+                'warning' => 'Não foi possível carregar status completo: ' . $e->getMessage(),
+            ];
+        }
+
         return view('laravel-updater::dashboard', [
-            'status' => $kernel->status(),
+            'status' => $status,
             'lastRun' => $lastRun,
             'runs' => $runs,
             'branding' => $this->managerStore->resolvedBranding(),
@@ -99,18 +113,40 @@ class UpdaterUiController extends Controller
 
     public function assetCss()
     {
-        return response()->file(__DIR__ . '/../../../../resources/assets/updater.css', [
-            'Cache-Control' => 'public, max-age=3600',
-            'Content-Type' => 'text/css; charset=UTF-8',
-        ]);
+        $candidates = [
+            __DIR__ . '/../../../../resources/assets/updater.css',
+            public_path('vendor/laravel-updater/updater.css'),
+        ];
+
+        foreach ($candidates as $file) {
+            if (is_file($file)) {
+                return response()->file($file, [
+                    'Cache-Control' => 'public, max-age=3600',
+                    'Content-Type' => 'text/css; charset=UTF-8',
+                ]);
+            }
+        }
+
+        abort(404, 'Asset CSS do updater não encontrado.');
     }
 
     public function assetJs()
     {
-        return response()->file(__DIR__ . '/../../../../resources/assets/updater.js', [
-            'Cache-Control' => 'public, max-age=3600',
-            'Content-Type' => 'application/javascript; charset=UTF-8',
-        ]);
+        $candidates = [
+            __DIR__ . '/../../../../resources/assets/updater.js',
+            public_path('vendor/laravel-updater/updater.js'),
+        ];
+
+        foreach ($candidates as $file) {
+            if (is_file($file)) {
+                return response()->file($file, [
+                    'Cache-Control' => 'public, max-age=3600',
+                    'Content-Type' => 'application/javascript; charset=UTF-8',
+                ]);
+            }
+        }
+
+        abort(404, 'Asset JS do updater não encontrado.');
     }
 
     public function brandingLogo()
