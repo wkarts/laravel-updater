@@ -56,12 +56,11 @@ class UpdaterKernel
             new CacheClearStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
             new MaintenanceOffStep($services['shell'], $services['lock']),
-        ], $services['logger']);
+        ], $services['logger'], $services['store']);
     }
 
     public function check(bool $allowDirty = false): array
     {
-        $this->environmentDetector->ensureCli();
         $this->store->ensureSchema();
         $this->preflight->validate(['allow_dirty' => $allowDirty]);
 
@@ -143,10 +142,18 @@ class UpdaterKernel
             ];
         }
 
+        $runId = $this->store->createRun(['rollback' => true]);
+        $context['run_id'] = $runId;
+        $this->store->addRunLog($runId, 'warning', 'Iniciando rollback da atualização.');
+
         try {
             $this->pipeline->rollback($context);
+            $this->store->finishRun($runId, $context);
+            $this->store->addRunLog($runId, 'info', 'Rollback finalizado com sucesso.');
             $this->logger->warning('updater.rollback.success', $context);
         } catch (Throwable $throwable) {
+            $this->store->finishRun($runId, $context, ['message' => mb_substr($throwable->getMessage(), 0, 1000)]);
+            $this->store->addRunLog($runId, 'error', 'Rollback falhou.', ['erro' => $throwable->getMessage()]);
             $this->logger->error('updater.rollback.failed', ['error' => $throwable->getMessage()]);
             throw new RollbackException('Rollback falhou: ' . $throwable->getMessage(), previous: $throwable);
         }

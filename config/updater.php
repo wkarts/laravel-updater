@@ -64,7 +64,7 @@ return [
     ],
 
     'trigger' => [
-        'driver' => env('UPDATER_TRIGGER_DRIVER', 'queue'),
+        'driver' => env('UPDATER_TRIGGER_DRIVER', 'auto'),
     ],
 
     'preflight' => [

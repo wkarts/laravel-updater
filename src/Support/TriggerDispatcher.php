@@ -38,7 +38,10 @@ class TriggerDispatcher
 
     public function triggerUpdate(array $options = []): void
     {
-        if ($this->driver === 'queue' && function_exists('dispatch')) {
+        $forceSync = (bool) ($options['sync'] ?? false);
+        $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
+
+        if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunUpdateJob($options));
 
             return;
@@ -56,18 +59,21 @@ class TriggerDispatcher
 
         $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 &';
         exec($cmd);
+
+        return null;
     }
 
     public function triggerRollback(): void
     {
-        if ($this->driver === 'queue' && function_exists('dispatch')) {
+        $driver = $this->resolveDriver();
+        if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunRollbackJob());
 
             return;
         }
 
-        if ($this->driver === 'process' && class_exists(Process::class)) {
-            $process = new Process(['php', 'artisan', 'system:update:rollback', '--force']);
+        if ($driver === 'process' && class_exists(Process::class)) {
+            $process = new Process($args, base_path());
             $process->disableOutput();
             $process->start();
 

@@ -105,6 +105,8 @@ class StateStore
             repo_url TEXT NOT NULL,
             branch TEXT NULL,
             auth_mode TEXT NOT NULL DEFAULT "none",
+            auth_username TEXT NULL,
+            auth_password TEXT NULL,
             token_encrypted TEXT NULL,
             ssh_private_key_path TEXT NULL,
             active INTEGER NOT NULL DEFAULT 0,
@@ -178,6 +180,8 @@ class StateStore
         $this->ensureColumn('updater_users', 'last_login_at', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_secret', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
+        $this->ensureColumn('updater_sources', 'auth_username', 'TEXT NULL');
+        $this->ensureColumn('updater_sources', 'auth_password', 'TEXT NULL');
     }
 
     public function createRun(array $options): int
@@ -314,6 +318,27 @@ class StateStore
             ':file_path' => $path,
             ':created_at' => date(DATE_ATOM),
             ':metadata_json' => json_encode($metadata, JSON_UNESCAPED_UNICODE),
+        ]);
+    }
+
+
+    public function lastNotification(int $sourceId, int $profileId): ?array
+    {
+        $stmt = $this->connect()->prepare('SELECT * FROM updater_notifications WHERE source_id = :source_id AND profile_id = :profile_id ORDER BY id DESC LIMIT 1');
+        $stmt->execute([':source_id' => $sourceId, ':profile_id' => $profileId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
+    public function saveNotification(int $sourceId, int $profileId, string $key): void
+    {
+        $stmt = $this->connect()->prepare('INSERT INTO updater_notifications (source_id, profile_id, last_notified_key, notified_at) VALUES (:source_id, :profile_id, :last_notified_key, :notified_at)');
+        $stmt->execute([
+            ':source_id' => $sourceId,
+            ':profile_id' => $profileId,
+            ':last_notified_key' => $key,
+            ':notified_at' => date(DATE_ATOM),
         ]);
     }
 
