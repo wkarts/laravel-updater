@@ -44,8 +44,9 @@ class GitUpdateStep implements PipelineStepInterface
                 }
 
                 $env = ['GIT_TERMINAL_PROMPT' => '0'];
-                $this->shellRunner->run(['git', 'remote', 'set-url', 'origin', $url], null, $env);
-                $this->shellRunner->run(['git', 'fetch', 'origin', $branch], null, $env);
+                $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+                $this->shellRunner->run(['git', 'remote', 'set-url', 'origin', $url], $cwd, $env);
+                $this->shellRunner->run(['git', 'fetch', 'origin', $branch], $cwd, $env);
             }
 
             $context['source_id'] = (int) $activeSource['id'];
