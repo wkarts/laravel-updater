@@ -15,6 +15,7 @@
         </select>
         <input name="q" placeholder="Buscar mensagem" value="{{ request('q') }}">
         <button class="btn btn-primary" type="submit">Filtrar</button>
+        <a class="btn" href="{{ route('updater.logs.report.download', ['run_id' => request('run_id'), 'level' => request('level'), 'q' => request('q')]) }}">Baixar relatório filtrado</a>
     </form>
 
     <div class="table-wrap">

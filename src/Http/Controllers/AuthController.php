@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Http\Controllers;
 
 use Argws\LaravelUpdater\Support\AuthStore;
+use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\Totp;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,7 +13,7 @@ use Illuminate\Routing\Controller;
 
 class AuthController extends Controller
 {
-    public function __construct(private readonly AuthStore $authStore, private readonly Totp $totp)
+    public function __construct(private readonly AuthStore $authStore, private readonly Totp $totp, private readonly ManagerStore $managerStore)
     {
     }
 
@@ -70,6 +71,8 @@ class AuthController extends Controller
             return redirect()->route('updater.profile')->with('status', 'Configure o 2FA para concluir o login.');
         }
 
+        $this->managerStore->addAuditLog((int) $user['id'], 'login', ['email' => $user['email']], $request->ip(), $request->userAgent());
+
         return $this->createAuthenticatedRedirect($request, (int) $user['id']);
     }
 
@@ -85,7 +88,7 @@ class AuthController extends Controller
     public function verifyTwoFactor(Request $request): RedirectResponse
     {
         $request->validate(['code' => ['required', 'string']], [
-            'code.required' => 'Informe o código 2FA.',
+            'code.required' => 'Informe o código 2FA ou um recovery code.',
         ]);
         $pendingId = (int) $request->session()->get('updater_pending_user_id', 0);
         if ($pendingId <= 0) {
@@ -97,8 +100,12 @@ class AuthController extends Controller
             return redirect()->route('updater.profile')->withErrors(['code' => '2FA não está configurado para este usuário.']);
         }
 
-        if (!$this->totp->verify((string) $user['totp_secret'], (string) $request->input('code'))) {
-            return back()->withErrors(['code' => 'Código 2FA inválido.']);
+        $code = (string) $request->input('code');
+        $validTotp = $this->totp->verify((string) $user['totp_secret'], $code);
+        $validRecovery = !$validTotp && $this->authStore->consumeRecoveryCode((int) $user['id'], $code);
+
+        if (!$validTotp && !$validRecovery) {
+            return back()->withErrors(['code' => 'Código 2FA/recovery inválido.']);
         }
 
         $request->session()->forget('updater_pending_user_id');
@@ -114,18 +121,9 @@ class AuthController extends Controller
         }
 
         $request->session()->forget('updater_pending_user_id');
+        $this->managerStore->addAuditLog($this->actorId($request), 'logout', [], $request->ip(), $request->userAgent());
 
-        return redirect()->route('updater.login')->withCookie(cookie(
-            'updater_session',
-            '',
-            -1,
-            '/',
-            null,
-            $request->isSecure(),
-            true,
-            false,
-            'lax'
-        ));
+        return redirect()->route('updater.login')->withCookie(cookie('updater_session', '', -1, '/', null, $request->isSecure(), true, false, 'lax'));
     }
 
     public function profile(Request $request)
@@ -134,18 +132,20 @@ class AuthController extends Controller
 
         $pendingSecret = (string) $request->session()->get('updater_totp_secret', '');
         if ($pendingSecret === '') {
-            $pendingSecret = $this->totp->generateSecret();
+            $pendingSecret = !empty($user['totp_secret']) ? (string) $user['totp_secret'] : $this->totp->generateSecret();
             $request->session()->put('updater_totp_secret', $pendingSecret);
         }
+
+        $issuer = (string) config('updater.ui.auth.2fa.issuer', 'Argws Updater');
+        $otpauthUri = $this->totp->otpauthUri($issuer, (string) $user['email'], $pendingSecret);
 
         return view('laravel-updater::profile', [
             'user' => $user,
             'pendingTotpSecret' => $pendingSecret,
-            'otpauthUri' => $this->totp->otpauthUri(
-                (string) config('updater.ui.auth.2fa.issuer', 'Argws Updater'),
-                (string) $user['email'],
-                $pendingSecret
-            ),
+            'otpauthUri' => $otpauthUri,
+            'qrcodeDataUri' => $this->totp->qrcodeDataUri($otpauthUri),
+            'recoverySummary' => $this->authStore->recoveryCodesSummary((int) $user['id']),
+            'newRecoveryCodes' => $request->session()->get('updater_new_recovery_codes', []),
         ]);
     }
 
@@ -153,10 +153,6 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'password' => ['required', 'string', 'min:6', 'confirmed'],
-        ], [
-            'password.required' => 'Informe a nova senha.',
-            'password.min' => 'A senha deve ter ao menos 6 caracteres.',
-            'password.confirmed' => 'A confirmação de senha não confere.',
         ]);
 
         $user = $this->currentUser($request);
@@ -167,7 +163,7 @@ class AuthController extends Controller
 
     public function enableTwoFactor(Request $request): RedirectResponse
     {
-        $request->validate(['code' => ['required', 'string']], ['code.required' => 'Informe o código 2FA.']);
+        $request->validate(['code' => ['required', 'string']]);
 
         $user = $this->currentUser($request);
         $secret = (string) $request->session()->get('updater_totp_secret', '');
@@ -181,9 +177,29 @@ class AuthController extends Controller
         }
 
         $this->authStore->updateTotp((int) $user['id'], $secret, true);
+        $codes = $this->authStore->replaceRecoveryCodes((int) $user['id'], 10);
         $request->session()->forget('updater_totp_secret');
+        $request->session()->put('updater_new_recovery_codes', $codes);
+        $this->managerStore->addAuditLog((int) $user['id'], 'enable2fa', [], $request->ip(), $request->userAgent());
 
-        return back()->with('status', 'Salvo com sucesso.');
+        return back()->with('status', '2FA ativado com sucesso. Guarde seus recovery codes.');
+    }
+
+    public function regenerateRecoveryCodes(Request $request): RedirectResponse
+    {
+        $user = $this->currentUser($request);
+        $request->validate(['password' => ['required', 'string']]);
+
+        $row = $this->authStore->findUserById((int) $user['id']);
+        if ($row === null || !$this->authStore->verifyPassword($row, (string) $request->input('password'))) {
+            return back()->withErrors(['password' => 'Senha inválida para regenerar os códigos.']);
+        }
+
+        $codes = $this->authStore->replaceRecoveryCodes((int) $user['id'], 10);
+        $request->session()->put('updater_new_recovery_codes', $codes);
+        $this->managerStore->addAuditLog((int) $user['id'], 'regen_recovery', [], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Novos recovery codes gerados com sucesso.');
     }
 
     public function disableTwoFactor(Request $request): RedirectResponse
@@ -199,27 +215,13 @@ class AuthController extends Controller
         $ttl = (int) config('updater.ui.auth.session_ttl_minutes', 120);
         $sessionId = $this->authStore->createSession($userId, $request->ip(), $request->userAgent(), $ttl);
 
-        return redirect()->route('updater.index')->withCookie(cookie(
-            'updater_session',
-            $sessionId,
-            $ttl,
-            '/',
-            null,
-            $request->isSecure(),
-            true,
-            false,
-            'lax'
-        ));
+        return redirect()->route('updater.index')->withCookie(cookie('updater_session', $sessionId, $ttl, '/', null, $request->isSecure(), true, false, 'lax'));
     }
 
     private function isAuthenticated(Request $request): bool
     {
         $sessionId = (string) $request->cookie('updater_session', '');
-        if ($sessionId === '') {
-            return false;
-        }
-
-        return $this->authStore->findValidSession($sessionId) !== null;
+        return $sessionId !== '' && $this->authStore->findValidSession($sessionId) !== null;
     }
 
     private function currentUser(Request $request): array
@@ -231,7 +233,6 @@ class AuthController extends Controller
 
         $sessionId = (string) $request->cookie('updater_session', '');
         $session = $this->authStore->findValidSession($sessionId);
-
         if ($session === null) {
             abort(401, 'Acesso negado.');
         }
@@ -243,5 +244,11 @@ class AuthController extends Controller
             'totp_enabled' => (int) $session['totp_enabled'] === 1,
             'totp_secret' => $session['totp_secret'],
         ];
+    }
+
+    private function actorId(Request $request): ?int
+    {
+        $user = $request->attributes->get('updater_user');
+        return is_array($user) ? (int) ($user['id'] ?? 0) : null;
     }
 }

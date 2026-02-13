@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Argws\LaravelUpdater\Http\Controllers\AuthController;
 use Argws\LaravelUpdater\Http\Controllers\ManagerController;
+use Argws\LaravelUpdater\Http\Controllers\OperationsController;
 use Argws\LaravelUpdater\Http\Controllers\UpdaterUiController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,10 +36,25 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/profile/password', [AuthController::class, 'updatePassword'])->name('updater.profile.password');
                 Route::post('/profile/2fa/enable', [AuthController::class, 'enableTwoFactor'])->name('updater.profile.2fa.enable');
                 Route::post('/profile/2fa/disable', [AuthController::class, 'disableTwoFactor'])->name('updater.profile.2fa.disable');
+                Route::post('/profile/2fa/recovery/regenerate', [AuthController::class, 'regenerateRecoveryCodes'])->name('updater.profile.2fa.recovery.regenerate');
                 Route::get('/status', [UpdaterUiController::class, 'status'])->name('updater.status');
                 Route::post('/check', [UpdaterUiController::class, 'check'])->name('updater.check');
                 Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
                 Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
+
+                Route::post('/updates/dry-run', [OperationsController::class, 'triggerDryRun'])->name('updater.trigger.dryrun');
+                Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->name('updater.runs.show');
+
+                Route::post('/backups/{type}/create', [OperationsController::class, 'backupNow'])->whereIn('type', ['database', 'snapshot', 'full'])->name('updater.backups.create');
+                Route::get('/backups/log/download', [OperationsController::class, 'downloadUpdaterLog'])->name('updater.backups.log.download');
+                Route::get('/logs/report/download', [OperationsController::class, 'downloadRunLogReport'])->name('updater.logs.report.download');
+                Route::get('/backups/progress/status', [OperationsController::class, 'progressStatus'])->name('updater.backups.progress.status');
+                Route::get('/backups/{id}/download', [OperationsController::class, 'downloadBackup'])->whereNumber('id')->name('updater.backups.download');
+                Route::get('/backups/{id}/restore', [OperationsController::class, 'showRestoreForm'])->whereNumber('id')->name('updater.backups.restore.form');
+                Route::post('/backups/{id}/restore', [OperationsController::class, 'restoreBackup'])->whereNumber('id')->name('updater.backups.restore');
+
+                Route::get('/seeds', [OperationsController::class, 'seedsIndex'])->name('updater.seeds.index');
+                Route::post('/seeds/reapply', [OperationsController::class, 'reapplySeed'])->name('updater.seeds.reapply');
 
                 Route::get('/users', [ManagerController::class, 'usersIndex'])->name('updater.users.index');
                 Route::get('/users/create', [ManagerController::class, 'usersCreate'])->name('updater.users.create');
@@ -68,7 +84,7 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::delete('/sources/{id}', [ManagerController::class, 'deleteSource'])->name('updater.sources.delete');
                 Route::post('/sources/test', [ManagerController::class, 'testSourceConnection'])->name('updater.sources.test');
 
-                Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings'])->name('updater.section');
+                Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds'])->name('updater.section');
             });
         });
     } else {
@@ -81,7 +97,7 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/check', [UpdaterUiController::class, 'check'])->name('updater.check');
             Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
             Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
-            Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings'])->name('updater.section');
+            Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds'])->name('updater.section');
         });
     }
 }

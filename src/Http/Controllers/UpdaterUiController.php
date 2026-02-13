@@ -12,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class UpdaterUiController extends Controller
 {
@@ -26,8 +27,21 @@ class UpdaterUiController extends Controller
         $lastRun = $store->lastRun();
         $runs = $store->recentRuns(20);
 
+        try {
+            $status = $kernel->status();
+        } catch (Throwable $e) {
+            $status = [
+                'enabled' => (bool) config('updater.enabled', true),
+                'mode' => (string) config('updater.mode', 'inplace'),
+                'channel' => (string) config('updater.channel', 'stable'),
+                'revision' => 'N/A',
+                'last_run' => $lastRun,
+                'warning' => 'Não foi possível carregar status completo: ' . $e->getMessage(),
+            ];
+        }
+
         return view('laravel-updater::dashboard', [
-            'status' => $kernel->status(),
+            'status' => $status,
             'lastRun' => $lastRun,
             'runs' => $runs,
             'branding' => $this->managerStore->resolvedBranding(),
@@ -49,21 +63,33 @@ class UpdaterUiController extends Controller
     public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher): RedirectResponse
     {
         $activeProfile = $this->managerStore->activeProfile();
+        $activeSource = $this->managerStore->activeSource();
+
+        $diagnostic = $dispatcher->webTriggerDiagnostic((string) ($activeSource['type'] ?? ''));
+        if (!(bool) ($diagnostic['ok'] ?? false)) {
+            return back()->withErrors(['update' => (string) ($diagnostic['reason'] ?? 'Execução web indisponível no momento.')]);
+        }
+
         $dispatcher->triggerUpdate([
             'seed' => (bool) ($activeProfile['seed'] ?? false),
             'seeders' => $request->filled('seed') ? [$request->string('seed')->toString()] : [],
             'allow_dirty' => false,
             'dry_run' => (bool) ($activeProfile['dry_run'] ?? false),
             'profile_id' => $activeProfile['id'] ?? null,
-            'source_id' => $this->managerStore->activeSource()['id'] ?? null,
+            'source_id' => $activeSource['id'] ?? null,
             'check_only' => $request->boolean('check_only'),
         ]);
 
-        return back()->with('status', 'Atualização disparada com sucesso.');
+        return back()->with('status', 'Atualização disparada com sucesso. Acompanhe em Execuções e Logs.');
     }
 
     public function triggerRollback(TriggerDispatcher $dispatcher): RedirectResponse
     {
+        $diagnostic = $dispatcher->webTriggerDiagnostic();
+        if (!(bool) ($diagnostic['ok'] ?? false)) {
+            return back()->withErrors(['rollback' => (string) ($diagnostic['reason'] ?? 'Execução web indisponível no momento.')]);
+        }
+
         $dispatcher->triggerRollback();
 
         return back()->with('status', 'Rollback disparado com sucesso.');
@@ -99,18 +125,40 @@ class UpdaterUiController extends Controller
 
     public function assetCss()
     {
-        return response()->file(__DIR__ . '/../../../../resources/assets/updater.css', [
-            'Cache-Control' => 'public, max-age=3600',
-            'Content-Type' => 'text/css; charset=UTF-8',
-        ]);
+        $candidates = [
+            __DIR__ . '/../../../../resources/assets/updater.css',
+            public_path('vendor/laravel-updater/updater.css'),
+        ];
+
+        foreach ($candidates as $file) {
+            if (is_file($file)) {
+                return response()->file($file, [
+                    'Cache-Control' => 'public, max-age=3600',
+                    'Content-Type' => 'text/css; charset=UTF-8',
+                ]);
+            }
+        }
+
+        abort(404, 'Asset CSS do updater não encontrado.');
     }
 
     public function assetJs()
     {
-        return response()->file(__DIR__ . '/../../../../resources/assets/updater.js', [
-            'Cache-Control' => 'public, max-age=3600',
-            'Content-Type' => 'application/javascript; charset=UTF-8',
-        ]);
+        $candidates = [
+            __DIR__ . '/../../../../resources/assets/updater.js',
+            public_path('vendor/laravel-updater/updater.js'),
+        ];
+
+        foreach ($candidates as $file) {
+            if (is_file($file)) {
+                return response()->file($file, [
+                    'Cache-Control' => 'public, max-age=3600',
+                    'Content-Type' => 'application/javascript; charset=UTF-8',
+                ]);
+            }
+        }
+
+        abort(404, 'Asset JS do updater não encontrado.');
     }
 
     public function brandingLogo()

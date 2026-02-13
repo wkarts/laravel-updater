@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Http\Controllers;
 
+use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Illuminate\Http\RedirectResponse;
@@ -20,14 +21,22 @@ class ManagerController extends Controller
     public function section(string $section, Request $request)
     {
         return match ($section) {
-            'updates' => view('laravel-updater::sections.updates', [
-                'profiles' => $this->managerStore->profiles(),
-                'activeProfile' => $this->managerStore->activeProfile(),
-                'sources' => $this->managerStore->sources(),
-                'activeSource' => $this->managerStore->activeSource(),
-            ]),
+            'updates' => (function () {
+                $store = app(UpdaterKernel::class)->stateStore();
+                $lastRun = $store->lastRun();
+                $lastRunId = is_array($lastRun) ? (int) ($lastRun['id'] ?? 0) : 0;
+
+                return view('laravel-updater::sections.updates', [
+                    'profiles' => $this->managerStore->profiles(),
+                    'activeProfile' => $this->managerStore->activeProfile(),
+                    'sources' => $this->managerStore->sources(),
+                    'activeSource' => $this->managerStore->activeSource(),
+                    'lastRun' => $lastRun,
+                    'lastRunLogs' => $lastRunId > 0 ? $this->managerStore->logs($lastRunId) : [],
+                ]);
+            })(),
             'runs' => view('laravel-updater::sections.runs', [
-                'runs' => app('updater.kernel')->stateStore()->recentRuns(100),
+                'runs' => app(UpdaterKernel::class)->stateStore()->recentRuns(100),
             ]),
             'sources' => view('laravel-updater::sections.sources', ['sources' => $this->managerStore->sources()]),
             'profiles' => redirect()->route('updater.profiles.index'),
@@ -40,6 +49,7 @@ class ManagerController extends Controller
                 ),
             ]),
             'security' => view('laravel-updater::sections.security'),
+            'seeds' => redirect()->route('updater.seeds.index'),
             'admin-users' => redirect()->route('updater.users.index'),
             'settings' => redirect()->route('updater.settings.index'),
             default => abort(404),
@@ -294,7 +304,7 @@ class ManagerController extends Controller
         $data = $request->validate([
             'id' => ['nullable', 'integer'],
             'name' => ['required', 'string', 'max:120'],
-            'type' => ['required', 'in:github,gitlab,bitbucket,git,zip'],
+            'type' => ['required', 'in:github,gitlab,bitbucket,git_ff_only,git_merge,git_tag,zip_release'],
             'repo_url' => ['required', 'string', 'max:255'],
             'branch' => ['nullable', 'string', 'max:120'],
             'auth_mode' => ['required', 'in:token,ssh,none'],
