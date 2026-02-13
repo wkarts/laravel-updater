@@ -8,11 +8,15 @@ return [
     'channel' => env('UPDATER_CHANNEL', 'stable'),
 
     'git' => [
+        'path' => env('UPDATER_GIT_PATH', base_path()),
         'remote' => env('UPDATER_GIT_REMOTE', 'origin'),
+        'remote_url' => env('UPDATER_GIT_REMOTE_URL', ''),
         'branch' => env('UPDATER_GIT_BRANCH', 'main'),
         'ff_only' => (bool) env('UPDATER_GIT_FF_ONLY', true),
         'update_type' => env('UPDATER_GIT_UPDATE_TYPE', 'git_ff_only'),
         'tag' => env('UPDATER_GIT_TAG', ''),
+        'auto_init' => (bool) env('UPDATER_GIT_AUTO_INIT', false),
+        'default_update_mode' => env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge'),
     ],
 
     'backup' => [
@@ -93,10 +97,15 @@ return [
 
     'sync_token' => env('UPDATER_SYNC_TOKEN', ''),
 
+    'sources' => [
+        'allow_multiple' => (bool) env('UPDATER_SOURCES_ALLOW_MULTIPLE', false),
+    ],
+
     'ui' => [
         'enabled' => (bool) env('UPDATER_UI_ENABLED', true),
         'prefix' => env('UPDATER_UI_PREFIX', '_updater'),
         'middleware' => ['web', 'auth'],
+        'force_sync' => (bool) env('UPDATER_UI_FORCE_SYNC', false),
         'auth' => [
             'enabled' => (bool) env('UPDATER_UI_AUTH_ENABLED', false),
             'auto_provision_admin' => (bool) env('UPDATER_UI_AUTO_PROVISION_ADMIN', true),

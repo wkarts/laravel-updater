@@ -104,14 +104,17 @@ class GitDriver implements CodeDriverInterface
 
     public function update(): string
     {
-        if (!$this->isGitRepository()) {
-            throw new GitException('Diretório atual não é um repositório git válido.');
-        }
-
         $config = $this->runtimeConfig();
         $remote = (string) ($config['remote'] ?? 'origin');
         $branch = (string) ($config['branch'] ?? 'main');
         $updateType = (string) ($config['update_type'] ?? 'git_ff_only');
+
+        if (!$this->isGitRepository()) {
+            if (!$this->tryInitRepository($config, $remote, $branch)) {
+                $cwd = $this->cwd();
+                throw new GitException('Diretório atual não é um repositório git válido: ' . $cwd . '. Defina UPDATER_GIT_PATH corretamente, limpe o cache de configuração (php artisan config:clear) e confirme permissões do usuário do PHP.');
+            }
+        }
 
         if ($updateType === 'git_tag' && !empty($config['tag'])) {
             $result = $this->shellRunner->run(['git', 'fetch', '--tags', $remote], $this->cwd());
@@ -173,13 +176,75 @@ class GitDriver implements CodeDriverInterface
 
     private function cwd(): string
     {
+        $config = $this->runtimeConfig();
+        $configuredPath = trim((string) ($config['path'] ?? ''));
+        if ($configuredPath === '') {
+            $configuredPath = trim((string) env('UPDATER_GIT_PATH', ''));
+        }
+
+        if ($configuredPath !== '') {
+            return $configuredPath;
+        }
+
         return function_exists('base_path') ? base_path() : (getcwd() ?: '.');
     }
 
     private function isGitRepository(): bool
     {
-        $result = $this->shellRunner->run(['git', 'rev-parse', '--is-inside-work-tree'], $this->cwd());
+        $cwd = $this->cwd();
+        if (!is_dir($cwd)) {
+            return false;
+        }
+
+        $result = $this->shellRunner->run(['git', 'rev-parse', '--is-inside-work-tree'], $cwd);
 
         return $result['exit_code'] === 0 && trim((string) $result['stdout']) === 'true';
     }
+
+    private function tryInitRepository(array $config, string $remote, string $branch): bool
+    {
+        $autoInit = (bool) ($config['auto_init'] ?? false);
+        $remoteUrl = trim((string) ($config['remote_url'] ?? ''));
+        $cwd = $this->cwd();
+
+        if (!$autoInit || $remoteUrl === '' || !is_dir($cwd)) {
+            return false;
+        }
+
+        $env = ['GIT_TERMINAL_PROMPT' => '0'];
+
+        $init = $this->shellRunner->run(['git', 'init'], $cwd, $env);
+        if ($init['exit_code'] !== 0) {
+            return false;
+        }
+
+        $this->shellRunner->run(['git', 'remote', 'remove', $remote], $cwd, $env);
+        $setRemote = $this->shellRunner->run(['git', 'remote', 'add', $remote, $remoteUrl], $cwd, $env);
+        if ($setRemote['exit_code'] !== 0) {
+            return false;
+        }
+
+        $fetch = $this->shellRunner->run(['git', 'fetch', '--depth=1', $remote, $branch], $cwd, $env);
+        if ($fetch['exit_code'] !== 0) {
+            $fetch = $this->shellRunner->run(['git', 'fetch', $remote, $branch], $cwd, $env);
+            if ($fetch['exit_code'] !== 0) {
+                return false;
+            }
+        }
+
+        $checkout = $this->shellRunner->run(['git', 'checkout', '-B', $branch], $cwd, $env);
+        if ($checkout['exit_code'] !== 0) {
+            return false;
+        }
+
+        $reset = $this->shellRunner->run(['git', 'reset', '--hard', 'FETCH_HEAD'], $cwd, $env);
+        if ($reset['exit_code'] !== 0) {
+            return false;
+        }
+
+        $this->shellRunner->run(['git', 'branch', '--set-upstream-to=' . $remote . '/' . $branch, $branch], $cwd, $env);
+
+        return $this->isGitRepository();
+    }
 }
+

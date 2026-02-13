@@ -65,7 +65,7 @@ class OperationsController extends Controller
                     'target_tag' => $targetTag,
                     'profile_id' => (int) $data['profile_id'],
                     'source_id' => (int) $data['source_id'],
-                    'sync' => true,
+                    'sync' => (bool) config('updater.ui.force_sync', false),
                 ]);
             } catch (\Throwable $e) {
                 return back()->withErrors(['update' => 'Falha ao executar dry-run: ' . $e->getMessage()])->withInput();
@@ -96,7 +96,7 @@ class OperationsController extends Controller
                 'target_tag' => $targetTag,
                 'profile_id' => (int) $data['profile_id'],
                 'source_id' => (int) $data['source_id'],
-                'sync' => true,
+                'sync' => (bool) config('updater.ui.force_sync', false),
             ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao aplicar atualização: ' . $e->getMessage()])->withInput();
@@ -139,7 +139,7 @@ class OperationsController extends Controller
                 'target_tag' => (string) ($pending['target_tag'] ?? ''),
                 'profile_id' => (int) ($pending['profile_id'] ?? 0),
                 'source_id' => (int) ($pending['source_id'] ?? 0),
-                'sync' => true,
+                'sync' => (bool) config('updater.ui.force_sync', false),
             ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao executar atualização aprovada: ' . $e->getMessage()]);
