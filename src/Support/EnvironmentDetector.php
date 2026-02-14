@@ -8,8 +8,12 @@ use Argws\LaravelUpdater\Exceptions\UpdaterException;
 
 class EnvironmentDetector
 {
-    public function ensureCli(): void
+    public function ensureCli(bool $allowHttp = false): void
     {
+        if ($allowHttp) {
+            return;
+        }
+
         if (PHP_SAPI !== 'cli') {
             throw new UpdaterException('O updater só pode ser executado via CLI.');
         }

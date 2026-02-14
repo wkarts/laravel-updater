@@ -73,7 +73,7 @@ class UpdaterKernel
 
     public function run(array $options = []): array
     {
-        $this->environmentDetector->ensureCli();
+        $this->environmentDetector->ensureCli((bool) ($options['allow_http'] ?? false));
         $this->store->ensureSchema();
         $isDryRun = (bool) ($options['dry_run'] ?? false);
         if (!$isDryRun) {

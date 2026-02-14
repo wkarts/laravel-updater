@@ -173,6 +173,10 @@ class TriggerDispatcher
             $args[] = '--profile-id=' . (int) $options['profile_id'];
         }
 
+        if ((bool) ($options['allow_http'] ?? false)) {
+            $args[] = '--allow-http';
+        }
+
         $seeders = $options['seeders'] ?? [];
         foreach ((array) $seeders as $seeder) {
             $args[] = '--seeder=' . (string) $seeder;

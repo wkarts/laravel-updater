@@ -71,6 +71,7 @@ class UpdaterUiController extends Controller
             'profile_id' => $activeProfile['id'] ?? null,
             'source_id' => $this->managerStore->activeSource()['id'] ?? null,
             'check_only' => $request->boolean('check_only'),
+            'allow_http' => true,
         ]);
 
         return back()->with('status', 'Atualização disparada com sucesso.');
@@ -100,6 +101,7 @@ class UpdaterUiController extends Controller
             'seed' => (string) $request->input('seed', ''),
             'sql_patch' => (string) $request->input('sql_patch', ''),
             'triggered_via' => 'api',
+            'allow_http' => true,
         ];
 
         $dispatcher->triggerUpdate($options);
