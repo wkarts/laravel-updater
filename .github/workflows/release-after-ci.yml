@@ -16,7 +16,8 @@ jobs:
   release:
     if: >
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -25,6 +26,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN != '' && secrets.RELEASE_TOKEN || github.token }}
 
       - name: Configurar git
         run: |
@@ -55,6 +57,9 @@ jobs:
           echo "next=${NEXT}" >> "$GITHUB_OUTPUT"
 
       - name: Criar tag e publicar
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -65,6 +70,17 @@ jobs:
             exit 0
           fi
 
+          if [ -n "${RELEASE_TOKEN:-}" ]; then
+            AUTH_TOKEN="$RELEASE_TOKEN"
+            echo "Usando RELEASE_TOKEN para push da tag."
+          else
+            AUTH_TOKEN="$GITHUB_TOKEN"
+            echo "Usando GITHUB_TOKEN padrão para push da tag."
+          fi
+
+          REPO_SLUG="${{ github.repository }}"
+          git remote set-url origin "https://x-access-token:${AUTH_TOKEN}@github.com/${REPO_SLUG}.git"
+
           git tag "$TAG"
           git push origin "$TAG"
 
@@ -73,6 +89,7 @@ jobs:
         with:
           tag_name: ${{ steps.next_tag.outputs.next }}
           generate_release_notes: true
+          token: ${{ secrets.RELEASE_TOKEN != '' && secrets.RELEASE_TOKEN || github.token }}
 
       - name: Notify Packagist
         env:
