@@ -25,4 +25,44 @@
     <label for="post_update_commands">Comandos pós-update (1 por linha)</label>
     <textarea id="post_update_commands" name="post_update_commands" rows="6">{{ old('post_update_commands', $profile['post_update_commands'] ?? '') }}</textarea>
     <small>Comandos opcionais executados após cache_clear. Linhas iniciadas com # são ignoradas.</small>
+    <div style="margin-top:8px;">
+        <small>Sugestões padrão (clique para inserir no campo):</small>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+            @foreach ([
+                '#composer require argws/laravel-updater',
+                '#php artisan vendor:publish --tag=updater-config --force',
+                '#php artisan vendor:publish --tag=updater-views --force',
+                '#composer update',
+                '#php artisan db:seed --class=ReformaTributariaSeeder',
+            ] as $commandSuggestion)
+                <button type="button" class="btn" data-insert-post-command="{{ $commandSuggestion }}">{{ $commandSuggestion }}</button>
+            @endforeach
+        </div>
+    </div>
 </div>
+
+<script>
+(function () {
+    const textarea = document.getElementById('post_update_commands');
+    if (!textarea) return;
+
+    document.querySelectorAll('[data-insert-post-command]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const command = (button.getAttribute('data-insert-post-command') || '').trim();
+            if (!command) return;
+
+            const current = textarea.value.trim();
+            const normalized = current
+                .split(/\r?\n/)
+                .map((line) => line.trim().replace(/^#\s*/, '').toLowerCase())
+                .filter(Boolean);
+
+            const candidate = command.replace(/^#\s*/, '').toLowerCase();
+            if (normalized.includes(candidate)) return;
+
+            textarea.value = current === '' ? command : `${current}\n${command}`;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    });
+})();
+</script>

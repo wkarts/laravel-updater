@@ -207,6 +207,8 @@ class ManagerController extends Controller
         $profile = $this->managerStore->findProfile($id);
         abort_if($profile === null, 404);
 
+        $profile['post_update_commands'] = $this->mergePostUpdateSuggestions((string) ($profile['post_update_commands'] ?? ''));
+
         return view('laravel-updater::profiles.edit', ['profile' => $profile]);
     }
 
@@ -453,10 +455,7 @@ class ManagerController extends Controller
             $data['pre_update_commands'] = null;
         }
 
-        $data['post_update_commands'] = trim((string) ($data['post_update_commands'] ?? ''));
-        if ($data['post_update_commands'] === '') {
-            $data['post_update_commands'] = null;
-        }
+        $data['post_update_commands'] = $this->mergePostUpdateSuggestions(trim((string) ($data['post_update_commands'] ?? '')));
 
         return $data;
     }
@@ -503,12 +502,58 @@ class ManagerController extends Controller
 
     private function defaultPostUpdateCommands(): string
     {
-        return implode("\n", [
-            '# composer update',
-            '# php artisan db:seed --class=Database\\Seeders\\ReformaTributariaSeeder --force',
-            '# php artisan vendor:publish --tag=updater-config --force',
-            '# php artisan vendor:publish --tag=updater-views --force',
-        ]);
+        return implode("\n", $this->suggestedPostUpdateCommands());
+    }
+
+    /** @return array<int, string> */
+    private function suggestedPostUpdateCommands(): array
+    {
+        return [
+            '#composer require argws/laravel-updater',
+            '#php artisan vendor:publish --tag=updater-config --force',
+            '#php artisan vendor:publish --tag=updater-views --force',
+            '#composer update',
+            '#php artisan db:seed --class=ReformaTributariaSeeder',
+        ];
+    }
+
+    private function mergePostUpdateSuggestions(string $raw): string
+    {
+        $raw = trim($raw);
+        $lines = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+
+        $existing = [];
+        foreach ($lines as $line) {
+            $line = trim((string) $line);
+            if ($line === '') {
+                continue;
+            }
+            $existing[] = $line;
+        }
+
+        $normalized = [];
+        foreach ($existing as $line) {
+            $normalized[] = $this->normalizeCommandLine($line);
+        }
+
+        foreach ($this->suggestedPostUpdateCommands() as $suggestion) {
+            if (!in_array($this->normalizeCommandLine($suggestion), $normalized, true)) {
+                $existing[] = $suggestion;
+                $normalized[] = $this->normalizeCommandLine($suggestion);
+            }
+        }
+
+        return implode("\n", $existing);
+    }
+
+    private function normalizeCommandLine(string $line): string
+    {
+        $line = trim($line);
+        if (str_starts_with($line, '#')) {
+            $line = ltrim(substr($line, 1));
+        }
+
+        return mb_strtolower($line);
     }
 
     /** @return array<int,string> */
