@@ -8,6 +8,32 @@ use Argws\LaravelUpdater\Exceptions\UpdaterException;
 
 class ShellRunner
 {
+    /**
+     * Resolve um binário a partir de uma lista de candidatos.
+     * Retorna o primeiro candidato executável/encontrado no PATH.
+     *
+     * @param array<int, string> $candidates
+     */
+    public function resolveBinary(array $candidates): ?string
+    {
+        foreach ($candidates as $bin) {
+            $bin = trim((string) $bin);
+            if ($bin === '') {
+                continue;
+            }
+            // Caminho absoluto
+            if (str_starts_with($bin, '/') && is_file($bin) && is_executable($bin)) {
+                return $bin;
+            }
+            // Procura no PATH
+            if ($this->binaryExists($bin)) {
+                return $bin;
+            }
+        }
+
+        return null;
+    }
+
     /** @param array<string, string> $env */
     public function run(array $command, ?string $cwd = null, array $env = []): array
     {
@@ -18,10 +44,11 @@ class ShellRunner
         $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
         $workingDirectory = $cwd ?? getcwd();
 
-        $process = proc_open($command, $descriptor, $pipes, $workingDirectory ?: '.', $env === [] ? null : $env);
+        $process = @proc_open($command, $descriptor, $pipes, $workingDirectory ?: '.', $env === [] ? null : $env);
 
         if (!is_resource($process)) {
-            throw new UpdaterException('Falha ao iniciar comando de sistema.');
+            // Quando o executável não existe (ex.: composer não está no PATH), o proc_open pode falhar.
+            throw new UpdaterException('Falha ao iniciar comando de sistema (binário ausente ou sem permissão).');
         }
 
         $stdout = stream_get_contents($pipes[1]) ?: '';
@@ -44,7 +71,10 @@ class ShellRunner
     {
         $result = $this->run($command, $cwd, $env);
         if ($result['exit_code'] !== 0) {
-            throw new UpdaterException(sprintf('Comando falhou (%s): %s', $result['exit_code'], $result['stderr'] ?: $result['stdout']));
+            $cmdStr = implode(' ', array_map(static fn ($p) => (string) $p, $command));
+            $msg = trim((string) ($result['stderr'] ?: $result['stdout']));
+            $suffix = $msg !== '' ? (' ' . $msg) : '';
+            throw new UpdaterException(sprintf('Comando falhou (%s): %s%s', $result['exit_code'], $cmdStr, $suffix));
         }
 
         return $result;
