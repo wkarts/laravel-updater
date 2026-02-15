@@ -48,11 +48,23 @@ class CacheClearStep implements PipelineStepInterface
 
     private function ignoreDuplicateRouteCacheFailure(): bool
     {
-        if (function_exists('config')) {
-            return (bool) config('updater.cache.ignore_route_cache_duplicate_name', true);
+        // Em testes unitários puros (sem container Laravel), o helper config() existe,
+        // mas pode lançar BindingResolutionException ao resolver o serviço "config".
+        // Neste cenário, usamos fallback por ENV e default true.
+        try {
+            if (function_exists('config')) {
+                return (bool) config('updater.cache.ignore_route_cache_duplicate_name', true);
+            }
+        } catch (\Throwable) {
+            // fallback abaixo
         }
 
-        return true;
+        $env = getenv('UPDATER_CACHE_IGNORE_ROUTE_CACHE_DUPLICATE_NAME');
+        if ($env === false || $env === null || $env === '') {
+            return true;
+        }
+
+        return filter_var($env, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? true;
     }
 
     private function isRouteCacheDuplicateNameError(UpdaterException $exception): bool
