@@ -25,6 +25,12 @@ class GitUpdateStep implements PipelineStepInterface
     {
         $activeSource = $this->managerStore?->activeSource();
         $isDryRun = (bool) ($context['options']['dry_run'] ?? false);
+        $requestedUpdateType = (string) ($context['options']['update_type'] ?? config('updater.git.update_type', 'git_ff_only'));
+        $requestedTag = trim((string) ($context['options']['target_tag'] ?? config('updater.git.tag', '')));
+        $context['git_update_log'][] = sprintf('tipo solicitado: %s', $requestedUpdateType);
+        if ($requestedTag !== '') {
+            $context['git_update_log'][] = sprintf('tag solicitada: %s', $requestedTag);
+        }
 
         if (is_array($activeSource) && $this->shellRunner !== null) {
             $sourceType = (string) ($activeSource['type'] ?? 'git_ff_only');
@@ -73,6 +79,11 @@ class GitUpdateStep implements PipelineStepInterface
         }
 
         $context['revision_before'] = $this->codeDriver->currentRevision();
+        $context['git_tag_before'] = $this->resolveCurrentTag();
+
+        if (!$isDryRun) {
+            $this->backupDotEnv($context);
+        }
 
         if (!$isDryRun) {
             $this->backupDotEnv($context);
@@ -89,6 +100,21 @@ class GitUpdateStep implements PipelineStepInterface
         }
 
         $context['revision_after'] = $this->codeDriver->update();
+        $context['git_tag_after'] = $this->resolveCurrentTag();
+
+        if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
+            $afterTag = (string) ($context['git_tag_after'] ?? '');
+            if ($afterTag === '' || $afterTag !== $requestedTag) {
+                throw new \RuntimeException('A tag alvo não foi aplicada corretamente. Esperado: ' . $requestedTag . '; atual: ' . ($afterTag !== '' ? $afterTag : 'sem tag exata'));
+            }
+        }
+
+        if (($context['revision_before'] ?? null) === ($context['revision_after'] ?? null)) {
+            $context['git_update_warning'] = 'Revisão inalterada após update. Isso pode ocorrer se já estava na versão/tag alvo.';
+        }
+
+        $context['git_update_log'][] = sprintf('revision_before: %s', (string) ($context['revision_before'] ?? 'N/A'));
+        $context['git_update_log'][] = sprintf('revision_after: %s', (string) ($context['revision_after'] ?? 'N/A'));
         $this->restoreDotEnv($context);
     }
 
@@ -141,6 +167,24 @@ class GitUpdateStep implements PipelineStepInterface
         if (@copy($backupPath, $envPath)) {
             $context['env_restored'] = true;
         }
+    }
+
+    private function resolveCurrentTag(): ?string
+    {
+        $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+        $env = ['GIT_TERMINAL_PROMPT' => '0'];
+        if (!$this->isGitRepository($cwd, $env)) {
+            return null;
+        }
+
+        $result = $this->shellRunner?->run(['git', 'describe', '--tags', '--exact-match'], $cwd, $env);
+        if (!is_array($result) || (int) ($result['exit_code'] ?? 1) !== 0) {
+            return null;
+        }
+
+        $tag = trim((string) ($result['stdout'] ?? ''));
+
+        return $tag !== '' ? $tag : null;
     }
 
     /** @param array<string,string> $env */
