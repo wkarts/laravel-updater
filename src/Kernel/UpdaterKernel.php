@@ -16,6 +16,8 @@ use Argws\LaravelUpdater\Pipeline\Steps\HealthCheckStep;
 use Argws\LaravelUpdater\Pipeline\Steps\LockStep;
 use Argws\LaravelUpdater\Pipeline\Steps\MaintenanceOffStep;
 use Argws\LaravelUpdater\Pipeline\Steps\MaintenanceOnStep;
+use Argws\LaravelUpdater\Pipeline\Steps\PostUpdateCommandsStep;
+use Argws\LaravelUpdater\Pipeline\Steps\PreUpdateCommandsStep;
 use Argws\LaravelUpdater\Pipeline\Steps\MigrateStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SeedStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SnapshotCodeStep;
@@ -46,6 +48,7 @@ class UpdaterKernel
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
             new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
             new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot'), $services['archive'] ?? null),
+            new PreUpdateCommandsStep($services['shell']),
             new MaintenanceOnStep($services['shell']),
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
             new ComposerInstallStep($services['shell']),
@@ -54,6 +57,7 @@ class UpdaterKernel
             new SqlPatchStep((string) config('updater.patches.path'), $services['store']),
             new BuildAssetsStep($services['shell'], (bool) config('updater.build_assets', false)),
             new CacheClearStep($services['shell']),
+            new PostUpdateCommandsStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
             new MaintenanceOffStep($services['shell'], $services['lock']),
         ], $services['logger'], $services['store']);
@@ -104,7 +108,7 @@ class UpdaterKernel
                     'versao_atual' => $this->codeDriver->currentRevision(),
                     'versao_alvo' => $status['remote'] ?? null,
                     'diff_commits' => $status['behind_by_commits'] ?? 0,
-                    'steps' => ['lock','backup_database','snapshot_code','maintenance_on','git_update','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','health_check','maintenance_off'],
+                    'steps' => ['lock','backup_database','snapshot_code','pre_update_commands','maintenance_on','git_update','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','post_update_commands','health_check','maintenance_off'],
                     'comandos_simulados' => [
                         'git fetch origin <branch>',
                         'git rev-list --count HEAD..origin/<branch>',
