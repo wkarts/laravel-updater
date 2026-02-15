@@ -6,7 +6,6 @@
 @section('content')
 <div class="grid">
     @include('laravel-updater::settings.branding', ['branding' => $branding])
-    @include('laravel-updater::settings.maintenance', ['maintenance' => $maintenance])
     @include('laravel-updater::settings.security')
 </div>
 
