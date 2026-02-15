@@ -95,8 +95,21 @@ class StateStore
             logo_path TEXT NULL,
             favicon_path TEXT NULL,
             primary_color TEXT NULL,
+            maintenance_title TEXT NULL,
+            maintenance_message TEXT NULL,
+            maintenance_footer TEXT NULL,
             updated_at TEXT NOT NULL
         )');
+
+        // Backward-compatible upgrades: add new columns if the table already exists.
+        foreach (['maintenance_title', 'maintenance_message', 'maintenance_footer'] as $col) {
+            try {
+                $this->connect()->exec('ALTER TABLE updater_branding ADD COLUMN ' . $col . ' TEXT NULL');
+            } catch (\Throwable $e) {
+                // ignore
+            }
+        }
+
 
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_sources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -360,7 +373,7 @@ class StateStore
         return $this->connect();
     }
 
-    private function connect(): PDO
+    public function connect(): PDO
     {
         if ($this->pdo instanceof PDO) {
             return $this->pdo;
