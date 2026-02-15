@@ -112,7 +112,13 @@ class GitDriver implements CodeDriverInterface
         if (!$this->isGitRepository()) {
             if (!$this->tryInitRepository($config, $remote, $branch)) {
                 $cwd = $this->cwd();
-                throw new GitException('Diretório atual não é um repositório git válido: ' . $cwd . '. Defina UPDATER_GIT_PATH corretamente, limpe o cache de configuração (php artisan config:clear) e confirme permissões do usuário do PHP.');
+                throw new GitException(
+                    'Diretório atual não é um repositório git válido: ' . $cwd . '. '
+                    . 'Isso normalmente acontece quando o projeto foi publicado por ZIP/FTP (sem pasta .git). '
+                    . 'Soluções: (1) inicialize git manualmente (git init + remote + fetch + checkout) '
+                    . 'OU (2) habilite o bootstrap automático definindo UPDATER_GIT_AUTO_INIT=true e UPDATER_GIT_REMOTE_URL, '
+                    . 'depois rode php artisan config:clear.'
+                );
             }
         }
 
@@ -159,7 +165,25 @@ class GitDriver implements CodeDriverInterface
     {
         $runtime = config('updater.git', []);
 
-        return is_array($runtime) ? array_merge($this->config, $runtime) : $this->config;
+        // Fallback direto do .env para reduzir "pegadinhas" com config cache.
+        // Ex.: você ajusta UPDATER_GIT_REMOTE_URL mas esquece de rodar config:clear.
+        $env = [
+            'path' => env('UPDATER_GIT_PATH'),
+            'remote_url' => env('UPDATER_GIT_REMOTE_URL'),
+            'branch' => env('UPDATER_GIT_BRANCH'),
+            'remote' => env('UPDATER_GIT_REMOTE', env('UPDATER_GIT_REMOTE_NAME')),
+            'auto_init' => env('UPDATER_GIT_AUTO_INIT'),
+            'tag' => env('UPDATER_GIT_TARGET_TAG'),
+            'update_type' => env('UPDATER_GIT_UPDATE_TYPE'),
+            'ff_only' => env('UPDATER_GIT_FF_ONLY'),
+        ];
+        $env = array_filter($env, static fn($v) => $v !== null && $v !== '');
+
+        if (is_array($runtime)) {
+            return array_merge($env, $this->config, $runtime);
+        }
+
+        return array_merge($env, $this->config);
     }
 
     private function currentTag(): ?string
