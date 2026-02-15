@@ -14,7 +14,21 @@
         }
 
         $primary = $branding['primary_color'] ?? (string) config('updater.app.primary_color', '#0d6efd');
-        $logoUrl = $branding['logo_url'] ?? ((string) config('updater.app.logo_url', '') ?: null);
+
+        // Mesma parametrização de branding do painel, com prioridade para logo dedicado da manutenção.
+        $logoUrl = null;
+        if (!empty($branding['maintenance_logo_path'])) {
+            try {
+                $logoUrl = route('updater.branding.maintenance_logo');
+            } catch (\Throwable $e) {
+                $logoUrl = null;
+            }
+        }
+
+        if (empty($logoUrl)) {
+            $logoUrl = $branding['maintenance_logo_url'] ?? ((string) config('updater.maintenance.logo_url', '') ?: null);
+        }
+
         if (empty($logoUrl) && !empty($branding['logo_path'])) {
             try {
                 $logoUrl = route('updater.branding.logo');
@@ -22,6 +36,11 @@
                 $logoUrl = null;
             }
         }
+
+        if (empty($logoUrl)) {
+            $logoUrl = $branding['logo_url'] ?? ((string) config('updater.app.logo_url', '') ?: null);
+        }
+
         $faviconUrl = $branding['favicon_url'] ?? ((string) config('updater.app.favicon_url', '') ?: null);
         $appName = $branding['app_name_full'] ?? ($branding['app_name'] ?? config('app.name', 'Aplicação'));
         $appDesc = $branding['app_desc'] ?? (string) config('updater.app.desc', '');

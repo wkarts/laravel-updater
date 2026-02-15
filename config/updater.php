@@ -247,6 +247,7 @@ return [
         'default_title' => env('UPDATER_MAINTENANCE_TITLE', 'Atualização em andamento'),
         'default_message' => env('UPDATER_MAINTENANCE_MESSAGE', 'Estamos atualizando o sistema. Volte em alguns minutos.'),
         'default_footer' => env('UPDATER_MAINTENANCE_FOOTER', 'Obrigado pela compreensão.'),
+        'logo_url' => env('UPDATER_MAINTENANCE_LOGO_URL', env('UPDATER_BRAND_LOGO_URL', '')),
         'enter_on_update_start' => (bool) env('UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START', true),
 
         // Rotas que nunca devem ser bloqueadas pelo maintenance mode.

@@ -368,7 +368,7 @@ No painel `/_updater/settings` você pode configurar tudo pela UI:
 
 - textos de manutenção;
 - cor primária;
-- upload de logo/favicon;
+- upload de logo do painel, favicon do painel e logo exclusiva da manutenção;
 - comportamento de primeira execução sem `.git`;
 - entrada em manutenção no início da atualização.
 
@@ -382,9 +382,12 @@ Se você preferir não usar upload no painel, também pode apontar logo/ícone p
 UPDATER_BRAND_LOGO_URL=https://seu-dominio.com.br/assets/logo.png
 UPDATER_BRAND_FAVICON_URL=https://seu-dominio.com.br/assets/favicon.ico
 UPDATER_BRAND_PRIMARY_COLOR=#0d6efd
+UPDATER_MAINTENANCE_LOGO_URL=https://seu-dominio.com.br/assets/logo-manutencao.png
 ```
 
 Se existir upload no painel, ele tem prioridade sobre as URLs do `.env`.
+
+Na tela de configurações de branding, os campos indicam claramente o que é cada ativo: logo do painel, favicon do painel e logo da manutenção.
 
 ### Controles manuais de manutenção
 

@@ -16,6 +16,7 @@ if ((bool) config('updater.ui.enabled', true)) {
         Route::get('/assets/updater.js', [UpdaterUiController::class, 'assetJs'])->name('updater.asset.js');
         Route::get('/assets/branding/logo', [UpdaterUiController::class, 'brandingLogo'])->name('updater.branding.logo');
         Route::get('/assets/branding/favicon', [UpdaterUiController::class, 'brandingFavicon'])->name('updater.branding.favicon');
+        Route::get('/assets/branding/maintenance-logo', [UpdaterUiController::class, 'brandingMaintenanceLogo'])->name('updater.branding.maintenance_logo');
         Route::post('/api/trigger', [UpdaterUiController::class, 'apiTrigger'])->name('updater.api.trigger');
     });
 
@@ -78,7 +79,7 @@ if ((bool) config('updater.ui.enabled', true)) {
 
                 Route::get('/settings', [ManagerController::class, 'settingsIndex'])->name('updater.settings.index');
                 Route::post('/settings/branding', [ManagerController::class, 'saveBranding'])->name('updater.settings.branding.save');
-                Route::delete('/settings/branding/{asset}', [ManagerController::class, 'removeBrandingAsset'])->whereIn('asset', ['logo', 'favicon'])->name('updater.settings.branding.asset.remove');
+                Route::delete('/settings/branding/{asset}', [ManagerController::class, 'removeBrandingAsset'])->whereIn('asset', ['logo', 'favicon', 'maintenance-logo'])->name('updater.settings.branding.asset.remove');
                 Route::post('/settings/branding/reset', [ManagerController::class, 'resetBranding'])->name('updater.settings.branding.reset');
                 Route::post('/settings/tokens', [ManagerController::class, 'createApiToken'])->name('updater.settings.tokens.create');
                 Route::delete('/settings/tokens/{id}', [ManagerController::class, 'revokeApiToken'])->name('updater.settings.tokens.revoke');

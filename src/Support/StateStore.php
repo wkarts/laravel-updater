@@ -95,6 +95,7 @@ class StateStore
             app_desc TEXT NULL,
             logo_path TEXT NULL,
             favicon_path TEXT NULL,
+            maintenance_logo_path TEXT NULL,
             primary_color TEXT NULL,
             maintenance_title TEXT NULL,
             maintenance_message TEXT NULL,
@@ -207,6 +208,7 @@ class StateStore
 
         $this->connect()->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_updater_login_attempts_email_ip ON updater_login_attempts(email, ip)');
 
+        $this->ensureColumn('updater_branding', 'maintenance_logo_path', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'name', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'last_login_at', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'permissions_json', 'TEXT NULL');

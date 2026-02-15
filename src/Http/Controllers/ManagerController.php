@@ -280,6 +280,7 @@ class ManagerController extends Controller
             'enter_maintenance_on_update_start' => ['nullable', 'boolean'],
             'logo' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:png,jpg,jpeg,svg'],
             'favicon' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:ico,png'],
+            'maintenance_logo' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:png,jpg,jpeg,svg'],
         ]);
 
         $row = $this->managerStore->branding() ?? [];
@@ -293,6 +294,12 @@ class ManagerController extends Controller
             $data['favicon_path'] = $request->file('favicon')->store('updater/branding');
         } else {
             $data['favicon_path'] = $row['favicon_path'] ?? null;
+        }
+
+        if ($request->hasFile('maintenance_logo')) {
+            $data['maintenance_logo_path'] = $request->file('maintenance_logo')->store('updater/branding');
+        } else {
+            $data['maintenance_logo_path'] = $row['maintenance_logo_path'] ?? null;
         }
 
         $data['first_run_assume_behind'] = (int) $request->boolean('first_run_assume_behind');
@@ -316,6 +323,11 @@ class ManagerController extends Controller
         if ($asset === 'favicon' && !empty($row['favicon_path'])) {
             Storage::delete((string) $row['favicon_path']);
             $row['favicon_path'] = null;
+        }
+
+        if ($asset === 'maintenance-logo' && !empty($row['maintenance_logo_path'])) {
+            Storage::delete((string) $row['maintenance_logo_path']);
+            $row['maintenance_logo_path'] = null;
         }
 
         $this->managerStore->saveBranding($row);

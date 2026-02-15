@@ -232,6 +232,19 @@ class UpdaterUiController extends Controller
         ]);
     }
 
+
+    public function brandingMaintenanceLogo()
+    {
+        $branding = $this->managerStore->branding();
+        if ($branding === null || empty($branding['maintenance_logo_path']) || !Storage::exists((string) $branding['maintenance_logo_path'])) {
+            abort(404);
+        }
+
+        return response()->file(Storage::path((string) $branding['maintenance_logo_path']), [
+            'Cache-Control' => 'public, max-age=3600',
+        ]);
+    }
+
     public function brandingFavicon()
     {
         $branding = $this->managerStore->branding();

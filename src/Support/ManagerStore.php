@@ -21,6 +21,7 @@ class ManagerStore
         $envDesc = (string) config('updater.app.desc', '');
         $envLogoUrl = (string) config('updater.app.logo_url', '');
         $envFaviconUrl = (string) config('updater.app.favicon_url', '');
+        $envMaintenanceLogoUrl = (string) config('updater.maintenance.logo_url', $envLogoUrl);
         $envPrimary = (string) config('updater.app.primary_color', '#3b82f6');
 
         return [
@@ -30,8 +31,10 @@ class ManagerStore
             'app_name_full' => trim(((string) ($row['app_name'] ?? $envName)).' '.((string) ($row['app_sufix_name'] ?? $envSuffix))),
             'logo_path' => $row['logo_path'] ?? null,
             'favicon_path' => $row['favicon_path'] ?? null,
+            'maintenance_logo_path' => $row['maintenance_logo_path'] ?? null,
             'logo_url' => (string) ($row['logo_url'] ?? $envLogoUrl),
             'favicon_url' => (string) ($row['favicon_url'] ?? $envFaviconUrl),
+            'maintenance_logo_url' => (string) ($row['maintenance_logo_url'] ?? $envMaintenanceLogoUrl),
             'primary_color' => (string) ($row['primary_color'] ?? $envPrimary),
             'maintenance_title' => (string) ($row['maintenance_title'] ?? config('updater.maintenance.default_title', 'Atualização em andamento')),
             'maintenance_message' => (string) ($row['maintenance_message'] ?? config('updater.maintenance.default_message', 'Estamos atualizando o sistema. Volte em alguns minutos.')),
@@ -54,14 +57,15 @@ class ManagerStore
 
     public function saveBranding(array $data): void
     {
-        $stmt = $this->pdo()->prepare('INSERT INTO updater_branding (id, app_name, app_sufix_name, app_desc, logo_path, favicon_path, primary_color, maintenance_title, maintenance_message, maintenance_footer, first_run_assume_behind, first_run_assume_behind_commits, enter_maintenance_on_update_start, updated_at)
-            VALUES (1, :app_name, :app_sufix_name, :app_desc, :logo_path, :favicon_path, :primary_color, :maintenance_title, :maintenance_message, :maintenance_footer, :first_run_assume_behind, :first_run_assume_behind_commits, :enter_maintenance_on_update_start, :updated_at)
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_branding (id, app_name, app_sufix_name, app_desc, logo_path, favicon_path, maintenance_logo_path, primary_color, maintenance_title, maintenance_message, maintenance_footer, first_run_assume_behind, first_run_assume_behind_commits, enter_maintenance_on_update_start, updated_at)
+            VALUES (1, :app_name, :app_sufix_name, :app_desc, :logo_path, :favicon_path, :maintenance_logo_path, :primary_color, :maintenance_title, :maintenance_message, :maintenance_footer, :first_run_assume_behind, :first_run_assume_behind_commits, :enter_maintenance_on_update_start, :updated_at)
             ON CONFLICT(id) DO UPDATE SET
             app_name = excluded.app_name,
             app_sufix_name = excluded.app_sufix_name,
             app_desc = excluded.app_desc,
             logo_path = excluded.logo_path,
             favicon_path = excluded.favicon_path,
+            maintenance_logo_path = excluded.maintenance_logo_path,
             primary_color = excluded.primary_color,
             maintenance_title = excluded.maintenance_title,
             maintenance_message = excluded.maintenance_message,
@@ -77,6 +81,7 @@ class ManagerStore
             ':app_desc' => $data['app_desc'] ?? null,
             ':logo_path' => $data['logo_path'] ?? null,
             ':favicon_path' => $data['favicon_path'] ?? null,
+            ':maintenance_logo_path' => $data['maintenance_logo_path'] ?? null,
             ':primary_color' => $data['primary_color'] ?? '#3b82f6',
             ':maintenance_title' => $data['maintenance_title'] ?? null,
             ':maintenance_message' => $data['maintenance_message'] ?? null,
