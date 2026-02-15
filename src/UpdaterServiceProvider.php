@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater;
 
 use Argws\LaravelUpdater\Commands\UpdateCheckCommand;
+use Argws\LaravelUpdater\Commands\UpdateEnvSyncCommand;
 use Argws\LaravelUpdater\Commands\UpdateNotifyCommand;
 use Argws\LaravelUpdater\Commands\UpdateRollbackCommand;
 use Argws\LaravelUpdater\Commands\UpdateRunCommand;
@@ -179,6 +180,7 @@ class UpdaterServiceProvider extends ServiceProvider
                 UpdateRollbackCommand::class,
                 UpdateStatusCommand::class,
                 UpdateNotifyCommand::class,
+                UpdateEnvSyncCommand::class,
                 UpdaterMigrateCommand::class,
             ]);
         }

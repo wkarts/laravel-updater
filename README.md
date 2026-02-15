@@ -144,6 +144,32 @@ UPDATER_UI_LOGIN_DECAY_MINUTES=10
 
 Se ambos existirem, o formato novo (`UPDATER_UI_RATE_LIMIT_*`) tem prioridade.
 
+
+## .env do updater sem sobrescrever seu .env atual
+
+Para reaproveitar o `.env` atual da aplicação (sem perder chaves já existentes), o pacote inclui:
+
+- `stubs/env/updater.default.env.example`
+- `stubs/env/updater.production.env.example`
+- `stubs/env/updater.homolog.env.example`
+
+E um comando de sincronização não destrutiva:
+
+```bash
+# apenas lista chaves UPDATER_* ausentes
+php artisan system:update:env-sync --profile=default
+
+# adiciona somente as chaves ausentes no .env atual
+php artisan system:update:env-sync --profile=production --write
+```
+
+Perfis disponíveis em `--profile`:
+- `default`
+- `production`
+- `homolog`
+
+Esse fluxo mantém o `.env` existente e só acrescenta parâmetros do updater que ainda não existem.
+
 ## CI e release
 
 - CI valida matrix real: PHP 8.2/8.3/8.4 + Laravel 10/11/12.
