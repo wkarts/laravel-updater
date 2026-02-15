@@ -15,9 +15,14 @@
 
 
 <div>
+    <label for="pre_update_commands">Comandos pré-update (1 por linha)</label>
+    <textarea id="pre_update_commands" name="pre_update_commands" rows="5">{{ old('pre_update_commands', $profile['pre_update_commands'] ?? '') }}</textarea>
+    <small>Comandos opcionais executados antes de entrar em manutenção e antes da atualização do código. Linhas iniciadas com # são ignoradas.</small>
+</div>
+
+
+<div>
     <label for="post_update_commands">Comandos pós-update (1 por linha)</label>
-    <textarea id="post_update_commands" name="post_update_commands" rows="6" placeholder="# Exemplo (comentado):
-# php artisan db:seed --class=Database\\Seeders\\ReformaTributariaSeeder --force
-php artisan cache:clear">{{ old('post_update_commands', $profile['post_update_commands'] ?? '') }}</textarea>
+    <textarea id="post_update_commands" name="post_update_commands" rows="6">{{ old('post_update_commands', $profile['post_update_commands'] ?? '') }}</textarea>
     <small>Comandos opcionais executados após cache_clear. Linhas iniciadas com # são ignoradas.</small>
 </div>

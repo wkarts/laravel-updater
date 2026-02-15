@@ -141,6 +141,7 @@ class StateStore
             rollback_on_fail INTEGER NOT NULL DEFAULT 0,
             retention_backups INTEGER NOT NULL DEFAULT 10,
             active INTEGER NOT NULL DEFAULT 0,
+            pre_update_commands TEXT NULL,
             post_update_commands TEXT NULL
         )');
 
@@ -204,6 +205,7 @@ class StateStore
         $this->ensureColumn('updater_users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
         $this->ensureColumn('updater_sources', 'auth_username', 'TEXT NULL');
         $this->ensureColumn('updater_sources', 'auth_password', 'TEXT NULL');
+        $this->ensureColumn('updater_profiles', 'pre_update_commands', 'TEXT NULL');
         $this->ensureColumn('updater_profiles', 'post_update_commands', 'TEXT NULL');
     }
 

@@ -29,6 +29,7 @@ class UpdateRunCommand extends Command
         {--strict-migrate : Não reconcilia drift de migrations}
         {--source-id= : ID da fonte a ativar antes da execução}
         {--profile-id= : ID do perfil a ativar antes da execução}
+        {--pre-command=* : Comando pré-update (pode repetir)}
         {--post-command=* : Comando pós-update (pode repetir)}';
     protected $description = 'Executa a atualização completa do sistema.';
 
@@ -89,6 +90,7 @@ class UpdateRunCommand extends Command
             'strict_migrate' => (bool) $this->option('strict-migrate'),
             'source_id' => $sourceId > 0 ? $sourceId : null,
             'profile_id' => $profileId > 0 ? $profileId : null,
+            'pre_update_commands' => $this->resolvePreUpdateCommands($profile, (array) $this->option('pre-command')),
             'post_update_commands' => $this->resolvePostUpdateCommands($profile, (array) $this->option('post-command')),
         ];
 
@@ -103,6 +105,44 @@ class UpdateRunCommand extends Command
 
             return self::FAILURE;
         }
+    }
+
+    /** @param array<string,mixed>|null $profile */
+    private function resolvePreUpdateCommands(?array $profile, array $manual): array
+    {
+        $commands = [];
+
+        $profileRaw = (string) ($profile['pre_update_commands'] ?? '');
+        foreach (preg_split('/\r\n|\r|\n/', $profileRaw) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $commands[] = $line;
+        }
+
+        foreach ($manual as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $commands[] = $line;
+        }
+
+        if ($commands === []) {
+            $envRaw = trim((string) env('UPDATER_PRE_UPDATE_COMMANDS', ''));
+            if ($envRaw !== '') {
+                foreach (preg_split('/;;|\r\n|\r|\n/', $envRaw) ?: [] as $line) {
+                    $line = trim((string) $line);
+                    if ($line === '' || str_starts_with($line, '#')) {
+                        continue;
+                    }
+                    $commands[] = $line;
+                }
+            }
+        }
+
+        return array_values(array_unique($commands));
     }
 
     /** @param array<string,mixed>|null $profile */

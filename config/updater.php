@@ -123,6 +123,11 @@ return [
     ],
 
 
+    // Comandos genéricos pré-update (opcional).
+    // Exemplo COMENTADO (não executa automaticamente):
+    // UPDATER_PRE_UPDATE_COMMANDS="php artisan optimize:clear"
+    'pre_update_commands' => env('UPDATER_PRE_UPDATE_COMMANDS', ''),
+
     // Comandos genéricos pós-update (opcional).
     // Exemplo COMENTADO (não executa automaticamente):
     // UPDATER_POST_UPDATE_COMMANDS="php artisan db:seed --class=Database\\Seeders\\ReformaTributariaSeeder --force"
