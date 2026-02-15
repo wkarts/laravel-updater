@@ -122,6 +122,13 @@ return [
         'backoff_ms' => (int) env('UPDATER_MIGRATE_BACKOFF_MS', 500),
     ],
 
+
+    'cache' => [
+        // Evita derrubar update quando route:cache falhar por rota duplicada no host.
+        // Nesse caso o updater registra warning e executa route:clear.
+        'ignore_route_cache_duplicate_name' => (bool) env('UPDATER_CACHE_IGNORE_ROUTE_CACHE_DUPLICATE_NAME', true),
+    ],
+
     'healthcheck' => [
         'enabled' => (bool) env('UPDATER_HEALTHCHECK_ENABLED', true),
         'url' => env('UPDATER_HEALTHCHECK_URL', env('APP_URL', 'http://localhost')),
@@ -148,6 +155,13 @@ return [
 
     'sources' => [
         'allow_multiple' => (bool) env('UPDATER_SOURCES_ALLOW_MULTIPLE', false),
+    ],
+
+
+    'auto_publish' => [
+        'enabled' => (bool) env('UPDATER_AUTO_PUBLISH_ENABLED', true),
+        'config' => (bool) env('UPDATER_AUTO_PUBLISH_CONFIG', true),
+        'views' => (bool) env('UPDATER_AUTO_PUBLISH_VIEWS', true),
     ],
 
     'ui' => [

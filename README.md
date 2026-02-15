@@ -15,6 +15,19 @@ php artisan vendor:publish --tag=updater-config
 ```
 
 ### Atualização do config após update do pacote
+### Publicação automática de config/views (equivalente ao --force)
+A partir desta versão, o updater pode sincronizar automaticamente (em execução de console) os arquivos publicados de `config` e `views` para manter o pacote atualizado, com comportamento equivalente ao `vendor:publish --force`.
+
+Controle por `.env`:
+
+```dotenv
+UPDATER_AUTO_PUBLISH_ENABLED=true
+UPDATER_AUTO_PUBLISH_CONFIG=true
+UPDATER_AUTO_PUBLISH_VIEWS=true
+```
+
+Se quiser desativar a sincronização automática, ajuste para `false`.
+
 
 Por padrão, o `vendor:publish` **não sobrescreve** `config/updater.php` se ele já existir no seu projeto.
 Se uma nova versão do pacote trouxer chaves novas no config, você tem 2 opções:
@@ -465,3 +478,14 @@ Se for consulta/uso normal (`select`, `update`, etc.), permanece `NON_RETRYABLE`
 Em alguns projetos, providers/helpers consultam `ENCRYPTION_KEY` via `env()/getenv()` durante comandos Artisan. Em execução não-interativa do updater, isso pode falhar mesmo com chave no `.env`.
 
 O `ShellRunner` do pacote agora preserva o ambiente do processo e também faz fallback de leitura do `.env` (chaves `ENCRYPTION_KEY` e `APP_KEY`) para o comando filho. Isso evita quebra no `cache_clear` por falso negativo de chave ausente.
+
+### Tratamento de falha de `route:cache` por nome de rota duplicado
+Se o host tiver rotas com nomes duplicados, o Laravel lança `LogicException` no `route:cache`.
+O updater agora pode seguir o pipeline sem abortar o update: registra warning e executa `route:clear`.
+
+Controle por `.env`:
+
+```dotenv
+UPDATER_CACHE_IGNORE_ROUTE_CACHE_DUPLICATE_NAME=true
+```
+

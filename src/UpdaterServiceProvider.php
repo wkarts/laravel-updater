@@ -165,6 +165,7 @@ class UpdaterServiceProvider extends ServiceProvider
         ], 'updater-assets');
 
         $this->syncAssetsIfNeeded();
+        $this->syncPublishedResourcesIfNeeded();
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-updater');
         $this->loadRoutesFrom(__DIR__ . '/../routes/updater.php');
@@ -199,6 +200,58 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->copyAssetIfStale($sourceCss, $targetCss);
         $this->copyAssetIfStale($sourceJs, $targetJs);
+    }
+
+
+    private function syncPublishedResourcesIfNeeded(): void
+    {
+        if (!$this->app->runningInConsole()) {
+            return;
+        }
+
+        if (!(bool) config('updater.auto_publish.enabled', true)) {
+            return;
+        }
+
+        if ((bool) config('updater.auto_publish.config', true)) {
+            $this->copyAssetIfStale(__DIR__ . '/../config/updater.php', config_path('updater.php'));
+        }
+
+        if ((bool) config('updater.auto_publish.views', true)) {
+            $this->copyDirectoryIfStale(__DIR__ . '/../resources/views', resource_path('views/vendor/laravel-updater'));
+        }
+    }
+
+    private function copyDirectoryIfStale(string $sourceDir, string $targetDir): void
+    {
+        if (!is_dir($sourceDir)) {
+            return;
+        }
+
+        if (!is_dir($targetDir)) {
+            @mkdir($targetDir, 0755, true);
+        }
+
+        $entries = @scandir($sourceDir);
+        if (!is_array($entries)) {
+            return;
+        }
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $source = $sourceDir . '/' . $entry;
+            $target = $targetDir . '/' . $entry;
+
+            if (is_dir($source)) {
+                $this->copyDirectoryIfStale($source, $target);
+                continue;
+            }
+
+            $this->copyAssetIfStale($source, $target);
+        }
     }
 
     private function copyAssetIfStale(string $source, string $target): void
