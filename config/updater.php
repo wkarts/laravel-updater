@@ -154,4 +154,17 @@ return [
         'channel' => env('UPDATER_LOG_CHANNEL', 'updater'),
         'path' => env('UPDATER_LOG_PATH', storage_path('logs/updater.log')),
     ],
+
+
+    'maintenance' => [
+        // View used by `php artisan down --render=...` during update.
+        // Default uses the package view to avoid CLI-only globals (REQUEST_URI) issues.
+        'render_view' => env('UPDATER_MAINTENANCE_VIEW', 'laravel-updater::maintenance'),
+
+        // Basic message defaults used by the package maintenance view.
+        'default_title' => env('UPDATER_MAINTENANCE_TITLE', 'Atualização em andamento'),
+        'default_message' => env('UPDATER_MAINTENANCE_MESSAGE', 'Estamos atualizando o sistema. Volte em alguns minutos.'),
+        'default_footer' => env('UPDATER_MAINTENANCE_FOOTER', 'Obrigado pela compreensão.'),
+    ],
+
 ];

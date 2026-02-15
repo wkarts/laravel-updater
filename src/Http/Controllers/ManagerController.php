@@ -251,6 +251,9 @@ class ManagerController extends Controller
             'app_sufix_name' => ['nullable', 'string', 'max:120'],
             'app_desc' => ['nullable', 'string', 'max:255'],
             'primary_color' => ['nullable', 'string', 'max:20'],
+            'maintenance_title' => ['nullable', 'string', 'max:120'],
+            'maintenance_message' => ['nullable', 'string', 'max:500'],
+            'maintenance_footer' => ['nullable', 'string', 'max:200'],
             'logo' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:png,jpg,jpeg,svg'],
             'favicon' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:ico,png'],
         ]);

@@ -31,6 +31,10 @@ class ManagerStore
             'logo_path' => $row['logo_path'] ?? null,
             'favicon_path' => $row['favicon_path'] ?? null,
             'primary_color' => (string) ($row['primary_color'] ?? '#3b82f6'),
+            'maintenance_title' => (string) ($row['maintenance_title'] ?? config('updater.maintenance.default_title', 'Atualização em andamento')),
+            'maintenance_message' => (string) ($row['maintenance_message'] ?? config('updater.maintenance.default_message', 'Estamos atualizando o sistema. Volte em alguns minutos.')),
+            'maintenance_footer' => (string) ($row['maintenance_footer'] ?? config('updater.maintenance.default_footer', 'Obrigado pela compreensão.')),
+
             'is_custom' => $row !== null,
         ];
     }
@@ -45,8 +49,8 @@ class ManagerStore
 
     public function saveBranding(array $data): void
     {
-        $stmt = $this->pdo()->prepare('INSERT INTO updater_branding (id, app_name, app_sufix_name, app_desc, logo_path, favicon_path, primary_color, updated_at)
-            VALUES (1, :app_name, :app_sufix_name, :app_desc, :logo_path, :favicon_path, :primary_color, :updated_at)
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_branding (id, app_name, app_sufix_name, app_desc, logo_path, favicon_path, primary_color, maintenance_title, maintenance_message, maintenance_footer, updated_at)
+            VALUES (1, :app_name, :app_sufix_name, :app_desc, :logo_path, :favicon_path, :primary_color, :maintenance_title, :maintenance_message, :maintenance_footer, :updated_at)
             ON CONFLICT(id) DO UPDATE SET
             app_name = excluded.app_name,
             app_sufix_name = excluded.app_sufix_name,
@@ -63,6 +67,9 @@ class ManagerStore
             ':logo_path' => $data['logo_path'] ?? null,
             ':favicon_path' => $data['favicon_path'] ?? null,
             ':primary_color' => $data['primary_color'] ?? '#3b82f6',
+            ':maintenance_title' => $data['maintenance_title'] ?? null,
+            ':maintenance_message' => $data['maintenance_message'] ?? null,
+            ':maintenance_footer' => $data['maintenance_footer'] ?? null,
             ':updated_at' => date(DATE_ATOM),
         ]);
     }

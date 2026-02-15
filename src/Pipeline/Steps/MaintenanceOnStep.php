@@ -18,7 +18,41 @@ class MaintenanceOnStep implements PipelineStepInterface
 
     public function handle(array &$context): void
     {
-        $this->shellRunner->runOrFail(['php', 'artisan', 'down']);
+        // Prefer a safe, package-provided view by default.
+        // If the host app wants to keep its own errors::503, it can set UPDATER_MAINTENANCE_VIEW=errors::503
+        // or updater.maintenance.render_view accordingly.
+        $preferred = (string) config('updater.maintenance.render_view', (string) env('UPDATER_MAINTENANCE_VIEW', 'laravel-updater::maintenance'));
+
+        $candidates = [];
+        if (!empty($preferred)) { $candidates[] = $preferred; }
+
+        // Keep legacy compatibility: some installations rely on errors::503.
+        // We try it as a fallback if not already chosen.
+        if (!in_array('errors::503', $candidates, true)) {
+            $candidates[] = 'errors::503';
+        }
+
+        $entered = false;
+
+        foreach ($candidates as $view) {
+            try {
+                $this->shellRunner->runOrFail(['php', 'artisan', 'down', '--render=' . $view]);
+                $entered = true;
+                break;
+            } catch (\Throwable $e) {
+                // Try next candidate (common failure: host view expects REQUEST_URI in CLI).
+                $context['maintenance_on_error'][] = [
+                    'view' => $view,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        if (!$entered) {
+            // Last resort: enter maintenance without custom render.
+            $this->shellRunner->runOrFail(['php', 'artisan', 'down']);
+        }
+
         $context['maintenance'] = true;
     }
 

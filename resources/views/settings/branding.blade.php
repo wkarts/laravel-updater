@@ -6,6 +6,9 @@
         <input name="app_sufix_name" value="{{ $branding['app_sufix_name'] ?? '' }}" placeholder="Sufixo do nome">
         <input name="app_desc" value="{{ $branding['app_desc'] ?? '' }}" placeholder="Descrição curta">
         <input name="primary_color" value="{{ $branding['primary_color'] ?? '#3b82f6' }}" placeholder="#3b82f6">
+        <input name="maintenance_title" value="{{ $branding['maintenance_title'] ?? '' }}" placeholder="Título da manutenção (opcional)">
+        <textarea name="maintenance_message" rows="3" placeholder="Mensagem de manutenção (opcional)">{{ $branding['maintenance_message'] ?? '' }}</textarea>
+        <input name="maintenance_footer" value="{{ $branding['maintenance_footer'] ?? '' }}" placeholder="Rodapé da manutenção (opcional)">
         <input type="file" name="logo">
         <input type="file" name="favicon">
         <button class="btn btn-primary" type="submit">Salvar branding</button>
