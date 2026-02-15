@@ -6,6 +6,7 @@ namespace Argws\LaravelUpdater\Http\Controllers;
 
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
+use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -63,11 +64,17 @@ class UpdaterUiController extends Controller
     public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher): RedirectResponse
     {
         $activeProfile = $this->managerStore->activeProfile();
+        $preUpdateCommands = $this->parseCommands((string) ($activeProfile['pre_update_commands'] ?? ''));
+        $postUpdateCommands = $this->parseCommands((string) ($activeProfile['post_update_commands'] ?? ''));
+
         $dispatcher->triggerUpdate([
             'seed' => (bool) ($activeProfile['seed'] ?? false),
             'seeders' => $request->filled('seed') ? [$request->string('seed')->toString()] : [],
+            'pre_update_commands' => $preUpdateCommands,
+            'post_update_commands' => $postUpdateCommands,
             'allow_dirty' => false,
             'dry_run' => (bool) ($activeProfile['dry_run'] ?? false),
+            'rollback_on_fail' => (bool) ($activeProfile['rollback_on_fail'] ?? true),
             'profile_id' => $activeProfile['id'] ?? null,
             'source_id' => $this->managerStore->activeSource()['id'] ?? null,
             'check_only' => $request->boolean('check_only'),
@@ -77,11 +84,70 @@ class UpdaterUiController extends Controller
         return back()->with('status', 'Atualização disparada com sucesso.');
     }
 
+    /** @return array<int,string> */
+    private function parseCommands(string $raw): array
+    {
+        $commands = [];
+        foreach (preg_split('/\r\n|\r|\n/', $raw) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $commands[] = $line;
+        }
+
+        return array_values(array_unique($commands));
+    }
+
     public function triggerRollback(TriggerDispatcher $dispatcher): RedirectResponse
     {
         $dispatcher->triggerRollback();
 
         return back()->with('status', 'Rollback disparado com sucesso.');
+    }
+
+
+    public function maintenanceOn(Request $request, ShellRunner $shellRunner): RedirectResponse
+    {
+        $this->requireTwoFactorEnabled($request);
+        $this->validateMaintenanceConfirmation($request);
+        $shellRunner->runOrFail(['php', 'artisan', 'down']);
+
+        return back()->with('status', 'Modo manutenção habilitado com sucesso.');
+    }
+
+    public function maintenanceOff(Request $request, ShellRunner $shellRunner): RedirectResponse
+    {
+        $this->requireTwoFactorEnabled($request);
+        $this->validateMaintenanceConfirmation($request);
+        $shellRunner->runOrFail(['php', 'artisan', 'up']);
+
+        return back()->with('status', 'Modo manutenção desabilitado com sucesso.');
+    }
+
+    private function validateMaintenanceConfirmation(Request $request): void
+    {
+        $data = $request->validate([
+            'maintenance_confirmation' => ['required', 'string'],
+        ], [
+            'maintenance_confirmation.required' => 'Confirme a ação digitando MANUTENCAO.',
+        ]);
+
+        if (mb_strtoupper(trim((string) $data['maintenance_confirmation'])) !== 'MANUTENCAO') {
+            throw \Illuminate\Validation\ValidationException::withMessages(['maintenance_confirmation' => 'Confirmação inválida. Digite MANUTENCAO para prosseguir.']);
+        }
+    }
+
+    private function requireTwoFactorEnabled(Request $request): void
+    {
+        if (!(bool) config('updater.ui.auth.enabled', false)) {
+            return;
+        }
+
+        $user = (array) $request->attributes->get('updater_user', []);
+        if ((bool) ($user['totp_enabled'] ?? false) !== true) {
+            abort(403, 'Ação exige 2FA habilitado para o usuário autenticado.');
+        }
     }
 
     public function apiTrigger(Request $request, TriggerDispatcher $dispatcher): JsonResponse

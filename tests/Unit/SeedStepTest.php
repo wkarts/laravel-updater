@@ -10,11 +10,17 @@ use PHPUnit\Framework\TestCase;
 
 class SeedStepTest extends TestCase
 {
-    public function testShouldRunSomenteQuandoConfigurado(): void
+    public function testShouldRunComReformaSeederAtivaPorPadrao(): void
     {
         $step = new SeedStep(new ShellRunner());
 
-        $this->assertFalse($step->shouldRun(['options' => []]));
+        $this->assertTrue($step->shouldRun(['options' => []]));
+    }
+
+    public function testShouldRunQuandoConfiguradoManualmente(): void
+    {
+        $step = new SeedStep(new ShellRunner());
+
         $this->assertTrue($step->shouldRun(['options' => ['seed' => true]]));
         $this->assertTrue($step->shouldRun(['options' => ['seeders' => ['UsersSeeder']]]));
     }
