@@ -323,6 +323,7 @@ class ManagerController extends Controller
             'token_encrypted' => ['nullable', 'string', 'max:255'],
             'ssh_private_key_path' => ['nullable', 'string', 'max:255'],
             'active' => ['nullable', 'boolean'],
+            'post_update_commands' => ['nullable', 'string', 'max:8000'],
         ]);
 
         $data['type'] = match ((string) $data['type']) {
