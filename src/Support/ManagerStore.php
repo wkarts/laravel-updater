@@ -35,56 +35,7 @@ class ManagerStore
         ];
     }
 
-    
-public function resolvedMaintenance(): array
-{
-    $row = $this->maintenance();
-
-    $defaultRender = (string) config('updater.maintenance.render_view', 'errors::503');
-
-    return [
-        'render_view' => (string) ($row['render_view'] ?? $defaultRender),
-        'title' => (string) ($row['title'] ?? config('updater.maintenance.whitelabel.title', env('APP_NAME', 'Aplicação'))),
-        'message' => (string) ($row['message'] ?? config('updater.maintenance.whitelabel.message', 'Estamos realizando uma atualização. Volte em alguns instantes.')),
-        'footer' => (string) ($row['footer'] ?? config('updater.maintenance.whitelabel.footer', 'Atualização em andamento')),
-    ];
-}
-
-public function maintenance(): ?array
-{
-    $pdo = $this->stateStore->connect();
-    $stmt = $pdo->query('SELECT * FROM updater_maintenance WHERE id = 1 LIMIT 1');
-    $row = $stmt ? $stmt->fetch(PDO::FETCH_ASSOC) : false;
-
-    return $row ? $row : null;
-}
-
-public function saveMaintenance(array $data): void
-{
-    $pdo = $this->stateStore->connect();
-
-    $now = date('c');
-
-    $stmt = $pdo->prepare('INSERT INTO updater_maintenance (id, render_view, title, message, footer, updated_at)
-        VALUES (1, :render_view, :title, :message, :footer, :updated_at)
-        ON CONFLICT(id) DO UPDATE SET
-            render_view = excluded.render_view,
-            title = excluded.title,
-            message = excluded.message,
-            footer = excluded.footer,
-            updated_at = excluded.updated_at
-    ');
-
-    $stmt->execute([
-        ':render_view' => $data['render_view'] ?? null,
-        ':title' => $data['title'] ?? null,
-        ':message' => $data['message'] ?? null,
-        ':footer' => $data['footer'] ?? null,
-        ':updated_at' => $now,
-    ]);
-}
-
-public function branding(): ?array
+    public function branding(): ?array
     {
         $stmt = $this->pdo()->query('SELECT * FROM updater_branding WHERE id = 1 LIMIT 1');
         $row = $stmt->fetch(PDO::FETCH_ASSOC);

@@ -237,7 +237,6 @@ class ManagerController extends Controller
     {
         return view('laravel-updater::settings.index', [
             'branding' => $this->managerStore->resolvedBranding(),
-            'maintenance' => $this->managerStore->resolvedMaintenance(),
             'tokens' => $this->managerStore->apiTokens(),
             'sources' => $this->managerStore->sources(),
             'activeSource' => $this->managerStore->activeSource(),
@@ -245,22 +244,7 @@ class ManagerController extends Controller
         ]);
     }
 
-    
-public function saveMaintenance(Request $request): RedirectResponse
-{
-    $data = $request->validate([
-        'render_view' => ['nullable', 'string', 'max:255'],
-        'title' => ['nullable', 'string', 'max:255'],
-        'message' => ['nullable', 'string', 'max:2000'],
-        'footer' => ['nullable', 'string', 'max:255'],
-    ]);
-
-    $this->managerStore->saveMaintenance($data);
-
-    return redirect()->back()->with('success', 'Configurações de manutenção salvas com sucesso.');
-}
-
-public function saveBranding(Request $request): RedirectResponse
+    public function saveBranding(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'app_name' => ['nullable', 'string', 'max:120'],

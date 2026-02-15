@@ -98,17 +98,7 @@ class StateStore
             updated_at TEXT NOT NULL
         )');
 
-        
-
-$this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_maintenance (
-    id INTEGER PRIMARY KEY,
-    render_view TEXT NULL,
-    title TEXT NULL,
-    message TEXT NULL,
-    footer TEXT NULL,
-    updated_at TEXT NOT NULL
-)');
-$this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_sources (
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_sources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             type TEXT NOT NULL,

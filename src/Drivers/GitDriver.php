@@ -157,36 +157,9 @@ class GitDriver implements CodeDriverInterface
 
     private function runtimeConfig(): array
     {
-        // Config de runtime: dá prioridade ao config/updater.php, mas mantém fallback em .env
-        // (mesmo com config cache) para reduzir problemas de "não pegou UPDATER_*".
         $runtime = config('updater.git', []);
-        $merged = is_array($runtime) ? array_merge($this->config, $runtime) : $this->config;
 
-        // Fallbacks via env (aplicados apenas se não estiverem definidos no config)
-        $fallbacks = [
-            'path'       => env('UPDATER_GIT_PATH'),
-            'remote'     => env('UPDATER_GIT_REMOTE'),
-            'branch'     => env('UPDATER_GIT_BRANCH'),
-            'remote_url' => env('UPDATER_GIT_REMOTE_URL'),
-            'update_type'=> env('UPDATER_GIT_UPDATE_TYPE'),
-            'tag'        => env('UPDATER_GIT_TARGET_TAG'),
-            'auto_init'  => env('UPDATER_GIT_AUTO_INIT'),
-        ];
-
-        foreach ($fallbacks as $key => $value) {
-            if (!array_key_exists($key, $merged) || $merged[$key] === null || $merged[$key] === '') {
-                if ($value !== null && $value !== '') {
-                    $merged[$key] = $value;
-                }
-            }
-        }
-
-        // Normalizações
-        if (isset($merged['auto_init'])) {
-            $merged['auto_init'] = filter_var($merged['auto_init'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? (bool) $merged['auto_init'];
-        }
-
-        return $merged;
+        return is_array($runtime) ? array_merge($this->config, $runtime) : $this->config;
     }
 
     private function currentTag(): ?string
