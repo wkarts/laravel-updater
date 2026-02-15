@@ -318,6 +318,7 @@ class ManagerController extends Controller
             'token_encrypted' => ['nullable', 'string', 'max:255'],
             'ssh_private_key_path' => ['nullable', 'string', 'max:255'],
             'active' => ['nullable', 'boolean'],
+            'post_update_commands' => ['nullable', 'string', 'max:8000'],
         ]);
 
         $data['type'] = match ((string) $data['type']) {
@@ -430,6 +431,7 @@ class ManagerController extends Controller
             'seed' => ['nullable', 'boolean'],
             'rollback_on_fail' => ['nullable', 'boolean'],
             'active' => ['nullable', 'boolean'],
+            'post_update_commands' => ['nullable', 'string', 'max:8000'],
         ], [
             'name.required' => 'Informe o nome do perfil.',
             'retention_backups.integer' => 'A retenção deve ser numérica.',
@@ -438,6 +440,11 @@ class ManagerController extends Controller
         $toggles = ['backup_enabled', 'dry_run', 'force', 'composer_install', 'migrate', 'seed', 'rollback_on_fail', 'active'];
         foreach ($toggles as $toggle) {
             $data[$toggle] = (int) $request->boolean($toggle);
+        }
+
+        $data['post_update_commands'] = trim((string) ($data['post_update_commands'] ?? ''));
+        if ($data['post_update_commands'] === '') {
+            $data['post_update_commands'] = null;
         }
 
         return $data;

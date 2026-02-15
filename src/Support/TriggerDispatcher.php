@@ -186,6 +186,14 @@ class TriggerDispatcher
             $args[] = '--seed';
         }
 
+        foreach ((array) ($options['post_update_commands'] ?? []) as $cmd) {
+            $line = trim((string) $cmd);
+            if ($line === '') {
+                continue;
+            }
+            $args[] = '--post-command=' . $line;
+        }
+
         return $args;
     }
 }

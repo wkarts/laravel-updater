@@ -18,15 +18,15 @@ class SeedStep implements PipelineStepInterface
 
     public function shouldRun(array $context): bool
     {
-        return (bool) ($context['options']['seed'] ?? false) || !empty($context['options']['seeders']);
+        $hasManualSeed = (bool) ($context['options']['seed'] ?? false) || !empty($context['options']['seeders']);
+        $runReforma = $this->cfg('updater.seed.run_reforma_tributaria', false);
+
+        return $hasManualSeed || $runReforma;
     }
 
     public function handle(array &$context): void
     {
-        $seeders = $context['options']['seeders'] ?? [];
-        if ($seeders === []) {
-            $seeders = ['Database\\Seeders\\DatabaseSeeder'];
-        }
+        $seeders = $this->resolveSeeders($context['options'] ?? []);
 
         foreach ($seeders as $seeder) {
             $checksum = hash('sha256', (string) $seeder);
@@ -34,6 +34,11 @@ class SeedStep implements PipelineStepInterface
 
             if (!$forceReapply && $this->stateStore?->hasSeedApplied((string) $seeder, $checksum)) {
                 $context['seed_log'][] = $seeder . ': já aplicado';
+                continue;
+            }
+
+            if (!class_exists((string) $seeder)) {
+                $context['seed_log'][] = $seeder . ': não encontrado, ignorado';
                 continue;
             }
 
@@ -50,5 +55,41 @@ class SeedStep implements PipelineStepInterface
 
     public function rollback(array &$context): void
     {
+    }
+
+    /** @return array<int, string> */
+    private function resolveSeeders(array $options): array
+    {
+        $seeders = array_values(array_filter((array) ($options['seeders'] ?? [])));
+
+        $requestedDefaultSeed = (bool) ($options['seed'] ?? false);
+        $allowDefaultSeed = (bool) ($options['install_seed_default'] ?? false)
+            || $this->cfg('updater.seed.allow_default_database_seeder', false);
+
+        if ($requestedDefaultSeed && $seeders === [] && $allowDefaultSeed) {
+            $seeders[] = 'Database\Seeders\DatabaseSeeder';
+        }
+
+        if ($this->cfg('updater.seed.run_reforma_tributaria', false)) {
+            $reformaSeeder = (string) $this->cfg('updater.seed.reforma_tributaria_seeder', 'Database\Seeders\ReformaTributariaSeeder');
+            if ($reformaSeeder !== '' && !in_array($reformaSeeder, $seeders, true)) {
+                $seeders[] = $reformaSeeder;
+            }
+        }
+
+        return $seeders;
+    }
+
+    private function cfg(string $key, mixed $default = null): mixed
+    {
+        try {
+            if (function_exists('config')) {
+                return config($key, $default);
+            }
+        } catch (\Throwable) {
+            // fallback
+        }
+
+        return $default;
     }
 }
