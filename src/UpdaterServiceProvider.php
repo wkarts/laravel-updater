@@ -145,6 +145,26 @@ class UpdaterServiceProvider extends ServiceProvider
         $this->syncAssetsIfNeeded();
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-updater');
+
+// Aplica overrides de manutenção/whitelabel salvos pelo painel (sem quebrar .env/config padrão).
+try {
+    /** @var \Argws\LaravelUpdater\Support\ManagerStore $store */
+    $store = $this->app->make(\Argws\LaravelUpdater\Support\ManagerStore::class);
+    $m = $store->resolvedMaintenance();
+    if (!empty($m['render_view'])) {
+        config(['updater.maintenance.render_view' => $m['render_view']]);
+    }
+    if (!empty($m['title']) || !empty($m['message']) || !empty($m['footer'])) {
+        $wl = (array) config('updater.maintenance.whitelabel', []);
+        $wl['title'] = (string) ($m['title'] ?? ($wl['title'] ?? ''));
+        $wl['message'] = (string) ($m['message'] ?? ($wl['message'] ?? ''));
+        $wl['footer'] = (string) ($m['footer'] ?? ($wl['footer'] ?? ''));
+        config(['updater.maintenance.whitelabel' => $wl]);
+    }
+} catch (\Throwable $e) {
+    // Silencioso: manutenção deve funcionar mesmo sem o storage do painel pronto.
+}
+
         $this->loadRoutesFrom(__DIR__ . '/../routes/updater.php');
 
         if ((bool) config('updater.ui.auth.enabled', false)) {
