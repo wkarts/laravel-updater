@@ -53,6 +53,27 @@ class MigrationFailureClassifierTest extends TestCase
         $this->assertSame('config_notas', $object['table']);
     }
 
+
+    public function testClassificaTableNotFoundEmDropComoIdempotente(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception("SQLSTATE[42S02]: Base table or view not found: 1146 Table 'conta_recebers' doesn't exist (Connection: mysql, SQL: drop table `conta_recebers`)", 1146);
+
+        $this->assertSame(MigrationFailureClassifier::ALREADY_EXISTS, $classifier->classify($ex));
+        $object = $classifier->inferObject($ex);
+        $this->assertSame('table', $object['type']);
+        $this->assertSame('conta_recebers', $object['name']);
+        $this->assertTrue($object['expects_absent']);
+    }
+
+    public function testNaoClassificaSelectTabelaInexistenteComoIdempotente(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception("SQLSTATE[42S02]: Base table or view not found: 1146 Table 'conta_recebers' doesn't exist (Connection: mysql, SQL: select * from `conta_recebers`)", 1146);
+
+        $this->assertSame(MigrationFailureClassifier::NON_RETRYABLE, $classifier->classify($ex));
+    }
+
     public function testClassificaLockRetryable(): void
     {
         $classifier = new MigrationFailureClassifier();

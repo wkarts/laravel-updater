@@ -16,7 +16,7 @@ class MigrationFailureClassifier
     {
         $details = $this->extractErrorDetails($throwable);
 
-        if ($this->matchesAlreadyExists($details['message'], $details['sqlstate'], $details['errno'])) {
+        if ($this->matchesIdempotentSafe($details['message'], $details['sqlstate'], $details['errno'])) {
             return self::ALREADY_EXISTS;
         }
 
@@ -27,36 +27,39 @@ class MigrationFailureClassifier
         return self::NON_RETRYABLE;
     }
 
-    /** @return array{type:string,name:?string,table:?string} */
+    /** @return array{type:string,name:?string,table:?string,expects_absent:bool} */
     public function inferObject(Throwable $throwable): array
     {
         $message = $throwable->getMessage();
         $table = $this->inferTableName($message);
+        $messageLower = mb_strtolower($message);
 
         $patterns = [
-            ['type' => 'table', 'pattern' => "/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i"],
-            ['type' => 'view', 'pattern' => "/view ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i"],
-            ['type' => 'column', 'pattern' => "/duplicate column name:? ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i"],
-            ['type' => 'index', 'pattern' => "/duplicate key name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i"],
-            ['type' => 'constraint', 'pattern' => "/duplicate foreign key constraint name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i"],
-            ['type' => 'index', 'pattern' => "/can't drop ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?; check that column\/key exists/i"],
+            ['type' => 'table', 'pattern' => "/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i", 'expects_absent' => false],
+            ['type' => 'view', 'pattern' => "/view ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i", 'expects_absent' => false],
+            ['type' => 'column', 'pattern' => "/duplicate column name:? ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
+            ['type' => 'index', 'pattern' => "/duplicate key name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
+            ['type' => 'constraint', 'pattern' => "/duplicate foreign key constraint name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
+            ['type' => 'index', 'pattern' => "/can't drop ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?; check that column\/key exists/i", 'expects_absent' => true],
+            ['type' => 'table', 'pattern' => "/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? doesn't exist/i", 'expects_absent' => true],
         ];
 
         foreach ($patterns as $rule) {
             if (preg_match($rule['pattern'], $message, $matches) === 1) {
-                $type = $rule['type'];
                 return [
-                    'type' => $type,
+                    'type' => $rule['type'],
                     'name' => $matches[1],
                     'table' => $table,
+                    'expects_absent' => (bool) $rule['expects_absent'],
                 ];
             }
         }
 
         return [
-            'type' => 'unknown',
-            'name' => null,
+            'type' => str_contains($messageLower, 'doesn\'t exist') ? 'table' : 'unknown',
+            'name' => str_contains($messageLower, 'doesn\'t exist') ? $table : null,
             'table' => $table,
+            'expects_absent' => str_contains($messageLower, 'doesn\'t exist'),
         ];
     }
 
@@ -82,7 +85,7 @@ class MigrationFailureClassifier
         ];
     }
 
-    private function matchesAlreadyExists(string $message, ?string $sqlstate, ?int $errno): bool
+    private function matchesIdempotentSafe(string $message, ?string $sqlstate, ?int $errno): bool
     {
         $phrases = [
             'already exists',
@@ -93,8 +96,6 @@ class MigrationFailureClassifier
             'duplicate key on write or update',
             "can't drop",
             'check that column/key exists',
-            'can\'t drop index',
-            'can\'t drop',
             'relation already exists',
             'duplicate object',
             'there is already an object named',
@@ -113,15 +114,42 @@ class MigrationFailureClassifier
             }
         }
 
-        if (in_array($sqlstate, $sqlStates, true)) {
+        if (in_array($sqlstate, $sqlStates, true) || in_array($errno, $errnoList, true)) {
             return true;
         }
 
-        if (in_array($errno, $errnoList, true)) {
+        if ($errno === 121 && str_contains($message, 'constraint')) {
             return true;
         }
 
-        return $errno === 121 && str_contains($message, 'constraint');
+        return $this->matchesMissingObjectSafe($message, $sqlstate, $errno);
+    }
+
+    private function matchesMissingObjectSafe(string $message, ?string $sqlstate, ?int $errno): bool
+    {
+        $isMissingObject = str_contains($message, "doesn't exist") || str_contains($message, 'does not exist');
+        $isMissingCode = in_array($sqlstate, ['42S02'], true) || $errno === 1146;
+
+        if (!$isMissingObject && !$isMissingCode) {
+            return false;
+        }
+
+        $safeDropOperations = [
+            'drop table',
+            'drop index',
+            'drop view',
+            'alter table',
+            'drop foreign key',
+            'drop constraint',
+        ];
+
+        foreach ($safeDropOperations as $operation) {
+            if (str_contains($message, $operation)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function matchesLockRetryable(string $message, ?string $sqlstate, ?int $errno): bool

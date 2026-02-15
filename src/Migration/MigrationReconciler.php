@@ -63,31 +63,31 @@ class MigrationReconciler
         $type = (string) ($object['type'] ?? 'unknown');
         $name = is_string($object['name'] ?? null) ? $object['name'] : null;
         $table = is_string($object['table'] ?? null) ? $object['table'] : null;
+        $expectsAbsent = (bool) ($object['expects_absent'] ?? false);
 
         if ($type === 'table' && $name !== null) {
             return [
-                'compatible' => $schema->hasTable($name),
+                'compatible' => $expectsAbsent ? !$schema->hasTable($name) : $schema->hasTable($name),
                 'warning' => false,
-                'note' => 'validated_table_exists',
+                'note' => $expectsAbsent ? 'validated_table_already_absent' : 'validated_table_exists',
             ];
         }
 
         if ($type === 'view' && $name !== null) {
             return [
-                'compatible' => $schema->hasTable($name),
+                'compatible' => $expectsAbsent ? !$schema->hasTable($name) : $schema->hasTable($name),
                 'warning' => false,
-                'note' => 'validated_view_exists_via_schema',
+                'note' => $expectsAbsent ? 'validated_view_already_absent' : 'validated_view_exists_via_schema',
             ];
         }
-
 
         if ($type === 'index' && $name !== null && $table !== null) {
             $exists = $this->indexExists($connection, $table, $name);
 
             return [
-                'compatible' => !$exists,
+                'compatible' => $expectsAbsent ? !$exists : $exists,
                 'warning' => false,
-                'note' => 'validated_index_already_absent',
+                'note' => $expectsAbsent ? 'validated_index_already_absent' : 'validated_index_exists',
             ];
         }
 
@@ -95,9 +95,9 @@ class MigrationReconciler
             $exists = $this->constraintExists($connection, $table, $name);
 
             return [
-                'compatible' => $exists,
+                'compatible' => $expectsAbsent ? !$exists : $exists,
                 'warning' => false,
-                'note' => 'validated_constraint_exists_information_schema',
+                'note' => $expectsAbsent ? 'validated_constraint_already_absent_information_schema' : 'validated_constraint_exists_information_schema',
             ];
         }
 
