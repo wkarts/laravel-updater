@@ -33,7 +33,12 @@
                 '#php artisan vendor:publish --tag=updater-config --force',
                 '#php artisan vendor:publish --tag=updater-views --force',
                 '#composer update',
-                '#php artisan db:seed --class=ReformaTributariaSeeder',
+                '#php artisan db:seed --class=ReformaTributariaSeeder --force',
+                '#php artisan cache:clear',
+                '#php artisan config:clear',
+                '#php artisan route:clear',
+                '#php artisan view:clear',
+                '#php artisan key:generate --force',
             ] as $commandSuggestion)
                 <button type="button" class="btn" data-insert-post-command="{{ $commandSuggestion }}">{{ $commandSuggestion }}</button>
             @endforeach
