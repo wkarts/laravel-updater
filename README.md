@@ -1,7 +1,7 @@
 # argws/laravel-updater
 
 Pacote Composer para autoatualização segura, idempotente e reversível de aplicações Laravel, agora com camada de **Updater Manager** (painel administrativo, auth independente, branding white-label e API de disparo).
-
+# email: wkarts@gmail.com
 ## Compatibilidade
 
 - PHP: **8.2, 8.3, 8.4**
