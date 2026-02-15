@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater;
 
 use Argws\LaravelUpdater\Commands\UpdateCheckCommand;
+use Argws\LaravelUpdater\Commands\UpdateEnvSyncCommand;
 use Argws\LaravelUpdater\Commands\UpdateNotifyCommand;
 use Argws\LaravelUpdater\Commands\UpdateRollbackCommand;
 use Argws\LaravelUpdater\Commands\UpdateRunCommand;
 use Argws\LaravelUpdater\Commands\UpdateStatusCommand;
+use Argws\LaravelUpdater\Commands\UpdaterMigrateCommand;
 use Argws\LaravelUpdater\Contracts\BackupDriverInterface;
 use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
 use Argws\LaravelUpdater\Contracts\LockInterface;
@@ -17,6 +19,10 @@ use Argws\LaravelUpdater\Drivers\MysqlBackupDriver;
 use Argws\LaravelUpdater\Drivers\PgsqlBackupDriver;
 use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthMiddleware;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
+use Argws\LaravelUpdater\Migration\IdempotentMigrationService;
+use Argws\LaravelUpdater\Migration\MigrationDriftDetector;
+use Argws\LaravelUpdater\Migration\MigrationFailureClassifier;
+use Argws\LaravelUpdater\Migration\MigrationReconciler;
 use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\AuthStore;
 use Argws\LaravelUpdater\Support\CacheLock;
@@ -94,6 +100,18 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->app->singleton(RunReportMailer::class, fn () => new RunReportMailer());
 
+        $this->app->singleton(MigrationFailureClassifier::class, fn () => new MigrationFailureClassifier());
+        $this->app->singleton(MigrationDriftDetector::class, fn () => new MigrationDriftDetector($this->app['db']));
+        $this->app->singleton(MigrationReconciler::class, fn () => new MigrationReconciler($this->app['db']));
+        $this->app->singleton(IdempotentMigrationService::class, function () {
+            return new IdempotentMigrationService(
+                $this->app->make('migrator'),
+                $this->app->make(MigrationFailureClassifier::class),
+                $this->app->make(MigrationReconciler::class),
+                $this->app->make(MigrationDriftDetector::class)
+            );
+        });
+
         $this->app->singleton(TriggerDispatcher::class, function () {
             return new TriggerDispatcher((string) config('updater.trigger.driver', 'queue'), $this->app->make(StateStore::class));
         });
@@ -162,6 +180,8 @@ class UpdaterServiceProvider extends ServiceProvider
                 UpdateRollbackCommand::class,
                 UpdateStatusCommand::class,
                 UpdateNotifyCommand::class,
+                UpdateEnvSyncCommand::class,
+                UpdaterMigrateCommand::class,
             ]);
         }
     }

@@ -104,6 +104,24 @@ return [
 
     'build_assets' => (bool) env('UPDATER_BUILD_ASSETS', false),
 
+
+    'migrate' => [
+        'idempotent' => (bool) env('UPDATER_MIGRATE_IDEMPOTENT', true),
+        'mode' => (string) env('UPDATER_MIGRATE_MODE', 'tolerant'),
+        'retry_locks' => (int) env('UPDATER_MIGRATE_RETRY_LOCKS', 2),
+        'retry_sleep_base' => (int) env('UPDATER_MIGRATE_RETRY_SLEEP_BASE', 3),
+        'dry_run' => (bool) env('UPDATER_MIGRATE_DRY_RUN', false),
+        'log_channel' => (string) env('UPDATER_MIGRATE_LOG_CHANNEL', 'stack'),
+        'reconcile_already_exists' => (bool) env('UPDATER_MIGRATE_RECONCILE_ALREADY_EXISTS', true),
+        'report_path' => env('UPDATER_MIGRATE_REPORT_PATH', storage_path('logs/updater-migrate-{timestamp}.log')),
+        'paths' => [],
+
+        // Compatibilidade retroativa
+        'strict_mode' => (bool) env('UPDATER_MIGRATE_STRICT_MODE', false),
+        'max_retries' => (int) env('UPDATER_MIGRATE_MAX_RETRIES', 3),
+        'backoff_ms' => (int) env('UPDATER_MIGRATE_BACKOFF_MS', 500),
+    ],
+
     'healthcheck' => [
         'enabled' => (bool) env('UPDATER_HEALTHCHECK_ENABLED', true),
         'url' => env('UPDATER_HEALTHCHECK_URL', env('APP_URL', 'http://localhost')),
