@@ -19,7 +19,7 @@ class SeedStep implements PipelineStepInterface
     public function shouldRun(array $context): bool
     {
         $hasManualSeed = (bool) ($context['options']['seed'] ?? false) || !empty($context['options']['seeders']);
-        $runReforma = $this->cfg('updater.seed.run_reforma_tributaria', false);
+        $runReforma = $this->cfg('updater.seed.run_reforma_tributaria', true);
 
         return $hasManualSeed || $runReforma;
     }
@@ -70,7 +70,7 @@ class SeedStep implements PipelineStepInterface
             $seeders[] = 'Database\Seeders\DatabaseSeeder';
         }
 
-        if ($this->cfg('updater.seed.run_reforma_tributaria', false)) {
+        if ($this->cfg('updater.seed.run_reforma_tributaria', true)) {
             $reformaSeeder = (string) $this->cfg('updater.seed.reforma_tributaria_seeder', 'Database\Seeders\ReformaTributariaSeeder');
             if ($reformaSeeder !== '' && !in_array($reformaSeeder, $seeders, true)) {
                 $seeders[] = $reformaSeeder;
