@@ -185,7 +185,12 @@ class ManagerController extends Controller
 
     public function profilesCreate()
     {
-        return view('laravel-updater::profiles.create');
+        return view('laravel-updater::profiles.create', [
+            'profile' => [
+                'pre_update_commands' => $this->defaultPreUpdateCommands(),
+                'post_update_commands' => $this->defaultPostUpdateCommands(),
+            ],
+        ]);
     }
 
     public function profilesStore(Request $request): RedirectResponse
@@ -201,6 +206,8 @@ class ManagerController extends Controller
     {
         $profile = $this->managerStore->findProfile($id);
         abort_if($profile === null, 404);
+
+        $profile['post_update_commands'] = $this->mergePostUpdateSuggestions((string) ($profile['post_update_commands'] ?? ''));
 
         return view('laravel-updater::profiles.edit', ['profile' => $profile]);
     }
@@ -254,6 +261,9 @@ class ManagerController extends Controller
             'maintenance_title' => ['nullable', 'string', 'max:120'],
             'maintenance_message' => ['nullable', 'string', 'max:500'],
             'maintenance_footer' => ['nullable', 'string', 'max:200'],
+            'first_run_assume_behind' => ['nullable', 'boolean'],
+            'first_run_assume_behind_commits' => ['nullable', 'integer', 'min:1', 'max:9999'],
+            'enter_maintenance_on_update_start' => ['nullable', 'boolean'],
             'logo' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:png,jpg,jpeg,svg'],
             'favicon' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:ico,png'],
         ]);
@@ -270,6 +280,10 @@ class ManagerController extends Controller
         } else {
             $data['favicon_path'] = $row['favicon_path'] ?? null;
         }
+
+        $data['first_run_assume_behind'] = (int) $request->boolean('first_run_assume_behind');
+        $data['first_run_assume_behind_commits'] = max(1, (int) ($data['first_run_assume_behind_commits'] ?? 1));
+        $data['enter_maintenance_on_update_start'] = (int) $request->boolean('enter_maintenance_on_update_start', true);
 
         $this->managerStore->saveBranding($data);
         $this->audit($request, $this->actorId($request), 'Branding atualizado.', ['tem_logo' => !empty($data['logo_path']), 'tem_favicon' => !empty($data['favicon_path'])]);
@@ -430,6 +444,8 @@ class ManagerController extends Controller
             'seed' => ['nullable', 'boolean'],
             'rollback_on_fail' => ['nullable', 'boolean'],
             'active' => ['nullable', 'boolean'],
+            'pre_update_commands' => ['nullable', 'string', 'max:8000'],
+            'post_update_commands' => ['nullable', 'string', 'max:8000'],
         ], [
             'name.required' => 'Informe o nome do perfil.',
             'retention_backups.integer' => 'A retenção deve ser numérica.',
@@ -439,6 +455,13 @@ class ManagerController extends Controller
         foreach ($toggles as $toggle) {
             $data[$toggle] = (int) $request->boolean($toggle);
         }
+
+        $data['pre_update_commands'] = trim((string) ($data['pre_update_commands'] ?? ''));
+        if ($data['pre_update_commands'] === '') {
+            $data['pre_update_commands'] = null;
+        }
+
+        $data['post_update_commands'] = $this->mergePostUpdateSuggestions(trim((string) ($data['post_update_commands'] ?? '')));
 
         return $data;
     }
@@ -473,6 +496,75 @@ class ManagerController extends Controller
         }
 
         return $repoUrl;
+    }
+
+    private function defaultPreUpdateCommands(): string
+    {
+        return implode("\n", [
+            '# php artisan optimize:clear',
+            '# php artisan config:clear',
+        ]);
+    }
+
+    private function defaultPostUpdateCommands(): string
+    {
+        return implode("\n", $this->suggestedPostUpdateCommands());
+    }
+
+    /** @return array<int, string> */
+    private function suggestedPostUpdateCommands(): array
+    {
+        return [
+            '#composer require argws/laravel-updater',
+            '#php artisan vendor:publish --tag=updater-config --force',
+            '#php artisan vendor:publish --tag=updater-views --force',
+            '#composer update',
+            '#php artisan db:seed --class=ReformaTributariaSeeder --force',
+            '#php artisan cache:clear',
+            '#php artisan config:clear',
+            '#php artisan route:clear',
+            '#php artisan view:clear',
+            '#php artisan key:generate --force',
+        ];
+    }
+
+    private function mergePostUpdateSuggestions(string $raw): string
+    {
+        $raw = trim($raw);
+        $lines = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+
+        $existing = [];
+        foreach ($lines as $line) {
+            $line = trim((string) $line);
+            if ($line === '') {
+                continue;
+            }
+            $existing[] = $line;
+        }
+
+        $normalized = [];
+        foreach ($existing as $line) {
+            $normalized[] = $this->normalizeCommandLine($line);
+        }
+
+        foreach ($this->suggestedPostUpdateCommands() as $suggestion) {
+            if (!in_array($this->normalizeCommandLine($suggestion), $normalized, true)) {
+                $existing[] = $suggestion;
+                $normalized[] = $this->normalizeCommandLine($suggestion);
+            }
+        }
+
+        return implode("\n", $existing);
+    }
+
+    private function normalizeCommandLine(string $line): string
+    {
+        $line = trim($line);
+        if (str_starts_with($line, '#')) {
+            $line = ltrim(substr($line, 1));
+        }
+
+        return mb_strtolower($line);
     }
 
     /** @return array<int,string> */

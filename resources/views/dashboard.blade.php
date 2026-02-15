@@ -13,6 +13,16 @@
         <div class="form-inline" style="margin-top:10px;">
             <form method="POST" action="{{ route('updater.trigger.update') }}">@csrf <button class="btn btn-primary" data-update-action="1" type="submit">Executar atualização</button></form>
             <form method="POST" action="{{ route('updater.trigger.rollback') }}">@csrf <button class="btn btn-danger" type="submit">Executar rollback</button></form>
+            <form method="POST" action="{{ route('updater.maintenance.on') }}" onsubmit="return updaterConfirmMaintenance(this, 'habilitar')">
+                @csrf
+                <input type="hidden" name="maintenance_confirmation" value="">
+                <button class="btn btn-secondary" type="submit">Habilitar manutenção agora</button>
+            </form>
+            <form method="POST" action="{{ route('updater.maintenance.off') }}" onsubmit="return updaterConfirmMaintenance(this, 'desabilitar')">
+                @csrf
+                <input type="hidden" name="maintenance_confirmation" value="">
+                <button class="btn btn-ghost" type="submit">Desabilitar manutenção</button>
+            </form>
         </div>
     </div>
     <div class="card">
@@ -66,3 +76,14 @@
     </div>
 </div>
 @endsection
+
+<script>
+function updaterConfirmMaintenance(form, actionLabel) {
+    const answer = window.prompt('Confirme para ' + actionLabel + ' a manutenção digitando MANUTENCAO');
+    if (!answer) {
+        return false;
+    }
+    form.querySelector('input[name="maintenance_confirmation"]').value = answer;
+    return true;
+}
+</script>
