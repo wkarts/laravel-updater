@@ -17,14 +17,26 @@ class MigrationReconciler
         DatabaseMigrationRepository $repository,
         string $migrationName,
         array $object,
-        ?string $connection = null
+        array $errorDetails,
+        ?string $connection = null,
+        bool $strictMode = false
     ): array {
-        $validation = $this->validateMinimumCompatibility($object, $connection);
+        if ($this->alreadyLogged($repository, $migrationName)) {
+            return [
+                'reconciled' => true,
+                'reason' => 'already_logged',
+                'warning' => false,
+                'validation' => ['compatible' => true, 'note' => 'migration_already_in_repository'],
+            ];
+        }
 
-        if ($validation['compatible'] === false) {
+        $validation = $this->validateMinimumCompatibility($object, $errorDetails, $connection, $strictMode);
+
+        if (($validation['compatible'] ?? false) !== true) {
             return [
                 'reconciled' => false,
                 'reason' => 'minimum_compatibility_failed',
+                'warning' => (bool) ($validation['warning'] ?? false),
                 'validation' => $validation,
             ];
         }
@@ -34,29 +46,108 @@ class MigrationReconciler
         return [
             'reconciled' => true,
             'reason' => 'already_exists_safe',
+            'warning' => (bool) ($validation['warning'] ?? false),
             'validation' => $validation,
         ];
     }
 
-    public function validateMinimumCompatibility(array $object, ?string $connection = null): array
+    private function alreadyLogged(DatabaseMigrationRepository $repository, string $migrationName): bool
     {
-        $schema = $this->resolver->connection($connection)->getSchemaBuilder();
-        $type = (string) ($object['type'] ?? 'unknown');
-        $name = $object['name'] ?? null;
+        return in_array($migrationName, $repository->getRan(), true);
+    }
 
-        if (!is_string($name) || $name === '') {
-            return ['compatible' => true, 'note' => 'object_name_unknown'];
+    public function validateMinimumCompatibility(array $object, array $errorDetails, ?string $connection = null, bool $strictMode = false): array
+    {
+        $conn = $this->resolver->connection($connection);
+        $schema = $conn->getSchemaBuilder();
+        $type = (string) ($object['type'] ?? 'unknown');
+        $name = is_string($object['name'] ?? null) ? $object['name'] : null;
+        $table = is_string($object['table'] ?? null) ? $object['table'] : null;
+
+        if ($type === 'table' && $name !== null) {
+            return [
+                'compatible' => $schema->hasTable($name),
+                'warning' => false,
+                'note' => 'validated_table_exists',
+            ];
         }
 
-        return match ($type) {
-            'table', 'view' => [
+        if ($type === 'view' && $name !== null) {
+            return [
                 'compatible' => $schema->hasTable($name),
-                'note' => 'validated_table_or_view_exists',
-            ],
-            default => [
-                'compatible' => true,
-                'note' => 'no_safe_probe_for_type',
-            ],
-        };
+                'warning' => false,
+                'note' => 'validated_view_exists_via_schema',
+            ];
+        }
+
+        if ($type === 'constraint' && $name !== null) {
+            $exists = $this->constraintExists($connection, $table, $name);
+
+            return [
+                'compatible' => $exists,
+                'warning' => false,
+                'note' => 'validated_constraint_exists_information_schema',
+            ];
+        }
+
+        if ($strictMode) {
+            return [
+                'compatible' => false,
+                'warning' => true,
+                'note' => 'strict_mode_requires_safe_inference',
+                'details' => $errorDetails,
+            ];
+        }
+
+        return [
+            'compatible' => true,
+            'warning' => true,
+            'note' => 'object_unknown_reconciled_in_tolerant_mode',
+            'details' => $errorDetails,
+        ];
+    }
+
+    private function constraintExists(?string $connection, ?string $table, string $constraint): bool
+    {
+        $conn = $this->resolver->connection($connection);
+        $driver = $conn->getDriverName();
+        $database = (string) $conn->getDatabaseName();
+
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            $query = 'SELECT COUNT(*) AS total
+                FROM information_schema.TABLE_CONSTRAINTS tc
+                LEFT JOIN information_schema.KEY_COLUMN_USAGE kcu
+                    ON tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+                    AND tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+                    AND tc.TABLE_NAME = kcu.TABLE_NAME
+                WHERE tc.CONSTRAINT_SCHEMA = ?
+                    AND tc.CONSTRAINT_NAME = ?';
+            $bindings = [$database, $constraint];
+
+            if ($table !== null && $table !== '') {
+                $query .= ' AND tc.TABLE_NAME = ?';
+                $bindings[] = $table;
+            }
+
+            $row = $conn->selectOne($query, $bindings);
+
+            return (int) ($row->total ?? 0) > 0;
+        }
+
+        if ($driver === 'pgsql') {
+            $query = 'SELECT COUNT(*) AS total FROM information_schema.table_constraints WHERE constraint_name = ?';
+            $bindings = [$constraint];
+
+            if ($table !== null && $table !== '') {
+                $query .= ' AND table_name = ?';
+                $bindings[] = $table;
+            }
+
+            $row = $conn->selectOne($query, $bindings);
+
+            return (int) ($row->total ?? 0) > 0;
+        }
+
+        return false;
     }
 }

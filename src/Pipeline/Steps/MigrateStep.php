@@ -25,13 +25,16 @@ class MigrateStep implements PipelineStepInterface
             $command[] = '--run-id=' . $context['run_id'];
         }
 
-        if ((bool) ($options['strict_migrate'] ?? config('updater.migrate.strict_mode', false))) {
-            $command[] = '--strict';
+        if ((bool) ($options['strict_migrate'] ?? false)) {
+            $command[] = '--mode=strict';
         }
 
         if ((bool) ($options['dry_run'] ?? false)) {
             $command[] = '--dry-run';
         }
+
+        $command[] = '--retry-locks=' . (int) config('updater.migrate.retry_locks', 2);
+        $command[] = '--retry-sleep-base=' . (int) config('updater.migrate.retry_sleep_base', 3);
 
         $this->shellRunner->runOrFail($command);
     }

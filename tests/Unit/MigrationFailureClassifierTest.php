@@ -21,10 +21,29 @@ class MigrationFailureClassifierTest extends TestCase
         $this->assertSame('abertura_caixas', $object['name']);
     }
 
+    public function testClassificaDuplicateForeignKeyConstraintName(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception("SQLSTATE[HY000]: General error: 1826 Duplicate foreign key constraint name 'fk_orders_customer_id'", 1826);
+
+        $this->assertSame(MigrationFailureClassifier::ALREADY_EXISTS, $classifier->classify($ex));
+        $object = $classifier->inferObject($ex);
+        $this->assertSame('constraint', $object['type']);
+        $this->assertSame('fk_orders_customer_id', $object['name']);
+    }
+
+    public function testClassificaDuplicateKeyOnWriteWhenConstraint(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception('SQLSTATE[HY000]: General error: 121 Duplicate key on write or update: constraint fk_orders_customer_id', 121);
+
+        $this->assertSame(MigrationFailureClassifier::ALREADY_EXISTS, $classifier->classify($ex));
+    }
+
     public function testClassificaLockRetryable(): void
     {
         $classifier = new MigrationFailureClassifier();
-        $ex = new Exception('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock', 1213);
+        $ex = new Exception('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction', 1213);
 
         $this->assertSame(MigrationFailureClassifier::LOCK_RETRYABLE, $classifier->classify($ex));
     }

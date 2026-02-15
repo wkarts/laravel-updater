@@ -372,52 +372,48 @@ php artisan cache:clear
 
 ## Migrador idempotente definitivo (`updater:migrate`)
 
-### O que é drift de migration
-Drift acontece quando o estado real do banco não bate com o histórico da tabela `migrations` (ex.: tabela já existe, mas a migration não está marcada como executada).
+### Por que acontece o erro `SQLSTATE[42S01]` / errno `1050`
+Esse erro indica que a migration tentou criar uma tabela/view que já existe no banco (`Base table or view already exists`).
+Em ambientes reais isso ocorre por drift entre o banco e a tabela `migrations` (dump restore, merge manual, execução parcial/interrompida, ou banco adiantado).
 
-### Estratégia implementada
-- Executa **uma migration por vez** (determinístico), identificando exatamente qual arquivo falhou.
-- Classifica falhas em:
-  - `ALREADY_EXISTS` (reconciliável no modo tolerante);
-  - `LOCK_RETRYABLE` (retry com backoff);
-  - `NON_RETRYABLE` (falha real, interrompe).
-- Em `ALREADY_EXISTS` e modo tolerante, reconcilia com validação mínima e registra a migration como executada.
-- Gera log JSONL em arquivo + logs no `StateStore` (tabela `updater_logs`).
-- Em caso de aplicação parcial, registra divergência no relatório final (`divergences`).
+### Como a reconciliação evita a falha
+O comando `updater:migrate` roda **exatamente uma migration por vez** e, quando a falha é classificada como `ALREADY_EXISTS` segura:
+1. confere se a migration já está na tabela `migrations`;
+2. se não estiver, reconcilia registrando a migration com batch correto;
+3. para constraints, valida via `information_schema.TABLE_CONSTRAINTS/KEY_COLUMN_USAGE` (MySQL/MariaDB);
+4. continua para a próxima migration.
+
+No modo `strict`, qualquer dúvida de inferência/compatibilidade interrompe com erro orientando intervenção manual.
 
 ### Configuração
 ```dotenv
-UPDATER_MIGRATE_STRICT_MODE=false
+UPDATER_MIGRATE_IDEMPOTENT=true
+UPDATER_MIGRATE_MODE=tolerant
+UPDATER_MIGRATE_RETRY_LOCKS=2
+UPDATER_MIGRATE_RETRY_SLEEP_BASE=3
 UPDATER_MIGRATE_DRY_RUN=false
-UPDATER_MIGRATE_MAX_RETRIES=3
-UPDATER_MIGRATE_BACKOFF_MS=500
+UPDATER_MIGRATE_LOG_CHANNEL=stack
+UPDATER_MIGRATE_RECONCILE_ALREADY_EXISTS=true
 UPDATER_MIGRATE_REPORT_PATH="storage/logs/updater-migrate-{timestamp}.log"
 ```
 
-### Comando
+### Comandos
 ```bash
-php artisan updater:migrate --force
-```
-
-Opções úteis:
-- `--strict`: modo estrito (não reconcilia `ALREADY_EXISTS`)
-- `--dry-run`: simula sem executar SQL
-- `--max-retries=` e `--backoff-ms=`: controle de retry de lock/deadlock
-- `--database=` e `--path=`: conexão/caminho específicos
-- `--run-id=`: vincula auditoria ao run do updater
-
-### Exemplos reais
-```bash
-# Modo tolerante padrão
+# execução real (tolerante)
 php artisan updater:migrate --force
 
-# Modo estrito para ambiente limpo
-php artisan updater:migrate --force --strict
+# modo estrito
+php artisan updater:migrate --force --mode=strict
 
-# Simulação prévia
-php artisan updater:migrate --dry-run --force
+# dry-run (não executa SQL)
+php artisan updater:migrate --force --dry-run
 ```
 
-### Riscos e quando usar modo estrito
-- Modo tolerante resolve cenários comuns de produção com drift, mas pode mascarar inconsistências semânticas profundas quando a migration está parcialmente aplicada.
-- Em ambientes novos/limpos, prefira `--strict` para falhar rápido e exigir correção explícita.
+### Retry/backoff de lock/deadlock
+Para falhas `LOCK_RETRYABLE` (deadlock, lock wait timeout, metadata lock), o updater aplica retry com backoff progressivo
+(`retry_sleep_base * 2^(tentativa-1) + (tentativa-1)`), por exemplo base=3: `3s`, `7s`, `15s`.
+
+### Quando usar modo strict
+Use `strict` em ambientes novos/limpos, onde drift não é esperado. Em produção com histórico heterogêneo,
+`mode=tolerant` tende a reduzir falhas por objetos já existentes sem editar migrations antigas.
+

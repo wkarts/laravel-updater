@@ -15,10 +15,11 @@ class UpdaterMigrateCommand extends Command
     protected $signature = 'updater:migrate
         {--database= : Conexão de banco alvo}
         {--path= : Caminho customizado de migrations (arquivo ou diretório)}
-        {--strict : Não reconcilia drift de already exists}
+        {--mode= : Modo de execução (tolerant|strict)}
+        {--strict : Atalho para --mode=strict}
         {--dry-run : Não executa SQL, apenas simula}
-        {--max-retries= : Máximo de retries para lock/deadlock}
-        {--backoff-ms= : Backoff base em milissegundos}
+        {--retry-locks= : Máximo de retries para lock/deadlock}
+        {--retry-sleep-base= : Backoff base em segundos}
         {--run-id= : Vincula logs ao run_id do updater}
         {--force : Compatibilidade com chamadas não interativas}';
 
@@ -29,20 +30,36 @@ class UpdaterMigrateCommand extends Command
         $runId = $this->option('run-id');
         $runId = is_numeric($runId) ? (int) $runId : null;
 
+        $mode = (string) ($this->option('mode') ?: config('updater.migrate.mode', 'tolerant'));
+        if ((bool) config('updater.migrate.strict_mode', false)) {
+            $mode = 'strict';
+        }
+        if ((bool) $this->option('strict')) {
+            $mode = 'strict';
+        }
+
         $logFile = (string) config('updater.migrate.report_path', storage_path('logs/updater-migrate.log'));
         if (str_contains($logFile, '{timestamp}')) {
             $logFile = str_replace('{timestamp}', date('Ymd-His'), $logFile);
         }
 
-        $reporter = new MigrationRunReporter($store, $logFile, $runId);
+        $reporter = new MigrationRunReporter(
+            $store,
+            $logFile,
+            $runId,
+            (string) config('updater.migrate.log_channel', 'stack')
+        );
 
         $options = [
+            'idempotent' => (bool) config('updater.migrate.idempotent', true),
             'database' => $this->option('database') ?: config('database.default'),
             'path' => $this->option('path') ?: null,
-            'strict' => (bool) ($this->option('strict') ?: config('updater.migrate.strict_mode', false)),
+            'mode' => $mode,
+            'strict' => $mode === 'strict',
             'dry_run' => (bool) ($this->option('dry-run') ?: config('updater.migrate.dry_run', false)),
-            'max_retries' => $this->option('max-retries') ?? config('updater.migrate.max_retries', 3),
-            'backoff_ms' => $this->option('backoff-ms') ?? config('updater.migrate.backoff_ms', 500),
+            'retry_locks' => $this->option('retry-locks') ?? config('updater.migrate.retry_locks', config('updater.migrate.max_retries', 2)),
+            'retry_sleep_base' => $this->option('retry-sleep-base') ?? config('updater.migrate.retry_sleep_base', max(1, (int) round(((int) config('updater.migrate.backoff_ms', 3000)) / 1000))),
+            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', true),
         ];
 
         try {

@@ -19,6 +19,14 @@ class IdempotentMigrationService
 
     public function run(array $options, MigrationRunReporter $reporter): array
     {
+        $isEnabled = (bool) ($options['idempotent'] ?? true);
+        $mode = (string) ($options['mode'] ?? 'tolerant');
+        $strict = $mode === 'strict' || (bool) ($options['strict'] ?? false);
+        $dryRun = (bool) ($options['dry_run'] ?? false);
+        $reconcileAlreadyExists = (bool) ($options['reconcile_already_exists'] ?? true);
+        $lockRetries = max(0, (int) ($options['retry_locks'] ?? 2));
+        $retrySleepBase = max(1, (int) ($options['retry_sleep_base'] ?? 3));
+
         $repository = $this->migrator->getRepository();
         if (!$repository->repositoryExists()) {
             $repository->createRepository();
@@ -38,24 +46,21 @@ class IdempotentMigrationService
             ARRAY_FILTER_USE_BOTH
         );
 
-        $strict = (bool) ($options['strict'] ?? false);
-        $dryRun = (bool) ($options['dry_run'] ?? false);
-        $maxRetries = max(0, (int) ($options['max_retries'] ?? 3));
-        $backoffMs = max(1, (int) ($options['backoff_ms'] ?? 500));
-
         $stats = [
             'total' => count($pending),
             'executed' => 0,
             'reconciled' => 0,
             'retried' => 0,
             'failed' => 0,
+            'warnings' => 0,
             'skipped_dry_run' => 0,
             'divergences' => [],
         ];
 
         $reporter->log('info', 'Iniciando updater:migrate.', [
-            'strict' => $strict,
+            'mode' => $mode,
             'dry_run' => $dryRun,
+            'idempotent' => $isEnabled,
             'pending' => array_keys($pending),
             'connection' => $connection,
         ]);
@@ -71,7 +76,11 @@ class IdempotentMigrationService
             $attempt = 0;
             while (true) {
                 $attempt++;
-                $reporter->log('info', 'Executando migration.', ['migration' => $name, 'path' => $path, 'attempt' => $attempt]);
+                $reporter->log('info', 'Executando migration (determinístico: 1 por vez).', [
+                    'migration' => $name,
+                    'path' => $path,
+                    'attempt' => $attempt,
+                ]);
 
                 try {
                     $this->migrator->run([$path], ['step' => false]);
@@ -81,28 +90,48 @@ class IdempotentMigrationService
                 } catch (Throwable $throwable) {
                     $classification = $this->classifier->classify($throwable);
                     $object = $this->classifier->inferObject($throwable);
+                    $details = $this->classifier->extractErrorDetails($throwable);
+
                     $reporter->log('warning', 'Falha classificada durante migration.', [
                         'migration' => $name,
                         'attempt' => $attempt,
                         'classification' => $classification,
                         'object' => $object,
+                        'sqlstate' => $details['sqlstate'],
+                        'errno' => $details['errno'],
                         'error' => $throwable->getMessage(),
                     ]);
 
-                    if ($classification === MigrationFailureClassifier::LOCK_RETRYABLE && $attempt <= $maxRetries) {
+                    if ($classification === MigrationFailureClassifier::LOCK_RETRYABLE && $attempt <= $lockRetries) {
                         $stats['retried']++;
-                        $sleepMs = $backoffMs * $attempt;
-                        usleep($sleepMs * 1000);
+                        $sleepSeconds = ($retrySleepBase * (2 ** ($attempt - 1))) + ($attempt - 1);
+                        $reporter->log('warning', 'Retry por lock/deadlock.', [
+                            'migration' => $name,
+                            'attempt' => $attempt,
+                            'next_wait_seconds' => $sleepSeconds,
+                        ]);
+                        sleep($sleepSeconds);
                         continue;
                     }
 
-                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && !$strict) {
-                        $reconciled = $this->reconciler->reconcile($repository, $name, $object, is_string($connection) ? $connection : null);
+                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && $isEnabled && $reconcileAlreadyExists && !$strict) {
+                        $reconciled = $this->reconciler->reconcile(
+                            $repository,
+                            $name,
+                            $object,
+                            $details,
+                            is_string($connection) ? $connection : null,
+                            false
+                        );
+
                         if (($reconciled['reconciled'] ?? false) === true) {
                             $stats['reconciled']++;
+                            if (($reconciled['warning'] ?? false) === true) {
+                                $stats['warnings']++;
+                            }
                             $stats['divergences'][] = [
                                 'migration' => $name,
-                                'type' => 'already_exists',
+                                'type' => 'DIVERGENCE SUSPECTED',
                                 'object' => $object,
                                 'note' => 'partial_apply_possible',
                             ];
@@ -114,8 +143,21 @@ class IdempotentMigrationService
                         }
                     }
 
+                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && $strict) {
+                        $reporter->log('error', 'Modo estrito ativo: drift exige intervenção manual.', [
+                            'migration' => $name,
+                            'object' => $object,
+                            'sqlstate' => $details['sqlstate'],
+                            'errno' => $details['errno'],
+                        ]);
+                    }
+
                     $stats['failed']++;
-                    $reporter->log('error', 'Falha não recuperável na migration.', ['migration' => $name, 'error' => $throwable->getMessage()]);
+                    $reporter->log('error', 'Falha não recuperável na migration.', [
+                        'migration' => $name,
+                        'error' => $throwable->getMessage(),
+                        'classification' => $classification,
+                    ]);
                     throw $throwable;
                 }
             }
