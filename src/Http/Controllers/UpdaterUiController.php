@@ -63,9 +63,14 @@ class UpdaterUiController extends Controller
     public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher): RedirectResponse
     {
         $activeProfile = $this->managerStore->activeProfile();
+        $preUpdateCommands = $this->parseCommands((string) ($activeProfile['pre_update_commands'] ?? ''));
+        $postUpdateCommands = $this->parseCommands((string) ($activeProfile['post_update_commands'] ?? ''));
+
         $dispatcher->triggerUpdate([
             'seed' => (bool) ($activeProfile['seed'] ?? false),
             'seeders' => $request->filled('seed') ? [$request->string('seed')->toString()] : [],
+            'pre_update_commands' => $preUpdateCommands,
+            'post_update_commands' => $postUpdateCommands,
             'allow_dirty' => false,
             'dry_run' => (bool) ($activeProfile['dry_run'] ?? false),
             'profile_id' => $activeProfile['id'] ?? null,
@@ -75,6 +80,21 @@ class UpdaterUiController extends Controller
         ]);
 
         return back()->with('status', 'Atualização disparada com sucesso.');
+    }
+
+    /** @return array<int,string> */
+    private function parseCommands(string $raw): array
+    {
+        $commands = [];
+        foreach (preg_split('/\r\n|\r|\n/', $raw) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $commands[] = $line;
+        }
+
+        return array_values(array_unique($commands));
     }
 
     public function triggerRollback(TriggerDispatcher $dispatcher): RedirectResponse
