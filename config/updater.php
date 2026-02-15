@@ -123,6 +123,11 @@ return [
     ],
 
 
+    // Comandos genéricos pós-update (opcional).
+    // Exemplo COMENTADO (não executa automaticamente):
+    // UPDATER_POST_UPDATE_COMMANDS="php artisan db:seed --class=Database\\Seeders\\ReformaTributariaSeeder --force"
+    'post_update_commands' => env('UPDATER_POST_UPDATE_COMMANDS', ''),
+
     'seed' => [
         'run_reforma_tributaria' => (bool) env('UPDATER_SEED_RUN_REFORMA_TRIBUTARIA', true),
         'reforma_tributaria_seeder' => env('UPDATER_SEED_REFORMA_TRIBUTARIA_SEEDER', 'Database\\Seeders\\ReformaTributariaSeeder'),
