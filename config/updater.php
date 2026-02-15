@@ -27,6 +27,8 @@ return [
         'tag' => env('UPDATER_GIT_TAG', ''),
         'auto_init' => (bool) env('UPDATER_GIT_AUTO_INIT', false),
         'default_update_mode' => env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge'),
+        'first_run_assume_behind' => (bool) env('UPDATER_GIT_FIRST_RUN_ASSUME_BEHIND', true),
+        'first_run_assume_behind_commits' => (int) env('UPDATER_GIT_FIRST_RUN_ASSUME_BEHIND_COMMITS', 1),
         // Lista de caminhos que NÃO devem bloquear o update mesmo com working tree "dirty".
         // Aceita array via config (config/updater.php). Para ENV, use vírgula: "config/updater.php,.env,storage/".
         'dirty_allowlist' => array_values(array_filter(array_map('trim', explode(',', (string) env('UPDATER_GIT_DIRTY_ALLOWLIST', 'config/updater.php,.env,storage/,bootstrap/cache/'))))),
@@ -104,10 +106,52 @@ return [
 
     'build_assets' => (bool) env('UPDATER_BUILD_ASSETS', false),
 
+
+    'migrate' => [
+        'idempotent' => (bool) env('UPDATER_MIGRATE_IDEMPOTENT', true),
+        'mode' => (string) env('UPDATER_MIGRATE_MODE', 'tolerant'),
+        'retry_locks' => (int) env('UPDATER_MIGRATE_RETRY_LOCKS', 2),
+        'retry_sleep_base' => (int) env('UPDATER_MIGRATE_RETRY_SLEEP_BASE', 3),
+        'dry_run' => (bool) env('UPDATER_MIGRATE_DRY_RUN', false),
+        'log_channel' => (string) env('UPDATER_MIGRATE_LOG_CHANNEL', 'stack'),
+        'reconcile_already_exists' => (bool) env('UPDATER_MIGRATE_RECONCILE_ALREADY_EXISTS', true),
+        'report_path' => env('UPDATER_MIGRATE_REPORT_PATH', storage_path('logs/updater-migrate-{timestamp}.log')),
+        'paths' => [],
+
+        // Compatibilidade retroativa
+        'strict_mode' => (bool) env('UPDATER_MIGRATE_STRICT_MODE', false),
+        'max_retries' => (int) env('UPDATER_MIGRATE_MAX_RETRIES', 3),
+        'backoff_ms' => (int) env('UPDATER_MIGRATE_BACKOFF_MS', 500),
+    ],
+
+
+    // Comandos genéricos pré-update (opcional).
+    // Exemplo COMENTADO (não executa automaticamente):
+    // UPDATER_PRE_UPDATE_COMMANDS="php artisan optimize:clear"
+    'pre_update_commands' => env('UPDATER_PRE_UPDATE_COMMANDS', ''),
+
+    // Comandos genéricos pós-update (opcional).
+    // Exemplo COMENTADO (não executa automaticamente):
+    // UPDATER_POST_UPDATE_COMMANDS="php artisan db:seed --class=Database\\Seeders\\ReformaTributariaSeeder --force"
+    'post_update_commands' => env('UPDATER_POST_UPDATE_COMMANDS', ''),
+
+    'seed' => [
+        'run_reforma_tributaria' => (bool) env('UPDATER_SEED_RUN_REFORMA_TRIBUTARIA', true),
+        'reforma_tributaria_seeder' => env('UPDATER_SEED_REFORMA_TRIBUTARIA_SEEDER', 'Database\\Seeders\\ReformaTributariaSeeder'),
+        'allow_default_database_seeder' => (bool) env('UPDATER_SEED_ALLOW_DEFAULT_DATABASE_SEEDER', false),
+    ],
+
+    'cache' => [
+        // Evita derrubar update quando route:cache falhar por rota duplicada no host.
+        // Nesse caso o updater registra warning e executa route:clear.
+        'ignore_route_cache_duplicate_name' => (bool) env('UPDATER_CACHE_IGNORE_ROUTE_CACHE_DUPLICATE_NAME', true),
+    ],
+
     'healthcheck' => [
         'enabled' => (bool) env('UPDATER_HEALTHCHECK_ENABLED', true),
         'url' => env('UPDATER_HEALTHCHECK_URL', env('APP_URL', 'http://localhost')),
         'timeout' => (int) env('UPDATER_HEALTHCHECK_TIMEOUT', 5),
+        'skip_localhost' => (bool) env('UPDATER_HEALTHCHECK_SKIP_LOCALHOST', true),
     ],
 
 
@@ -132,6 +176,13 @@ return [
         'allow_multiple' => (bool) env('UPDATER_SOURCES_ALLOW_MULTIPLE', false),
     ],
 
+
+    'auto_publish' => [
+        'enabled' => (bool) env('UPDATER_AUTO_PUBLISH_ENABLED', true),
+        'config' => (bool) env('UPDATER_AUTO_PUBLISH_CONFIG', true),
+        'views' => (bool) env('UPDATER_AUTO_PUBLISH_VIEWS', true),
+    ],
+
     'ui' => [
         'enabled' => (bool) env('UPDATER_UI_ENABLED', true),
         'prefix' => env('UPDATER_UI_PREFIX', '_updater'),
@@ -143,6 +194,7 @@ return [
             'default_email' => env('UPDATER_UI_DEFAULT_EMAIL', 'admin@admin.com'),
             'default_password' => env('UPDATER_UI_DEFAULT_PASSWORD', '123456'),
             'default_name' => env('UPDATER_UI_DEFAULT_NAME', 'Admin'),
+            'master_email' => env('UPDATER_UI_MASTER_EMAIL', ''),
             'session_ttl_minutes' => (int) env('UPDATER_UI_SESSION_TTL', 120),
             'rate_limit' => [
                 'max_attempts' => (int) $uiRateLimitMaxAttempts,
@@ -195,6 +247,14 @@ return [
         'default_title' => env('UPDATER_MAINTENANCE_TITLE', 'Atualização em andamento'),
         'default_message' => env('UPDATER_MAINTENANCE_MESSAGE', 'Estamos atualizando o sistema. Volte em alguns minutos.'),
         'default_footer' => env('UPDATER_MAINTENANCE_FOOTER', 'Obrigado pela compreensão.'),
+        'enter_on_update_start' => (bool) env('UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START', true),
+
+        // Rotas que nunca devem ser bloqueadas pelo maintenance mode.
+        // Por padrão protege o prefixo da UI do updater.
+        'except_paths' => [
+            trim((string) config('updater.ui.prefix', '_updater'), '/'),
+            trim((string) config('updater.ui.prefix', '_updater'), '/') . '/*',
+        ],
     ],
 
 ];

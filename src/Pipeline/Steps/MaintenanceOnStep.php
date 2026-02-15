@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Pipeline\Steps;
 
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
+use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ShellRunner;
 
 class MaintenanceOnStep implements PipelineStepInterface
 {
-    public function __construct(private readonly ShellRunner $shellRunner)
+    public function __construct(private readonly ShellRunner $shellRunner, private readonly ?MaintenanceMode $maintenanceMode = null)
     {
     }
 
@@ -34,9 +35,17 @@ class MaintenanceOnStep implements PipelineStepInterface
 
         $entered = false;
 
+        $downEnv = [
+            'REQUEST_URI' => '/',
+            'HTTP_HOST' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
+            'SERVER_NAME' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
+            'SERVER_PORT' => (string) (parse_url((string) config('app.url', 'http://localhost'), PHP_URL_PORT) ?: 80),
+            'HTTPS' => str_starts_with((string) config('app.url', 'http://localhost'), 'https://') ? 'on' : 'off',
+        ];
+
         foreach ($candidates as $view) {
             try {
-                $this->shellRunner->runOrFail(['php', 'artisan', 'down', '--render=' . $view]);
+                $this->shellRunner->runOrFail($this->downCommand($view), env: $downEnv);
                 $entered = true;
                 break;
             } catch (\Throwable $e) {
@@ -50,10 +59,26 @@ class MaintenanceOnStep implements PipelineStepInterface
 
         if (!$entered) {
             // Last resort: enter maintenance without custom render.
-            $this->shellRunner->runOrFail(['php', 'artisan', 'down']);
+            $this->shellRunner->runOrFail($this->downCommand(), env: $downEnv);
         }
 
         $context['maintenance'] = true;
+    }
+
+
+    /** @return array<int,string> */
+    private function downCommand(?string $view = null): array
+    {
+        if ($this->maintenanceMode !== null) {
+            return $this->maintenanceMode->downCommand($view);
+        }
+
+        $command = ['php', 'artisan', 'down'];
+        if ($view !== null && trim($view) !== '') {
+            $command[] = '--render=' . trim($view);
+        }
+
+        return $command;
     }
 
     public function rollback(array &$context): void

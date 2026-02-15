@@ -30,7 +30,7 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/2fa', [AuthController::class, 'verifyTwoFactor'])->name('updater.2fa.verify');
             Route::post('/logout', [AuthController::class, 'logout'])->name('updater.logout');
 
-            Route::group(['middleware' => ['updater.auth']], function (): void {
+            Route::group(['middleware' => ['updater.auth', 'updater.authorize']], function (): void {
                 Route::get('/', [UpdaterUiController::class, 'index'])->name('updater.index');
                 Route::get('/profile', [AuthController::class, 'profile'])->name('updater.profile');
                 Route::post('/profile/password', [AuthController::class, 'updatePassword'])->name('updater.profile.password');
@@ -41,6 +41,8 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/check', [UpdaterUiController::class, 'check'])->name('updater.check');
                 Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
                 Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
+                Route::post('/maintenance/on', [UpdaterUiController::class, 'maintenanceOn'])->name('updater.maintenance.on');
+                Route::post('/maintenance/off', [UpdaterUiController::class, 'maintenanceOff'])->name('updater.maintenance.off');
 
                 Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->name('updater.runs.show');
 
@@ -99,6 +101,8 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/check', [UpdaterUiController::class, 'check'])->name('updater.check');
             Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
             Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
+            Route::post('/maintenance/on', [UpdaterUiController::class, 'maintenanceOn'])->name('updater.maintenance.on');
+            Route::post('/maintenance/off', [UpdaterUiController::class, 'maintenanceOff'])->name('updater.maintenance.off');
             Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds'])->name('updater.section');
         });
     }

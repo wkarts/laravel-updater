@@ -36,6 +36,9 @@ class ManagerStore
             'maintenance_title' => (string) ($row['maintenance_title'] ?? config('updater.maintenance.default_title', 'Atualização em andamento')),
             'maintenance_message' => (string) ($row['maintenance_message'] ?? config('updater.maintenance.default_message', 'Estamos atualizando o sistema. Volte em alguns minutos.')),
             'maintenance_footer' => (string) ($row['maintenance_footer'] ?? config('updater.maintenance.default_footer', 'Obrigado pela compreensão.')),
+            'first_run_assume_behind' => (int) ($row['first_run_assume_behind'] ?? ((bool) config('updater.git.first_run_assume_behind', true) ? 1 : 0)),
+            'first_run_assume_behind_commits' => (int) ($row['first_run_assume_behind_commits'] ?? (int) config('updater.git.first_run_assume_behind_commits', 1)),
+            'enter_maintenance_on_update_start' => (int) ($row['enter_maintenance_on_update_start'] ?? ((bool) config('updater.maintenance.enter_on_update_start', true) ? 1 : 0)),
 
             'is_custom' => $row !== null,
         ];
@@ -51,8 +54,8 @@ class ManagerStore
 
     public function saveBranding(array $data): void
     {
-        $stmt = $this->pdo()->prepare('INSERT INTO updater_branding (id, app_name, app_sufix_name, app_desc, logo_path, favicon_path, primary_color, maintenance_title, maintenance_message, maintenance_footer, updated_at)
-            VALUES (1, :app_name, :app_sufix_name, :app_desc, :logo_path, :favicon_path, :primary_color, :maintenance_title, :maintenance_message, :maintenance_footer, :updated_at)
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_branding (id, app_name, app_sufix_name, app_desc, logo_path, favicon_path, primary_color, maintenance_title, maintenance_message, maintenance_footer, first_run_assume_behind, first_run_assume_behind_commits, enter_maintenance_on_update_start, updated_at)
+            VALUES (1, :app_name, :app_sufix_name, :app_desc, :logo_path, :favicon_path, :primary_color, :maintenance_title, :maintenance_message, :maintenance_footer, :first_run_assume_behind, :first_run_assume_behind_commits, :enter_maintenance_on_update_start, :updated_at)
             ON CONFLICT(id) DO UPDATE SET
             app_name = excluded.app_name,
             app_sufix_name = excluded.app_sufix_name,
@@ -60,6 +63,12 @@ class ManagerStore
             logo_path = excluded.logo_path,
             favicon_path = excluded.favicon_path,
             primary_color = excluded.primary_color,
+            maintenance_title = excluded.maintenance_title,
+            maintenance_message = excluded.maintenance_message,
+            maintenance_footer = excluded.maintenance_footer,
+            first_run_assume_behind = excluded.first_run_assume_behind,
+            first_run_assume_behind_commits = excluded.first_run_assume_behind_commits,
+            enter_maintenance_on_update_start = excluded.enter_maintenance_on_update_start,
             updated_at = excluded.updated_at');
 
         $stmt->execute([
@@ -72,6 +81,9 @@ class ManagerStore
             ':maintenance_title' => $data['maintenance_title'] ?? null,
             ':maintenance_message' => $data['maintenance_message'] ?? null,
             ':maintenance_footer' => $data['maintenance_footer'] ?? null,
+            ':first_run_assume_behind' => isset($data['first_run_assume_behind']) ? (int) $data['first_run_assume_behind'] : null,
+            ':first_run_assume_behind_commits' => isset($data['first_run_assume_behind_commits']) ? (int) $data['first_run_assume_behind_commits'] : null,
+            ':enter_maintenance_on_update_start' => isset($data['enter_maintenance_on_update_start']) ? (int) $data['enter_maintenance_on_update_start'] : null,
             ':updated_at' => date(DATE_ATOM),
         ]);
     }
@@ -81,10 +93,26 @@ class ManagerStore
         $this->pdo()->exec('DELETE FROM updater_branding WHERE id = 1');
     }
 
+
+    public function runtimeSettings(): array
+    {
+        $row = $this->branding() ?? [];
+
+        return [
+            'git' => [
+                'first_run_assume_behind' => (bool) ((int) ($row['first_run_assume_behind'] ?? ((bool) config('updater.git.first_run_assume_behind', true) ? 1 : 0))),
+                'first_run_assume_behind_commits' => max(1, (int) ($row['first_run_assume_behind_commits'] ?? config('updater.git.first_run_assume_behind_commits', 1))),
+            ],
+            'maintenance' => [
+                'enter_on_update_start' => (bool) ((int) ($row['enter_maintenance_on_update_start'] ?? ((bool) config('updater.maintenance.enter_on_update_start', true) ? 1 : 0))),
+            ],
+        ];
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function users(): array
     {
-        $stmt = $this->pdo()->query('SELECT id,email,name,is_admin,is_active,totp_enabled,last_login_at FROM updater_users ORDER BY id DESC');
+        $stmt = $this->pdo()->query('SELECT id,email,name,is_admin,is_active,permissions_json,totp_enabled,last_login_at FROM updater_users ORDER BY id DESC');
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
@@ -101,7 +129,7 @@ class ManagerStore
 
     public function createUser(array $data): int
     {
-        $stmt = $this->pdo()->prepare('INSERT INTO updater_users (name, email, password_hash, is_admin, is_active, totp_enabled, created_at, updated_at) VALUES (:name, :email, :password_hash, :is_admin, :is_active, 0, :created_at, :updated_at)');
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_users (name, email, password_hash, is_admin, is_active, permissions_json, totp_enabled, created_at, updated_at) VALUES (:name, :email, :password_hash, :is_admin, :is_active, :permissions_json, 0, :created_at, :updated_at)');
         $now = date(DATE_ATOM);
         $stmt->execute([
             ':name' => $data['name'],
@@ -109,6 +137,7 @@ class ManagerStore
             ':password_hash' => password_hash((string) $data['password'], PASSWORD_BCRYPT),
             ':is_admin' => (int) ($data['is_admin'] ?? 0),
             ':is_active' => (int) ($data['is_active'] ?? 1),
+            ':permissions_json' => $data['permissions_json'] ?? null,
             ':created_at' => $now,
             ':updated_at' => $now,
         ]);
@@ -123,6 +152,7 @@ class ManagerStore
             'email = :email',
             'is_admin = :is_admin',
             'is_active = :is_active',
+            'permissions_json = :permissions_json',
             'updated_at = :updated_at',
         ];
 
@@ -132,6 +162,7 @@ class ManagerStore
             ':email' => mb_strtolower(trim((string) $data['email'])),
             ':is_admin' => (int) ($data['is_admin'] ?? 0),
             ':is_active' => (int) ($data['is_active'] ?? 1),
+            ':permissions_json' => $data['permissions_json'] ?? null,
             ':updated_at' => date(DATE_ATOM),
         ];
 
@@ -267,10 +298,10 @@ class ManagerStore
         }
 
         if ($id === null) {
-            $stmt = $this->pdo()->prepare('INSERT INTO updater_profiles (name, backup_enabled, dry_run, force, composer_install, migrate, seed, build_assets, health_check, rollback_on_fail, retention_backups, active)
-            VALUES (:name,:backup_enabled,:dry_run,:force,:composer_install,:migrate,:seed,:build_assets,:health_check,:rollback_on_fail,:retention_backups,:active)');
+            $stmt = $this->pdo()->prepare('INSERT INTO updater_profiles (name, backup_enabled, dry_run, force, composer_install, migrate, seed, build_assets, health_check, rollback_on_fail, retention_backups, active, pre_update_commands, post_update_commands)
+            VALUES (:name,:backup_enabled,:dry_run,:force,:composer_install,:migrate,:seed,:build_assets,:health_check,:rollback_on_fail,:retention_backups,:active,:pre_update_commands,:post_update_commands)');
         } else {
-            $stmt = $this->pdo()->prepare('UPDATE updater_profiles SET name=:name, backup_enabled=:backup_enabled, dry_run=:dry_run, force=:force, composer_install=:composer_install, migrate=:migrate, seed=:seed, build_assets=:build_assets, health_check=:health_check, rollback_on_fail=:rollback_on_fail, retention_backups=:retention_backups, active=:active WHERE id=:id');
+            $stmt = $this->pdo()->prepare('UPDATE updater_profiles SET name=:name, backup_enabled=:backup_enabled, dry_run=:dry_run, force=:force, composer_install=:composer_install, migrate=:migrate, seed=:seed, build_assets=:build_assets, health_check=:health_check, rollback_on_fail=:rollback_on_fail, retention_backups=:retention_backups, active=:active, pre_update_commands=:pre_update_commands, post_update_commands=:post_update_commands WHERE id=:id');
         }
 
         $payload = [
@@ -286,6 +317,8 @@ class ManagerStore
             ':rollback_on_fail' => $data['rollback_on_fail'],
             ':retention_backups' => (int) ($data['retention_backups'] ?? 10),
             ':active' => $data['active'],
+            ':pre_update_commands' => $data['pre_update_commands'] ?? null,
+            ':post_update_commands' => $data['post_update_commands'] ?? null,
         ];
         if ($id !== null) {
             $payload[':id'] = $id;
