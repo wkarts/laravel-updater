@@ -6,6 +6,7 @@ namespace Argws\LaravelUpdater\Http\Controllers;
 
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
+use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -103,6 +104,35 @@ class UpdaterUiController extends Controller
         $dispatcher->triggerRollback();
 
         return back()->with('status', 'Rollback disparado com sucesso.');
+    }
+
+
+    public function maintenanceOn(Request $request, ShellRunner $shellRunner): RedirectResponse
+    {
+        $this->requireTwoFactorEnabled($request);
+        $shellRunner->runOrFail(['php', 'artisan', 'down']);
+
+        return back()->with('status', 'Modo manutenção habilitado com sucesso.');
+    }
+
+    public function maintenanceOff(Request $request, ShellRunner $shellRunner): RedirectResponse
+    {
+        $this->requireTwoFactorEnabled($request);
+        $shellRunner->runOrFail(['php', 'artisan', 'up']);
+
+        return back()->with('status', 'Modo manutenção desabilitado com sucesso.');
+    }
+
+    private function requireTwoFactorEnabled(Request $request): void
+    {
+        if (!(bool) config('updater.ui.auth.enabled', false)) {
+            return;
+        }
+
+        $user = (array) $request->attributes->get('updater_user', []);
+        if ((bool) ($user['totp_enabled'] ?? false) !== true) {
+            abort(403, 'Ação exige 2FA habilitado para o usuário autenticado.');
+        }
     }
 
     public function apiTrigger(Request $request, TriggerDispatcher $dispatcher): JsonResponse

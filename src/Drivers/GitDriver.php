@@ -31,14 +31,19 @@ class GitDriver implements CodeDriverInterface
     public function statusUpdates(): array
     {
         if (!$this->isGitRepository()) {
+            $cfg = $this->runtimeConfig();
+            $assumeBehind = (bool) ($cfg['first_run_assume_behind'] ?? true);
+            $assumedCommits = max(1, (int) ($cfg['first_run_assume_behind_commits'] ?? 1));
+
             return [
                 'local' => 'N/A',
                 'remote' => 'N/A',
-                'behind_by_commits' => 0,
+                'behind_by_commits' => $assumeBehind ? $assumedCommits : 0,
                 'ahead_by_commits' => 0,
-                'has_updates' => false,
+                'has_updates' => $assumeBehind,
                 'latest_tag' => null,
                 'has_update_by_tag' => false,
+                'first_run_assumed_update' => $assumeBehind,
             ];
         }
 

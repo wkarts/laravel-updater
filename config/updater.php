@@ -27,6 +27,8 @@ return [
         'tag' => env('UPDATER_GIT_TAG', ''),
         'auto_init' => (bool) env('UPDATER_GIT_AUTO_INIT', false),
         'default_update_mode' => env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge'),
+        'first_run_assume_behind' => (bool) env('UPDATER_GIT_FIRST_RUN_ASSUME_BEHIND', true),
+        'first_run_assume_behind_commits' => (int) env('UPDATER_GIT_FIRST_RUN_ASSUME_BEHIND_COMMITS', 1),
         // Lista de caminhos que NÃO devem bloquear o update mesmo com working tree "dirty".
         // Aceita array via config (config/updater.php). Para ENV, use vírgula: "config/updater.php,.env,storage/".
         'dirty_allowlist' => array_values(array_filter(array_map('trim', explode(',', (string) env('UPDATER_GIT_DIRTY_ALLOWLIST', 'config/updater.php,.env,storage/,bootstrap/cache/'))))),
@@ -244,6 +246,7 @@ return [
         'default_title' => env('UPDATER_MAINTENANCE_TITLE', 'Atualização em andamento'),
         'default_message' => env('UPDATER_MAINTENANCE_MESSAGE', 'Estamos atualizando o sistema. Volte em alguns minutos.'),
         'default_footer' => env('UPDATER_MAINTENANCE_FOOTER', 'Obrigado pela compreensão.'),
+        'enter_on_update_start' => (bool) env('UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START', true),
     ],
 
 ];

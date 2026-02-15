@@ -44,12 +44,27 @@ class UpdaterKernel
 
     public static function makePipeline(array $services): UpdatePipeline
     {
-        return new UpdatePipeline([
+        $maintenanceEarly = (bool) config('updater.maintenance.enter_on_update_start', true);
+
+        $steps = [
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
+        ];
+
+        if ($maintenanceEarly) {
+            $steps[] = new MaintenanceOnStep($services['shell']);
+        }
+
+        $steps = array_merge($steps, [
             new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
             new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot'), $services['archive'] ?? null),
             new PreUpdateCommandsStep($services['shell']),
-            new MaintenanceOnStep($services['shell']),
+        ]);
+
+        if (!$maintenanceEarly) {
+            $steps[] = new MaintenanceOnStep($services['shell']);
+        }
+
+        $steps = array_merge($steps, [
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
@@ -60,7 +75,9 @@ class UpdaterKernel
             new PostUpdateCommandsStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
             new MaintenanceOffStep($services['shell'], $services['lock']),
-        ], $services['logger'], $services['store']);
+        ]);
+
+        return new UpdatePipeline($steps, $services['logger'], $services['store']);
     }
 
     public function check(bool $allowDirty = false): array
