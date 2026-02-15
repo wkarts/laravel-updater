@@ -369,3 +369,55 @@ Após alterar variáveis do updater em produção, execute também:
 php artisan config:clear
 php artisan cache:clear
 ```
+
+## Migrador idempotente definitivo (`updater:migrate`)
+
+### O que é drift de migration
+Drift acontece quando o estado real do banco não bate com o histórico da tabela `migrations` (ex.: tabela já existe, mas a migration não está marcada como executada).
+
+### Estratégia implementada
+- Executa **uma migration por vez** (determinístico), identificando exatamente qual arquivo falhou.
+- Classifica falhas em:
+  - `ALREADY_EXISTS` (reconciliável no modo tolerante);
+  - `LOCK_RETRYABLE` (retry com backoff);
+  - `NON_RETRYABLE` (falha real, interrompe).
+- Em `ALREADY_EXISTS` e modo tolerante, reconcilia com validação mínima e registra a migration como executada.
+- Gera log JSONL em arquivo + logs no `StateStore` (tabela `updater_logs`).
+- Em caso de aplicação parcial, registra divergência no relatório final (`divergences`).
+
+### Configuração
+```dotenv
+UPDATER_MIGRATE_STRICT_MODE=false
+UPDATER_MIGRATE_DRY_RUN=false
+UPDATER_MIGRATE_MAX_RETRIES=3
+UPDATER_MIGRATE_BACKOFF_MS=500
+UPDATER_MIGRATE_REPORT_PATH="storage/logs/updater-migrate-{timestamp}.log"
+```
+
+### Comando
+```bash
+php artisan updater:migrate --force
+```
+
+Opções úteis:
+- `--strict`: modo estrito (não reconcilia `ALREADY_EXISTS`)
+- `--dry-run`: simula sem executar SQL
+- `--max-retries=` e `--backoff-ms=`: controle de retry de lock/deadlock
+- `--database=` e `--path=`: conexão/caminho específicos
+- `--run-id=`: vincula auditoria ao run do updater
+
+### Exemplos reais
+```bash
+# Modo tolerante padrão
+php artisan updater:migrate --force
+
+# Modo estrito para ambiente limpo
+php artisan updater:migrate --force --strict
+
+# Simulação prévia
+php artisan updater:migrate --dry-run --force
+```
+
+### Riscos e quando usar modo estrito
+- Modo tolerante resolve cenários comuns de produção com drift, mas pode mascarar inconsistências semânticas profundas quando a migration está parcialmente aplicada.
+- Em ambientes novos/limpos, prefira `--strict` para falhar rápido e exigir correção explícita.

@@ -104,6 +104,16 @@ return [
 
     'build_assets' => (bool) env('UPDATER_BUILD_ASSETS', false),
 
+
+    'migrate' => [
+        'strict_mode' => (bool) env('UPDATER_MIGRATE_STRICT_MODE', false),
+        'dry_run' => (bool) env('UPDATER_MIGRATE_DRY_RUN', false),
+        'max_retries' => (int) env('UPDATER_MIGRATE_MAX_RETRIES', 3),
+        'backoff_ms' => (int) env('UPDATER_MIGRATE_BACKOFF_MS', 500),
+        'report_path' => env('UPDATER_MIGRATE_REPORT_PATH', storage_path('logs/updater-migrate-{timestamp}.log')),
+        'paths' => [],
+    ],
+
     'healthcheck' => [
         'enabled' => (bool) env('UPDATER_HEALTHCHECK_ENABLED', true),
         'url' => env('UPDATER_HEALTHCHECK_URL', env('APP_URL', 'http://localhost')),
