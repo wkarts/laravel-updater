@@ -41,6 +41,11 @@ class ShellRunner
             throw new UpdaterException('Comando inválido: vazio.');
         }
 
+        // Em ambientes não-interativos (Supervisor, cron, PHP-FPM), o PATH pode vir reduzido.
+        // Isso causa exit code 127 (command not found) mesmo com o binário instalado.
+        // Aqui fazemos um fallback seguro, preservando o PATH original e garantindo diretórios comuns.
+        $env = $this->normalizeEnv($env);
+
         $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
         $workingDirectory = $cwd ?? getcwd();
 
@@ -64,6 +69,42 @@ class ShellRunner
             'stderr' => trim($stderr),
             'exit_code' => $exitCode,
         ];
+    }
+
+    /** @param array<string, string> $env */
+    private function normalizeEnv(array $env): array
+    {
+        $final = $env;
+
+        $path = $final['PATH'] ?? (getenv('PATH') ?: '');
+
+        $common = [
+            '/usr/local/sbin',
+            '/usr/local/bin',
+            '/usr/sbin',
+            '/usr/bin',
+            '/sbin',
+            '/bin',
+            '/snap/bin',
+        ];
+
+        $home = getenv('HOME') ?: null;
+        if ($home) {
+            $common[] = rtrim($home, '/').'/bin';
+            $common[] = rtrim($home, '/').'/.composer/vendor/bin';
+        }
+
+        $parts = array_values(array_filter(explode(':', (string) $path), static fn ($p) => trim((string) $p) !== ''));
+
+        foreach (array_reverse($common) as $dir) {
+            if (!in_array($dir, $parts, true)) {
+                array_unshift($parts, $dir);
+            }
+        }
+
+        $final['PATH'] = implode(':', $parts);
+
+        return $final;
     }
 
     /** @param array<string, string> $env */

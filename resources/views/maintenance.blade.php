@@ -9,11 +9,17 @@
         $branding = app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding();
         $primary = $branding['primary_color'] ?? '#0d6efd';
         $logoUrl = $branding['logo_url'] ?? null;
-        $appName = $branding['app_name_full'] ?? config('app.name', 'Aplicação');
+        $faviconUrl = $branding['favicon_url'] ?? null;
+        $appName = $branding['app_name_full'] ?? ($branding['app_name'] ?? config('app.name', 'Aplicação'));
         $appDesc = $branding['app_desc'] ?? null;
         $message = $branding['maintenance_message'] ?? config('updater.maintenance.default_message');
         $footer  = $branding['maintenance_footer']  ?? config('updater.maintenance.default_footer');
     @endphp
+
+    @if(!empty($faviconUrl))
+        <link rel="icon" href="{{ $faviconUrl }}" />
+    @endif
+    <meta name="theme-color" content="{{ $primary }}" />
 
     <style>
         :root { --primary: {{ $primary }}; --bg: #0b1220; --card: rgba(255,255,255,.06); --text: rgba(255,255,255,.92); --muted: rgba(255,255,255,.65); }

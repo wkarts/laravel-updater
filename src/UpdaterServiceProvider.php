@@ -138,6 +138,10 @@ class UpdaterServiceProvider extends ServiceProvider
         ], 'updater-config');
 
         $this->publishes([
+            __DIR__ . '/../resources/views' => resource_path('views/vendor/laravel-updater'),
+        ], 'updater-views');
+
+        $this->publishes([
             __DIR__ . '/../resources/assets/updater.css' => public_path('vendor/laravel-updater/updater.css'),
             __DIR__ . '/../resources/assets/updater.js' => public_path('vendor/laravel-updater/updater.js'),
         ], 'updater-assets');
