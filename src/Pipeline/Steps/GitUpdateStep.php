@@ -85,6 +85,10 @@ class GitUpdateStep implements PipelineStepInterface
             $this->backupDotEnv($context);
         }
 
+        if (!$isDryRun) {
+            $this->backupDotEnv($context);
+        }
+
         if ($isDryRun) {
             $context['dry_run_plan']['git'] = [
                 'atual' => $context['revision_before'],
