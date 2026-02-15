@@ -13,7 +13,8 @@ class UpdateRunCommand extends Command
 {
     protected $signature = 'system:update:run
         {--force : Executa sem confirmação}
-        {--seed : Executa seed padrão}
+        {--seed : Executa fluxo de seed}
+        {--install-seed-default : Também executa DatabaseSeeder (somente instalação inicial)}
         {--seeder=* : Seeder específica (pode repetir)}
         {--seeders= : Lista separada por vírgula de seeders}
         {--sql-path= : Caminho customizado para patch SQL}
@@ -65,6 +66,7 @@ class UpdateRunCommand extends Command
 
         $options = [
             'seed' => (bool) $this->option('seed'),
+            'install_seed_default' => (bool) $this->option('install-seed-default'),
             'seeders' => array_values(array_filter($seeders)),
             'sql_path' => $this->option('sql-path') ?: null,
             'no_backup' => (bool) $this->option('no-backup'),

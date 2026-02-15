@@ -183,6 +183,34 @@ Perfis disponíveis em `--profile`:
 
 Esse fluxo mantém o `.env` existente e só acrescenta parâmetros do updater que ainda não existem.
 
+
+### Seed pós-update (comportamento padrão)
+Por padrão, após cada update o updater tenta executar **somente**:
+
+```bash
+php artisan db:seed --class=Database\Seeders\ReformaTributariaSeeder --force
+```
+
+Se a classe não existir na aplicação host, o updater apenas registra log e segue o pipeline.
+
+As seeds padrão do sistema (`DatabaseSeeder`) **não** rodam por padrão. Para instalação inicial (zero), habilite explicitamente:
+
+```bash
+php artisan system:update:run --seed --install-seed-default --force
+```
+
+Ou via `.env`:
+
+```dotenv
+UPDATER_SEED_ALLOW_DEFAULT_DATABASE_SEEDER=true
+```
+
+Também é possível trocar a classe da seed específica:
+
+```dotenv
+UPDATER_SEED_REFORMA_TRIBUTARIA_SEEDER="Database\Seeders\ReformaTributariaSeeder"
+```
+
 ## CI e release
 
 - CI valida matrix real: PHP 8.2/8.3/8.4 + Laravel 10/11/12.
@@ -489,3 +517,13 @@ Controle por `.env`:
 UPDATER_CACHE_IGNORE_ROUTE_CACHE_DUPLICATE_NAME=true
 ```
 
+
+
+### Healthcheck em localhost durante update
+Para evitar falso negativo em ambientes onde `APP_URL`/healthcheck fica em `localhost`, o updater ignora healthcheck local por padrão.
+
+Controle por `.env`:
+
+```dotenv
+UPDATER_HEALTHCHECK_SKIP_LOCALHOST=true
+```

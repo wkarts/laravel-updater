@@ -123,6 +123,12 @@ return [
     ],
 
 
+    'seed' => [
+        'run_reforma_tributaria' => (bool) env('UPDATER_SEED_RUN_REFORMA_TRIBUTARIA', true),
+        'reforma_tributaria_seeder' => env('UPDATER_SEED_REFORMA_TRIBUTARIA_SEEDER', 'Database\\Seeders\\ReformaTributariaSeeder'),
+        'allow_default_database_seeder' => (bool) env('UPDATER_SEED_ALLOW_DEFAULT_DATABASE_SEEDER', false),
+    ],
+
     'cache' => [
         // Evita derrubar update quando route:cache falhar por rota duplicada no host.
         // Nesse caso o updater registra warning e executa route:clear.
@@ -133,6 +139,7 @@ return [
         'enabled' => (bool) env('UPDATER_HEALTHCHECK_ENABLED', true),
         'url' => env('UPDATER_HEALTHCHECK_URL', env('APP_URL', 'http://localhost')),
         'timeout' => (int) env('UPDATER_HEALTHCHECK_TIMEOUT', 5),
+        'skip_localhost' => (bool) env('UPDATER_HEALTHCHECK_SKIP_LOCALHOST', true),
     ],
 
 
