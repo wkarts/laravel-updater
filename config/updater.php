@@ -30,6 +30,11 @@ return [
         // Lista de caminhos que NÃO devem bloquear o update mesmo com working tree "dirty".
         // Aceita array via config (config/updater.php). Para ENV, use vírgula: "config/updater.php,.env,storage/".
         'dirty_allowlist' => array_values(array_filter(array_map('trim', explode(',', (string) env('UPDATER_GIT_DIRTY_ALLOWLIST', 'config/updater.php,.env,storage/,bootstrap/cache/'))))),
+
+        // Por padrão, a consulta de updates (check) NÃO deve ser bloqueada por working tree dirty,
+        // porque é uma operação somente leitura. Se quiser bloquear também no check:
+        // UPDATER_GIT_ALLOW_DIRTY_CHECK=false
+        'allow_dirty_check' => (bool) env('UPDATER_GIT_ALLOW_DIRTY_CHECK', true),
     ],
 
     'composer' => [

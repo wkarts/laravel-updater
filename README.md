@@ -1,7 +1,7 @@
 # argws/laravel-updater
 
 Pacote Composer para autoatualização segura, idempotente e reversível de aplicações Laravel, agora com camada de **Updater Manager** (painel administrativo, auth independente, branding white-label e API de disparo).
-# email: wkarts@gmail.com
+
 ## Compatibilidade
 
 - PHP: **8.2, 8.3, 8.4**
@@ -253,6 +253,26 @@ php artisan cache:clear
 
 ---
 
+### Erro no `composer install`: "The HOME or COMPOSER_HOME environment variable must be set"
+
+Isso acontece quando o updater roda em um ambiente sem variáveis de usuário (muito comum em **cron**, **supervisor**
+ou quando o PHP é executado com um usuário sem shell).
+
+✅ A partir desta versão, o updater faz **fallback automático**:
+- define `HOME` quando não existe;
+- define `COMPOSER_HOME` e `COMPOSER_CACHE_DIR` automaticamente;
+- cria os diretórios necessários se não existirem.
+
+Se você quiser forçar valores específicos (opcional), pode exportar antes de rodar o comando:
+
+```bash
+export HOME=/home/seu-usuario
+export COMPOSER_HOME=/home/seu-usuario/.composer
+php artisan system:update:run --force
+```
+
+---
+
 ## Página de manutenção (503) e Whitelabel
 
 Durante uma atualização, o updater ativa o *maintenance mode* e exibe uma página 503 própria.
@@ -312,6 +332,13 @@ Valide:
 2. branch da fonte ativa bate com `UPDATER_GIT_BRANCH`;
 3. repositório local possui upstream correto (`origin/main` por exemplo);
 4. execute `php artisan system:update:check` para comparar com o status da UI.
+
+> Dica: por padrão, o updater **não bloqueia o CHECK** por working tree dirty (somente leitura).
+> Se você quiser bloquear também, configure:
+
+```dotenv
+UPDATER_GIT_ALLOW_DIRTY_CHECK=false
+```
 
 ### Solução para erro “Diretório atual não é um repositório git válido”
 
