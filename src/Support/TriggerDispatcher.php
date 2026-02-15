@@ -148,12 +148,15 @@ class TriggerDispatcher
     private function buildUpdateCommandArgs(array $options): array
     {
         $args = ['php', 'artisan', 'system:update:run', '--force'];
+        $allowDirty = array_key_exists('allow_dirty', $options)
+            ? (bool) $options['allow_dirty']
+            : (bool) config('updater.git.allow_dirty_updates', true);
 
         if ((bool) ($options['dry_run'] ?? false)) {
             $args[] = '--dry-run';
         }
 
-        if ((bool) ($options['allow_dirty'] ?? false)) {
+        if ($allowDirty) {
             $args[] = '--allow-dirty';
         }
 

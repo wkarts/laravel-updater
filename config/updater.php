@@ -35,6 +35,11 @@ return [
         // porque é uma operação somente leitura. Se quiser bloquear também no check:
         // UPDATER_GIT_ALLOW_DIRTY_CHECK=false
         'allow_dirty_check' => (bool) env('UPDATER_GIT_ALLOW_DIRTY_CHECK', true),
+
+        // Atualização (run): por padrão permite working tree dirty para evitar travas em ambientes com
+        // alterações locais esperadas (ex.: arquivos de configuração e cache).
+        // Para bloquear, altere este valor diretamente em config/updater.php para false.
+        'allow_dirty_updates' => true,
     ],
 
     'composer' => [

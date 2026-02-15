@@ -60,7 +60,6 @@ class OperationsController extends Controller
             try {
                 $runId = $dispatcher->triggerUpdate([
                     'dry_run' => true,
-                    'allow_dirty' => false,
                     'update_type' => $updateType,
                     'target_tag' => $targetTag,
                     'profile_id' => (int) $data['profile_id'],
@@ -91,7 +90,6 @@ class OperationsController extends Controller
 
         try {
             $runId = $dispatcher->triggerUpdate([
-                'allow_dirty' => false,
                 'dry_run' => false,
                 'update_type' => $updateType,
                 'target_tag' => $targetTag,
@@ -135,7 +133,6 @@ class OperationsController extends Controller
 
         try {
             $runId = $dispatcher->triggerUpdate([
-                'allow_dirty' => false,
                 'dry_run' => false,
                 'update_type' => (string) ($pending['update_type'] ?? 'git_merge'),
                 'target_tag' => (string) ($pending['target_tag'] ?? ''),

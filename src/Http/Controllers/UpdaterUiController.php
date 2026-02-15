@@ -66,7 +66,6 @@ class UpdaterUiController extends Controller
         $dispatcher->triggerUpdate([
             'seed' => (bool) ($activeProfile['seed'] ?? false),
             'seeders' => $request->filled('seed') ? [$request->string('seed')->toString()] : [],
-            'allow_dirty' => false,
             'dry_run' => (bool) ($activeProfile['dry_run'] ?? false),
             'profile_id' => $activeProfile['id'] ?? null,
             'source_id' => $this->managerStore->activeSource()['id'] ?? null,
