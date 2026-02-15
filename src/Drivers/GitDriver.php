@@ -112,13 +112,7 @@ class GitDriver implements CodeDriverInterface
         if (!$this->isGitRepository()) {
             if (!$this->tryInitRepository($config, $remote, $branch)) {
                 $cwd = $this->cwd();
-                throw new GitException(
-                    'Diretório atual não é um repositório git válido: ' . $cwd . '. '
-                    . 'Isso normalmente acontece quando o projeto foi publicado por ZIP/FTP (sem pasta .git). '
-                    . 'Soluções: (1) inicialize git manualmente (git init + remote + fetch + checkout) '
-                    . 'OU (2) habilite o bootstrap automático definindo UPDATER_GIT_AUTO_INIT=true e UPDATER_GIT_REMOTE_URL, '
-                    . 'depois rode php artisan config:clear.'
-                );
+                throw new GitException('Diretório atual não é um repositório git válido: ' . $cwd . '. Defina UPDATER_GIT_PATH corretamente, limpe o cache de configuração (php artisan config:clear) e confirme permissões do usuário do PHP.');
             }
         }
 
@@ -163,27 +157,36 @@ class GitDriver implements CodeDriverInterface
 
     private function runtimeConfig(): array
     {
+        // Config de runtime: dá prioridade ao config/updater.php, mas mantém fallback em .env
+        // (mesmo com config cache) para reduzir problemas de "não pegou UPDATER_*".
         $runtime = config('updater.git', []);
+        $merged = is_array($runtime) ? array_merge($this->config, $runtime) : $this->config;
 
-        // Fallback direto do .env para reduzir "pegadinhas" com config cache.
-        // Ex.: você ajusta UPDATER_GIT_REMOTE_URL mas esquece de rodar config:clear.
-        $env = [
-            'path' => env('UPDATER_GIT_PATH'),
+        // Fallbacks via env (aplicados apenas se não estiverem definidos no config)
+        $fallbacks = [
+            'path'       => env('UPDATER_GIT_PATH'),
+            'remote'     => env('UPDATER_GIT_REMOTE'),
+            'branch'     => env('UPDATER_GIT_BRANCH'),
             'remote_url' => env('UPDATER_GIT_REMOTE_URL'),
-            'branch' => env('UPDATER_GIT_BRANCH'),
-            'remote' => env('UPDATER_GIT_REMOTE', env('UPDATER_GIT_REMOTE_NAME')),
-            'auto_init' => env('UPDATER_GIT_AUTO_INIT'),
-            'tag' => env('UPDATER_GIT_TARGET_TAG'),
-            'update_type' => env('UPDATER_GIT_UPDATE_TYPE'),
-            'ff_only' => env('UPDATER_GIT_FF_ONLY'),
+            'update_type'=> env('UPDATER_GIT_UPDATE_TYPE'),
+            'tag'        => env('UPDATER_GIT_TARGET_TAG'),
+            'auto_init'  => env('UPDATER_GIT_AUTO_INIT'),
         ];
-        $env = array_filter($env, static fn($v) => $v !== null && $v !== '');
 
-        if (is_array($runtime)) {
-            return array_merge($env, $this->config, $runtime);
+        foreach ($fallbacks as $key => $value) {
+            if (!array_key_exists($key, $merged) || $merged[$key] === null || $merged[$key] === '') {
+                if ($value !== null && $value !== '') {
+                    $merged[$key] = $value;
+                }
+            }
         }
 
-        return array_merge($env, $this->config);
+        // Normalizações
+        if (isset($merged['auto_init'])) {
+            $merged['auto_init'] = filter_var($merged['auto_init'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? (bool) $merged['auto_init'];
+        }
+
+        return $merged;
     }
 
     private function currentTag(): ?string
