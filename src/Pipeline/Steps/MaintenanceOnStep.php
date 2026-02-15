@@ -58,7 +58,7 @@ class MaintenanceOnStep implements PipelineStepInterface
 
         if (!$entered) {
             // Last resort: enter maintenance without custom render.
-$this->shellRunner->runOrFail(['php', 'artisan', 'down'], env: $downEnv);
+            $this->shellRunner->runOrFail(['php', 'artisan', 'down'], env: $downEnv);
         }
 
         $context['maintenance'] = true;

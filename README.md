@@ -418,11 +418,14 @@ Para falhas `LOCK_RETRYABLE` (deadlock, lock wait timeout, metadata lock), o upd
 Use `strict` em ambientes novos/limpos, onde drift não é esperado. Em produção com histórico heterogêneo,
 `mode=tolerant` tende a reduzir falhas por objetos já existentes sem editar migrations antigas.
 
+
+
 ### Nota sobre manutenção whitelabel
 A view `laravel-updater::maintenance` agora possui fallback seguro: se o armazenamento de branding não estiver acessível no momento do `artisan down --render`, ela renderiza com valores de config (`updater.app.*` e `updater.maintenance.*`) em vez de falhar. Isso evita o cenário em que a aplicação não entra corretamente em manutenção por erro de renderização da view.
 
 ### Caso idempotente adicional: DROP INDEX inexistente (MySQL errno 1091)
 O migrador idempotente trata `Can't DROP ... check that column/key exists` (`errno 1091`) como drift idempotente no modo tolerante. Nesse caso, valida no `information_schema.STATISTICS` se o índice já está ausente, reconcilia a migration e segue o pipeline sem editar migrations antigas.
+
 
 ### Correção de entrada em manutenção (REQUEST_URI no CLI)
 Quando o host dispara erro `Undefined array key "REQUEST_URI"` durante `artisan down --render`, o updater agora injeta variáveis de servidor mínimas (`REQUEST_URI`, `HTTP_HOST`, `SERVER_NAME`, `SERVER_PORT`, `HTTPS`) no comando de manutenção. Com isso a aplicação volta a entrar em manutenção e exibir a view whitelabel do pacote.
@@ -430,3 +433,9 @@ Quando o host dispara erro `Undefined array key "REQUEST_URI"` durante `artisan 
 ### Caso idempotente adicional: tabela inexistente em DROP (SQLSTATE 42S02 / errno 1146)
 O classificador considera `42S02/1146` como idempotente **somente** quando o SQL indica operação de remoção segura (`drop table`, `drop index`, `alter table ... drop`, etc.).
 Se for consulta/uso normal (`select`, `update`, etc.), permanece `NON_RETRYABLE` para não mascarar erro real.
+
+
+### Correção definitiva para erro de `ENCRYPTION_KEY` no `route:cache`
+Em alguns projetos, providers/helpers consultam `ENCRYPTION_KEY` via `env()/getenv()` durante comandos Artisan. Em execução não-interativa do updater, isso pode falhar mesmo com chave no `.env`.
+
+O `ShellRunner` do pacote agora preserva o ambiente do processo e também faz fallback de leitura do `.env` (chaves `ENCRYPTION_KEY` e `APP_KEY`) para o comando filho. Isso evita quebra no `cache_clear` por falso negativo de chave ausente.
