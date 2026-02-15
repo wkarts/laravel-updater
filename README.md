@@ -224,6 +224,17 @@ UPDATER_SEED_REFORMA_TRIBUTARIA_SEEDER="Database\Seeders\ReformaTributariaSeeder
 - Sessão própria com cookie HttpOnly + SameSite=Lax + Secure quando HTTPS.
 - 2FA TOTP nativo (6 dígitos, janela +-1 step).
 - Rate limit de login por email+IP.
+- Permissões granulares por usuário (acesso por módulo/ação), com exceção de usuário master.
+
+### Usuário master + permissões por perfil
+
+Defina no `.env` o usuário master que sempre terá acesso total, independente das permissões marcadas na UI:
+
+```dotenv
+UPDATER_UI_MASTER_EMAIL=wkarts@gmail.com
+```
+
+No menu `/_updater/users` você pode definir permissões específicas de cada usuário (dashboard, updates, backups, logs, fontes, perfis, usuários, settings etc.).
 
 ## Comandos Artisan
 

@@ -30,7 +30,7 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/2fa', [AuthController::class, 'verifyTwoFactor'])->name('updater.2fa.verify');
             Route::post('/logout', [AuthController::class, 'logout'])->name('updater.logout');
 
-            Route::group(['middleware' => ['updater.auth']], function (): void {
+            Route::group(['middleware' => ['updater.auth', 'updater.authorize']], function (): void {
                 Route::get('/', [UpdaterUiController::class, 'index'])->name('updater.index');
                 Route::get('/profile', [AuthController::class, 'profile'])->name('updater.profile');
                 Route::post('/profile/password', [AuthController::class, 'updatePassword'])->name('updater.profile.password');

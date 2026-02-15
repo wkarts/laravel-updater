@@ -112,7 +112,7 @@ class ManagerStore
     /** @return array<int,array<string,mixed>> */
     public function users(): array
     {
-        $stmt = $this->pdo()->query('SELECT id,email,name,is_admin,is_active,totp_enabled,last_login_at FROM updater_users ORDER BY id DESC');
+        $stmt = $this->pdo()->query('SELECT id,email,name,is_admin,is_active,permissions_json,totp_enabled,last_login_at FROM updater_users ORDER BY id DESC');
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
@@ -129,7 +129,7 @@ class ManagerStore
 
     public function createUser(array $data): int
     {
-        $stmt = $this->pdo()->prepare('INSERT INTO updater_users (name, email, password_hash, is_admin, is_active, totp_enabled, created_at, updated_at) VALUES (:name, :email, :password_hash, :is_admin, :is_active, 0, :created_at, :updated_at)');
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_users (name, email, password_hash, is_admin, is_active, permissions_json, totp_enabled, created_at, updated_at) VALUES (:name, :email, :password_hash, :is_admin, :is_active, :permissions_json, 0, :created_at, :updated_at)');
         $now = date(DATE_ATOM);
         $stmt->execute([
             ':name' => $data['name'],
@@ -137,6 +137,7 @@ class ManagerStore
             ':password_hash' => password_hash((string) $data['password'], PASSWORD_BCRYPT),
             ':is_admin' => (int) ($data['is_admin'] ?? 0),
             ':is_active' => (int) ($data['is_active'] ?? 1),
+            ':permissions_json' => $data['permissions_json'] ?? null,
             ':created_at' => $now,
             ':updated_at' => $now,
         ]);
@@ -151,6 +152,7 @@ class ManagerStore
             'email = :email',
             'is_admin = :is_admin',
             'is_active = :is_active',
+            'permissions_json = :permissions_json',
             'updated_at = :updated_at',
         ];
 
@@ -160,6 +162,7 @@ class ManagerStore
             ':email' => mb_strtolower(trim((string) $data['email'])),
             ':is_admin' => (int) ($data['is_admin'] ?? 0),
             ':is_active' => (int) ($data['is_active'] ?? 1),
+            ':permissions_json' => $data['permissions_json'] ?? null,
             ':updated_at' => date(DATE_ATOM),
         ];
 

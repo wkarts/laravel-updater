@@ -18,6 +18,7 @@ use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Drivers\MysqlBackupDriver;
 use Argws\LaravelUpdater\Drivers\PgsqlBackupDriver;
 use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthMiddleware;
+use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthorizeMiddleware;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Migration\IdempotentMigrationService;
 use Argws\LaravelUpdater\Migration\MigrationDriftDetector;
@@ -38,6 +39,7 @@ use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\Totp;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
+use Argws\LaravelUpdater\Support\UiPermission;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
@@ -63,6 +65,7 @@ class UpdaterServiceProvider extends ServiceProvider
         $this->app->singleton(MaintenanceMode::class, fn () => new MaintenanceMode());
         $this->app->singleton('updater.store', fn () => $this->app->make(StateStore::class));
         $this->app->singleton(Totp::class, fn () => new Totp());
+        $this->app->singleton(UiPermission::class, fn () => new UiPermission());
 
         $this->app->singleton(LockInterface::class, function () {
             if ((string) config('updater.lock.driver', 'file') === 'cache') {
@@ -153,6 +156,7 @@ class UpdaterServiceProvider extends ServiceProvider
     public function boot(Router $router): void
     {
         $router->aliasMiddleware('updater.auth', UpdaterAuthMiddleware::class);
+        $router->aliasMiddleware('updater.authorize', UpdaterAuthorizeMiddleware::class);
 
         $this->publishes([
             __DIR__ . '/../config/updater.php' => config_path('updater.php'),

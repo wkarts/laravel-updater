@@ -9,6 +9,7 @@ use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
+use Argws\LaravelUpdater\Support\UiPermission;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -16,7 +17,7 @@ use Illuminate\Support\Facades\Storage;
 
 class ManagerController extends Controller
 {
-    public function __construct(private readonly ManagerStore $managerStore)
+    public function __construct(private readonly ManagerStore $managerStore, private readonly UiPermission $permission)
     {
     }
 
@@ -69,7 +70,10 @@ class ManagerController extends Controller
     {
         $this->ensureAdmin();
 
-        return view('laravel-updater::users.create');
+        return view('laravel-updater::users.create', [
+            'permissionDefinitions' => $this->permission->definitions(),
+            'masterEmail' => (string) config('updater.ui.auth.master_email', ''),
+        ]);
     }
 
     public function usersStore(Request $request): RedirectResponse
@@ -82,6 +86,8 @@ class ManagerController extends Controller
             'password' => ['required', 'string', 'min:6', 'confirmed'],
             'is_admin' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
+            'permissions' => ['nullable', 'array'],
+            'permissions.*' => ['string'],
         ], [
             'name.required' => 'Informe o nome.',
             'email.required' => 'Informe o e-mail.',
@@ -93,6 +99,7 @@ class ManagerController extends Controller
 
         $data['is_admin'] = (int) $request->boolean('is_admin');
         $data['is_active'] = (int) $request->boolean('is_active', true);
+        $data['permissions_json'] = json_encode($this->permission->normalizePermissions((array) $request->input('permissions', [])), JSON_UNESCAPED_UNICODE);
 
         $id = $this->managerStore->createUser($data);
         $this->audit($request, $actor['id'], 'Usuário administrativo criado.', ['usuario_id' => $id]);
@@ -106,7 +113,11 @@ class ManagerController extends Controller
         $user = $this->managerStore->findUser($id);
         abort_if($user === null, 404);
 
-        return view('laravel-updater::users.edit', ['user' => $user]);
+        return view('laravel-updater::users.edit', [
+            'user' => $user,
+            'permissionDefinitions' => $this->permission->definitions(),
+            'masterEmail' => (string) config('updater.ui.auth.master_email', ''),
+        ]);
     }
 
     public function usersUpdate(int $id, Request $request): RedirectResponse
@@ -121,6 +132,8 @@ class ManagerController extends Controller
             'password' => ['nullable', 'string', 'min:6', 'confirmed'],
             'is_admin' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
+            'permissions' => ['nullable', 'array'],
+            'permissions.*' => ['string'],
         ], [
             'name.required' => 'Informe o nome.',
             'email.required' => 'Informe o e-mail.',
@@ -131,6 +144,7 @@ class ManagerController extends Controller
 
         $data['is_admin'] = (int) $request->boolean('is_admin');
         $data['is_active'] = (int) $request->boolean('is_active');
+        $data['permissions_json'] = json_encode($this->permission->normalizePermissions((array) $request->input('permissions', [])), JSON_UNESCAPED_UNICODE);
 
         if ((int) $user['is_admin'] === 1 && (int) $user['is_active'] === 1 && ($data['is_admin'] === 0 || $data['is_active'] === 0) && $this->managerStore->activeAdminCount() <= 1) {
             return back()->withErrors(['is_admin' => 'Não é possível remover ou inativar o último admin ativo.']);
@@ -662,7 +676,11 @@ class ManagerController extends Controller
     private function ensureAdmin(): array
     {
         $user = request()->attributes->get('updater_user');
-        if (!is_array($user) || !((bool) ($user['is_admin'] ?? false))) {
+        if (!is_array($user)) {
+            abort(403, 'Acesso negado.');
+        }
+
+        if (!$this->permission->has($user, 'users.manage')) {
             abort(403, 'Acesso negado.');
         }
 

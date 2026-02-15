@@ -53,6 +53,7 @@ class StateStore
             name TEXT NULL,
             is_admin INTEGER NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
+            permissions_json TEXT NULL,
             totp_secret TEXT NULL,
             totp_enabled INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
@@ -208,6 +209,7 @@ class StateStore
 
         $this->ensureColumn('updater_users', 'name', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'last_login_at', 'TEXT NULL');
+        $this->ensureColumn('updater_users', 'permissions_json', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_secret', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
         $this->ensureColumn('updater_sources', 'auth_username', 'TEXT NULL');

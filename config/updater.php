@@ -194,6 +194,7 @@ return [
             'default_email' => env('UPDATER_UI_DEFAULT_EMAIL', 'admin@admin.com'),
             'default_password' => env('UPDATER_UI_DEFAULT_PASSWORD', '123456'),
             'default_name' => env('UPDATER_UI_DEFAULT_NAME', 'Admin'),
+            'master_email' => env('UPDATER_UI_MASTER_EMAIL', ''),
             'session_ttl_minutes' => (int) env('UPDATER_UI_SESSION_TTL', 120),
             'rate_limit' => [
                 'max_attempts' => (int) $uiRateLimitMaxAttempts,
