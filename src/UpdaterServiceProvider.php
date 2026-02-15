@@ -42,6 +42,11 @@ class UpdaterServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__ . '/../config/updater.php', 'updater');
 
+        // Deep-merge: garante que novas chaves do package entrem mesmo quando existe config/updater.php publicado
+        $defaults = require __DIR__ . '/../config/updater.php';
+        $current  = (array) config('updater', []);
+        config(['updater' => array_replace_recursive($defaults, $current)]);
+
         $this->app->singleton(ShellRunner::class, fn () => new ShellRunner());
         $this->app->singleton(FileManager::class, fn () => new FileManager(new Filesystem()));
         $this->app->singleton(ArchiveManager::class, fn () => new ArchiveManager());
@@ -59,7 +64,26 @@ class UpdaterServiceProvider extends ServiceProvider
         $this->app->singleton(LockInterface::class, function () {
             if ((string) config('updater.lock.driver', 'file') === 'cache') {
                 return new CacheLock();
+
+            $target = config_path('updater.php');
+
+            if (is_file($target)) {
+                return;
             }
+
+            $source = __DIR__ . '/../config/updater.php';
+
+            if (!is_file($source)) {
+                return;
+            }
+
+            @copy($source, $target);
+        } catch (\Throwable $e) {
+            // não quebra o boot do app
+        }
+    }
+
+}
 
             return new FileLock(storage_path('framework/cache/updater.lock'));
         });
@@ -186,5 +210,31 @@ class UpdaterServiceProvider extends ServiceProvider
             @copy($source, $target);
         }
     }
+
+    private function autoPublishConfigIfMissing(): void
+    {
+        try {
+            if (!config('updater.config_sync.auto_publish_if_missing', true)) {
+                return;
+            }
+
+            $target = config_path('updater.php');
+
+            if (is_file($target)) {
+                return;
+            }
+
+            $source = __DIR__ . '/../config/updater.php';
+
+            if (!is_file($source)) {
+                return;
+            }
+
+            @copy($source, $target);
+        } catch (\Throwable $e) {
+            // não quebra o boot do app
+        }
+    }
+
 
 }

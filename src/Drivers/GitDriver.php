@@ -97,7 +97,7 @@ class GitDriver implements CodeDriverInterface
             return true;
         }
 
-        $result = $this->shellRunner->runOrFail(['git', 'status', '--porcelain'], $this->cwd());
+        $result = $this->shellRunner->runOrFail(['git', 'status', '--porcelain', '--untracked-files=no'], $this->cwd());
 
         return trim($result['stdout']) === '';
     }
