@@ -40,6 +40,19 @@ class MigrationFailureClassifierTest extends TestCase
         $this->assertSame(MigrationFailureClassifier::ALREADY_EXISTS, $classifier->classify($ex));
     }
 
+
+    public function testClassificaDropIndexInexistenteComoIdempotente(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception("SQLSTATE[42000]: Syntax error or access violation: 1091 Can't DROP 'config_notas_token_sync_unique'; check that column/key exists (Connection: mysql, SQL: alter table `config_notas` drop index `config_notas_token_sync_unique`)", 1091);
+
+        $this->assertSame(MigrationFailureClassifier::ALREADY_EXISTS, $classifier->classify($ex));
+        $object = $classifier->inferObject($ex);
+        $this->assertSame('index', $object['type']);
+        $this->assertSame('config_notas_token_sync_unique', $object['name']);
+        $this->assertSame('config_notas', $object['table']);
+    }
+
     public function testClassificaLockRetryable(): void
     {
         $classifier = new MigrationFailureClassifier();

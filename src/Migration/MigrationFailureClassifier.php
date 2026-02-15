@@ -31,21 +31,24 @@ class MigrationFailureClassifier
     public function inferObject(Throwable $throwable): array
     {
         $message = $throwable->getMessage();
+        $table = $this->inferTableName($message);
 
         $patterns = [
-            'table' => "/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i",
-            'view' => "/view ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i",
-            'column' => "/duplicate column name:? ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i",
-            'index' => "/duplicate key name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i",
-            'constraint' => "/duplicate foreign key constraint name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i",
+            ['type' => 'table', 'pattern' => "/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i"],
+            ['type' => 'view', 'pattern' => "/view ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i"],
+            ['type' => 'column', 'pattern' => "/duplicate column name:? ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i"],
+            ['type' => 'index', 'pattern' => "/duplicate key name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i"],
+            ['type' => 'constraint', 'pattern' => "/duplicate foreign key constraint name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i"],
+            ['type' => 'index', 'pattern' => "/can't drop ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?; check that column\/key exists/i"],
         ];
 
-        foreach ($patterns as $type => $pattern) {
-            if (preg_match($pattern, $message, $matches) === 1) {
+        foreach ($patterns as $rule) {
+            if (preg_match($rule['pattern'], $message, $matches) === 1) {
+                $type = $rule['type'];
                 return [
                     'type' => $type,
                     'name' => $matches[1],
-                    'table' => $this->inferTableName($message),
+                    'table' => $table,
                 ];
             }
         }
@@ -53,7 +56,7 @@ class MigrationFailureClassifier
         return [
             'type' => 'unknown',
             'name' => null,
-            'table' => $this->inferTableName($message),
+            'table' => $table,
         ];
     }
 
@@ -88,13 +91,17 @@ class MigrationFailureClassifier
             'duplicate key name',
             'duplicate foreign key constraint name',
             'duplicate key on write or update',
+            "can't drop",
+            'check that column/key exists',
+            'can\'t drop index',
+            'can\'t drop',
             'relation already exists',
             'duplicate object',
             'there is already an object named',
         ];
 
         $sqlStates = ['42S01', '42S21', '42S11', '42P07', '42701'];
-        $errnoList = [1050, 1060, 1061, 1826];
+        $errnoList = [1050, 1060, 1061, 1091, 1826];
 
         foreach ($phrases as $phrase) {
             if (str_contains($message, $phrase)) {
@@ -143,6 +150,10 @@ class MigrationFailureClassifier
 
     private function inferTableName(string $message): ?string
     {
+        if (preg_match("/alter table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", $message, $matches) === 1) {
+            return $matches[1];
+        }
+
         if (preg_match("/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", $message, $matches) === 1) {
             return $matches[1];
         }

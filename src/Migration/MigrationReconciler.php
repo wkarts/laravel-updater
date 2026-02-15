@@ -80,6 +80,17 @@ class MigrationReconciler
             ];
         }
 
+
+        if ($type === 'index' && $name !== null && $table !== null) {
+            $exists = $this->indexExists($connection, $table, $name);
+
+            return [
+                'compatible' => !$exists,
+                'warning' => false,
+                'note' => 'validated_index_already_absent',
+            ];
+        }
+
         if ($type === 'constraint' && $name !== null) {
             $exists = $this->constraintExists($connection, $table, $name);
 
@@ -150,4 +161,32 @@ class MigrationReconciler
 
         return false;
     }
+
+    private function indexExists(?string $connection, string $table, string $index): bool
+    {
+        $conn = $this->resolver->connection($connection);
+        $driver = $conn->getDriverName();
+        $database = (string) $conn->getDatabaseName();
+
+        if (in_array($driver, ['mysql', 'mariadb'], true)) {
+            $row = $conn->selectOne(
+                'SELECT COUNT(*) AS total FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?',
+                [$database, $table, $index]
+            );
+
+            return (int) ($row->total ?? 0) > 0;
+        }
+
+        if ($driver === 'pgsql') {
+            $row = $conn->selectOne(
+                'SELECT COUNT(*) AS total FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ? AND indexname = ?',
+                [$table, $index]
+            );
+
+            return (int) ($row->total ?? 0) > 0;
+        }
+
+        return false;
+    }
+
 }
