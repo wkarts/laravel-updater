@@ -43,12 +43,29 @@ class MaintenanceOnStep implements PipelineStepInterface
             'HTTPS' => str_starts_with((string) config('app.url', 'http://localhost'), 'https://') ? 'on' : 'off',
         ];
 
+        $includeExcept = true;
+
         foreach ($candidates as $view) {
             try {
-                $this->shellRunner->runOrFail($this->downCommand($view), env: $downEnv);
+                $this->shellRunner->runOrFail($this->downCommand($view, $includeExcept), env: $downEnv);
                 $entered = true;
                 break;
             } catch (\Throwable $e) {
+                if ($includeExcept && $this->hasExceptOptionError($e)) {
+                    $includeExcept = false;
+                    try {
+                        $this->shellRunner->runOrFail($this->downCommand($view, false), env: $downEnv);
+                        $entered = true;
+                        break;
+                    } catch (\Throwable $retryError) {
+                        $context['maintenance_on_error'][] = [
+                            'view' => $view,
+                            'error' => $retryError->getMessage(),
+                        ];
+                        continue;
+                    }
+                }
+
                 // Try next candidate (common failure: host view expects REQUEST_URI in CLI).
                 $context['maintenance_on_error'][] = [
                     'view' => $view,
@@ -59,7 +76,7 @@ class MaintenanceOnStep implements PipelineStepInterface
 
         if (!$entered) {
             // Last resort: enter maintenance without custom render.
-            $this->shellRunner->runOrFail($this->downCommand(), env: $downEnv);
+            $this->shellRunner->runOrFail($this->downCommand(null, $includeExcept), env: $downEnv);
         }
 
         $context['maintenance'] = true;
@@ -67,10 +84,10 @@ class MaintenanceOnStep implements PipelineStepInterface
 
 
     /** @return array<int,string> */
-    private function downCommand(?string $view = null): array
+    private function downCommand(?string $view = null, bool $includeExcept = true): array
     {
         if ($this->maintenanceMode !== null) {
-            return $this->maintenanceMode->downCommand($view);
+            return $this->maintenanceMode->downCommand($view, $includeExcept);
         }
 
         $command = ['php', 'artisan', 'down'];
@@ -79,6 +96,16 @@ class MaintenanceOnStep implements PipelineStepInterface
         }
 
         return $command;
+    }
+
+
+    private function hasExceptOptionError(\Throwable $e): bool
+    {
+        if ($this->maintenanceMode !== null) {
+            return $this->maintenanceMode->hasExceptOptionError($e);
+        }
+
+        return str_contains(mb_strtolower($e->getMessage()), '--except');
     }
 
     public function rollback(array &$context): void

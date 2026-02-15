@@ -116,7 +116,7 @@ body {
 
 .breadcrumbs { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
 
-.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
 
 .card {
     background: var(--surface);
@@ -540,4 +540,39 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     }
 
     img { max-width: 100%; height: auto; }
+}
+
+
+.dashboard-actions > * {
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.dashboard-actions form {
+    margin: 0;
+}
+
+.dashboard-actions .btn {
+    white-space: nowrap;
+}
+
+.dashboard-status-card pre {
+    max-height: 280px;
+}
+
+@media (max-width: 768px) {
+    .dashboard-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .dashboard-actions > * {
+        width: 100%;
+    }
+
+    .dashboard-actions .btn {
+        width: 100%;
+        justify-content: center;
+        white-space: normal;
+    }
 }

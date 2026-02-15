@@ -399,6 +399,8 @@ Critérios de segurança aplicados:
 
 Além disso, o updater adiciona automaticamente exceção de manutenção para o prefixo configurado em `UPDATER_UI_PREFIX` (ex.: `/_updater`), para que o painel continue acessível durante a janela de manutenção.
 
+Em versões de Laravel que não suportam `php artisan down --except`, o updater faz fallback automático sem `--except` para não quebrar o fluxo de update/manutenção.
+
 ## Atualização de arquivos publicados (config/views)
 
 O Laravel não sobrescreve automaticamente arquivos publicados em `config/` e `resources/views/`.

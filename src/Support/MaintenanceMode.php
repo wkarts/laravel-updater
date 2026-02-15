@@ -7,7 +7,7 @@ namespace Argws\LaravelUpdater\Support;
 class MaintenanceMode
 {
     /** @return array<int,string> */
-    public function downCommand(?string $renderView = null): array
+    public function downCommand(?string $renderView = null, bool $includeExcept = true): array
     {
         $command = ['php', 'artisan', 'down'];
 
@@ -15,11 +15,23 @@ class MaintenanceMode
             $command[] = '--render=' . trim($renderView);
         }
 
-        foreach ($this->exceptPaths() as $path) {
-            $command[] = '--except=' . $path;
+        if ($includeExcept) {
+            foreach ($this->exceptPaths() as $path) {
+                $command[] = '--except=' . $path;
+            }
         }
 
         return $command;
+    }
+
+
+    public function hasExceptOptionError(\Throwable $e): bool
+    {
+        $message = mb_strtolower($e->getMessage());
+
+        return str_contains($message, '"--except" option does not exist')
+            || str_contains($message, 'the "--except" option does not exist')
+            || str_contains($message, '--except');
     }
 
     /** @return array<int,string> */

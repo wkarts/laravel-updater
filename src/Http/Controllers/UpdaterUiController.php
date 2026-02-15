@@ -114,7 +114,18 @@ class UpdaterUiController extends Controller
     {
         $this->requireTwoFactorEnabled($request);
         $this->validateMaintenanceConfirmation($request);
-        $shellRunner->runOrFail($this->maintenanceMode->downCommand((string) config('updater.maintenance.render_view', 'laravel-updater::maintenance')));
+
+        $view = (string) config('updater.maintenance.render_view', 'laravel-updater::maintenance');
+
+        try {
+            $shellRunner->runOrFail($this->maintenanceMode->downCommand($view, true));
+        } catch (\Throwable $e) {
+            if ($this->maintenanceMode->hasExceptOptionError($e)) {
+                $shellRunner->runOrFail($this->maintenanceMode->downCommand($view, false));
+            } else {
+                throw $e;
+            }
+        }
 
         return back()->with('status', 'Modo manutenção habilitado com sucesso.');
     }
