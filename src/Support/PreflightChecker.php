@@ -27,7 +27,8 @@ class PreflightChecker
 
         $requireClean = (bool) ($this->config['require_clean_git'] ?? true);
         $allowDirty = (bool) ($options['allow_dirty'] ?? false);
-        $report['git_clean'] = !$requireClean || $allowDirty || $this->git->isWorkingTreeClean();
+        $allowDirtyByDefault = (bool) ($this->config['allow_dirty_updates'] ?? false);
+        $report['git_clean'] = !$requireClean || $allowDirty || $allowDirtyByDefault || $this->git->isWorkingTreeClean();
 
         $minFree = (int) ($this->config['min_free_disk_mb'] ?? 200);
         $free = (int) floor((disk_free_space(base_path()) ?: 0) / 1024 / 1024);
@@ -59,7 +60,8 @@ class PreflightChecker
 
         $requireClean = (bool) ($this->config['require_clean_git'] ?? true);
         $allowDirty = (bool) ($options['allow_dirty'] ?? false);
-        if ($requireClean && !$allowDirty && !$this->git->isWorkingTreeClean()) {
+        $allowDirtyByDefault = (bool) ($this->config['allow_dirty_updates'] ?? false);
+        if ($requireClean && !$allowDirty && !$allowDirtyByDefault && !$this->git->isWorkingTreeClean()) {
             throw new UpdaterException('Repositório git possui alterações locais (dirty). Use --allow-dirty para sobrescrever esta validação.');
         }
 

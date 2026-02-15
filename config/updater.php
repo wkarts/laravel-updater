@@ -97,6 +97,9 @@ return [
     'preflight' => [
         'min_free_disk_mb' => (int) env('UPDATER_MIN_FREE_DISK_MB', 200),
         'require_clean_git' => (bool) env('UPDATER_REQUIRE_CLEAN_GIT', true),
+        // Evita bloqueio de atualização via UI quando o projeto possui alterações locais
+        // esperadas em produção (ex.: ajustes de config, cache e storage).
+        'allow_dirty_updates' => true,
     ],
 
     'build_assets' => (bool) env('UPDATER_BUILD_ASSETS', false),
