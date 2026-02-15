@@ -55,6 +55,9 @@ jobs:
           echo "next=${NEXT}" >> "$GITHUB_OUTPUT"
 
       - name: Criar tag e publicar
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -64,6 +67,17 @@ jobs:
             echo "Tag já existe: $TAG"
             exit 0
           fi
+
+          if [ -n "${RELEASE_TOKEN:-}" ]; then
+            AUTH_TOKEN="$RELEASE_TOKEN"
+            echo "Usando RELEASE_TOKEN para push da tag."
+          else
+            AUTH_TOKEN="$GITHUB_TOKEN"
+            echo "Usando GITHUB_TOKEN padrão para push da tag."
+          fi
+
+          REPO_SLUG="${{ github.repository }}"
+          git remote set-url origin "https://x-access-token:${AUTH_TOKEN}@github.com/${REPO_SLUG}.git"
 
           git tag "$TAG"
           git push origin "$TAG"
