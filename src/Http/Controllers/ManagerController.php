@@ -185,7 +185,11 @@ class ManagerController extends Controller
 
     public function profilesCreate()
     {
-        return view('laravel-updater::profiles.create');
+        return view('laravel-updater::profiles.create', [
+            'profile' => [
+                'post_update_commands' => $this->defaultPostUpdateCommands(),
+            ],
+        ]);
     }
 
     public function profilesStore(Request $request): RedirectResponse
@@ -480,6 +484,16 @@ class ManagerController extends Controller
         }
 
         return $repoUrl;
+    }
+
+    private function defaultPostUpdateCommands(): string
+    {
+        return implode("\n", [
+            'composer update',
+            '# php artisan db:seed --class=Database\\Seeders\\ReformaTributariaSeeder --force',
+            'php artisan vendor:publish --tag=updater-config --force',
+            'php artisan vendor:publish --tag=updater-views --force',
+        ]);
     }
 
     /** @return array<int,string> */
