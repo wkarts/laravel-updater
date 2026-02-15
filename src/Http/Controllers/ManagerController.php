@@ -261,6 +261,9 @@ class ManagerController extends Controller
             'maintenance_title' => ['nullable', 'string', 'max:120'],
             'maintenance_message' => ['nullable', 'string', 'max:500'],
             'maintenance_footer' => ['nullable', 'string', 'max:200'],
+            'first_run_assume_behind' => ['nullable', 'boolean'],
+            'first_run_assume_behind_commits' => ['nullable', 'integer', 'min:1', 'max:9999'],
+            'enter_maintenance_on_update_start' => ['nullable', 'boolean'],
             'logo' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:png,jpg,jpeg,svg'],
             'favicon' => ['nullable', 'file', 'max:' . (int) config('updater.branding.max_upload_kb', 1024), 'mimes:ico,png'],
         ]);
@@ -277,6 +280,10 @@ class ManagerController extends Controller
         } else {
             $data['favicon_path'] = $row['favicon_path'] ?? null;
         }
+
+        $data['first_run_assume_behind'] = (int) $request->boolean('first_run_assume_behind');
+        $data['first_run_assume_behind_commits'] = max(1, (int) ($data['first_run_assume_behind_commits'] ?? 1));
+        $data['enter_maintenance_on_update_start'] = (int) $request->boolean('enter_maintenance_on_update_start', true);
 
         $this->managerStore->saveBranding($data);
         $this->audit($request, $this->actorId($request), 'Branding atualizado.', ['tem_logo' => !empty($data['logo_path']), 'tem_favicon' => !empty($data['favicon_path'])]);

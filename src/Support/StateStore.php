@@ -98,6 +98,9 @@ class StateStore
             maintenance_title TEXT NULL,
             maintenance_message TEXT NULL,
             maintenance_footer TEXT NULL,
+            first_run_assume_behind INTEGER NULL,
+            first_run_assume_behind_commits INTEGER NULL,
+            enter_maintenance_on_update_start INTEGER NULL,
             updated_at TEXT NOT NULL
         )');
 
@@ -109,6 +112,10 @@ class StateStore
                 // ignore
             }
         }
+
+        $this->ensureColumn('updater_branding', 'first_run_assume_behind', 'INTEGER NULL');
+        $this->ensureColumn('updater_branding', 'first_run_assume_behind_commits', 'INTEGER NULL');
+        $this->ensureColumn('updater_branding', 'enter_maintenance_on_update_start', 'INTEGER NULL');
 
 
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_sources (

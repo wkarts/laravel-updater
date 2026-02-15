@@ -45,6 +45,16 @@ class UpdaterKernel
     public static function makePipeline(array $services): UpdatePipeline
     {
         $maintenanceEarly = (bool) config('updater.maintenance.enter_on_update_start', true);
+        if (isset($services['manager_store'])) {
+            try {
+                $runtime = $services['manager_store']->runtimeSettings();
+                if (isset($runtime['maintenance']['enter_on_update_start'])) {
+                    $maintenanceEarly = (bool) $runtime['maintenance']['enter_on_update_start'];
+                }
+            } catch (\Throwable $e) {
+                // mantém fallback de configuração padrão.
+            }
+        }
 
         $steps = [
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),

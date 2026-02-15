@@ -351,9 +351,21 @@ Se você não configurar nada, o updater usa automaticamente a view padrão do p
 
 - `laravel-updater::maintenance`
 
-### Whitelabel por `.env` (URLs diretas)
+### Whitelabel por painel (prioritário)
 
-Você pode apontar logo/ícone por URL (sem upload/Storage):
+No painel `/_updater/settings` você pode configurar tudo pela UI:
+
+- textos de manutenção;
+- cor primária;
+- upload de logo/favicon;
+- comportamento de primeira execução sem `.git`;
+- entrada em manutenção no início da atualização.
+
+Essas configurações salvas no painel têm prioridade em relação ao fallback de configuração do projeto.
+
+### Fallback por `.env` (opcional)
+
+Se você preferir não usar upload no painel, também pode apontar logo/ícone por URL:
 
 ```dotenv
 UPDATER_BRAND_LOGO_URL=https://seu-dominio.com.br/assets/logo.png
@@ -361,15 +373,15 @@ UPDATER_BRAND_FAVICON_URL=https://seu-dominio.com.br/assets/favicon.ico
 UPDATER_BRAND_PRIMARY_COLOR=#0d6efd
 ```
 
-### Whitelabel por painel (upload)
-
-No painel `/_updater/settings` você pode configurar:
-
-- textos de manutenção;
-- cor primária;
-- upload de logo/favicon.
-
 Se existir upload no painel, ele tem prioridade sobre as URLs do `.env`.
+
+### Controles manuais de manutenção
+
+No dashboard há botões para habilitar/desabilitar manutenção imediatamente.
+
+Critérios de segurança aplicados:
+- confirmação obrigatória digitando `MANUTENCAO`;
+- quando autenticação da UI está habilitada, a ação exige usuário com 2FA ativo.
 
 ## Atualização de arquivos publicados (config/views)
 

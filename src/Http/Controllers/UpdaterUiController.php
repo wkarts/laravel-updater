@@ -110,6 +110,7 @@ class UpdaterUiController extends Controller
     public function maintenanceOn(Request $request, ShellRunner $shellRunner): RedirectResponse
     {
         $this->requireTwoFactorEnabled($request);
+        $this->validateMaintenanceConfirmation($request);
         $shellRunner->runOrFail(['php', 'artisan', 'down']);
 
         return back()->with('status', 'Modo manutenção habilitado com sucesso.');
@@ -118,9 +119,23 @@ class UpdaterUiController extends Controller
     public function maintenanceOff(Request $request, ShellRunner $shellRunner): RedirectResponse
     {
         $this->requireTwoFactorEnabled($request);
+        $this->validateMaintenanceConfirmation($request);
         $shellRunner->runOrFail(['php', 'artisan', 'up']);
 
         return back()->with('status', 'Modo manutenção desabilitado com sucesso.');
+    }
+
+    private function validateMaintenanceConfirmation(Request $request): void
+    {
+        $data = $request->validate([
+            'maintenance_confirmation' => ['required', 'string'],
+        ], [
+            'maintenance_confirmation.required' => 'Confirme a ação digitando MANUTENCAO.',
+        ]);
+
+        if (mb_strtoupper(trim((string) $data['maintenance_confirmation'])) !== 'MANUTENCAO') {
+            throw \Illuminate\Validation\ValidationException::withMessages(['maintenance_confirmation' => 'Confirmação inválida. Digite MANUTENCAO para prosseguir.']);
+        }
     }
 
     private function requireTwoFactorEnabled(Request $request): void

@@ -221,6 +221,23 @@ class GitDriver implements CodeDriverInterface
             }
         }
 
+        // Overrides persistidos via UI (fallback ao config/env).
+        if (function_exists('app')) {
+            try {
+                /** @var \Argws\LaravelUpdater\Support\ManagerStore $managerStore */
+                $managerStore = app(\Argws\LaravelUpdater\Support\ManagerStore::class);
+                $runtime = $managerStore->runtimeSettings();
+                if (isset($runtime['git']['first_run_assume_behind'])) {
+                    $merged['first_run_assume_behind'] = (bool) $runtime['git']['first_run_assume_behind'];
+                }
+                if (isset($runtime['git']['first_run_assume_behind_commits'])) {
+                    $merged['first_run_assume_behind_commits'] = max(1, (int) $runtime['git']['first_run_assume_behind_commits']);
+                }
+            } catch (\Throwable $e) {
+                // ignora em contextos sem container/schema.
+            }
+        }
+
         // Normalizações
         if (isset($merged['auto_init'])) {
             $merged['auto_init'] = filter_var($merged['auto_init'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? (bool) $merged['auto_init'];
