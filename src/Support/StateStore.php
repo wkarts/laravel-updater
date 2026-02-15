@@ -140,7 +140,8 @@ class StateStore
             health_check INTEGER NOT NULL DEFAULT 1,
             rollback_on_fail INTEGER NOT NULL DEFAULT 0,
             retention_backups INTEGER NOT NULL DEFAULT 10,
-            active INTEGER NOT NULL DEFAULT 0
+            active INTEGER NOT NULL DEFAULT 0,
+            post_update_commands TEXT NULL
         )');
 
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_backups (
@@ -203,6 +204,7 @@ class StateStore
         $this->ensureColumn('updater_users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
         $this->ensureColumn('updater_sources', 'auth_username', 'TEXT NULL');
         $this->ensureColumn('updater_sources', 'auth_password', 'TEXT NULL');
+        $this->ensureColumn('updater_profiles', 'post_update_commands', 'TEXT NULL');
     }
 
     public function createRun(array $options): int
