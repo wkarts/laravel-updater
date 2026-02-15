@@ -25,6 +25,7 @@ class UpdateRunCommand extends Command
         {--update-type= : Tipo de update (git_merge|git_ff_only|git_tag|zip_release)}
         {--tag= : Tag alvo para update por tag}
         {--allow-http : Permite execução disparada via HTTP/UI}
+        {--strict-migrate : Não reconcilia drift de migrations}
         {--source-id= : ID da fonte a ativar antes da execução}
         {--profile-id= : ID do perfil a ativar antes da execução}';
     protected $description = 'Executa a atualização completa do sistema.';
@@ -74,6 +75,7 @@ class UpdateRunCommand extends Command
             'update_type' => $updateType,
             'target_tag' => $tag,
             'allow_http' => (bool) $this->option('allow-http'),
+            'strict_migrate' => (bool) $this->option('strict-migrate'),
             'source_id' => $sourceId > 0 ? $sourceId : null,
             'profile_id' => $profileId > 0 ? $profileId : null,
         ];

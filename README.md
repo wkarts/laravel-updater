@@ -147,7 +147,8 @@ Se ambos existirem, o formato novo (`UPDATER_UI_RATE_LIMIT_*`) tem prioridade.
 ## CI e release
 
 - CI valida matrix real: PHP 8.2/8.3/8.4 + Laravel 10/11/12.
-- `release-after-ci.yml` cria tag automática após CI verde na `main`.
+- `release-after-ci.yml` cria tag automática após CI verde na `main` (evento `push`).
+- Para evitar erro 403 no push de tag, configure o secret `RELEASE_TOKEN` com permissão de `contents:write` (fallback automático para `GITHUB_TOKEN`).
 - Notificação Packagist usa `PACKAGIST_USERNAME` e `PACKAGIST_TOKEN` como secrets.
 
 ## Segurança
@@ -369,3 +370,72 @@ Após alterar variáveis do updater em produção, execute também:
 php artisan config:clear
 php artisan cache:clear
 ```
+
+## Migrador idempotente definitivo (`updater:migrate`)
+
+### Por que acontece o erro `SQLSTATE[42S01]` / errno `1050`
+Esse erro indica que a migration tentou criar uma tabela/view que já existe no banco (`Base table or view already exists`).
+Em ambientes reais isso ocorre por drift entre o banco e a tabela `migrations` (dump restore, merge manual, execução parcial/interrompida, ou banco adiantado).
+
+### Como a reconciliação evita a falha
+O comando `updater:migrate` roda **exatamente uma migration por vez** e, quando a falha é classificada como `ALREADY_EXISTS` segura:
+1. confere se a migration já está na tabela `migrations`;
+2. se não estiver, reconcilia registrando a migration com batch correto;
+3. para constraints, valida via `information_schema.TABLE_CONSTRAINTS/KEY_COLUMN_USAGE` (MySQL/MariaDB);
+4. continua para a próxima migration.
+
+No modo `strict`, qualquer dúvida de inferência/compatibilidade interrompe com erro orientando intervenção manual.
+
+### Configuração
+```dotenv
+UPDATER_MIGRATE_IDEMPOTENT=true
+UPDATER_MIGRATE_MODE=tolerant
+UPDATER_MIGRATE_RETRY_LOCKS=2
+UPDATER_MIGRATE_RETRY_SLEEP_BASE=3
+UPDATER_MIGRATE_DRY_RUN=false
+UPDATER_MIGRATE_LOG_CHANNEL=stack
+UPDATER_MIGRATE_RECONCILE_ALREADY_EXISTS=true
+UPDATER_MIGRATE_REPORT_PATH="storage/logs/updater-migrate-{timestamp}.log"
+```
+
+### Comandos
+```bash
+# execução real (tolerante)
+php artisan updater:migrate --force
+
+# modo estrito
+php artisan updater:migrate --force --mode=strict
+
+# dry-run (não executa SQL)
+php artisan updater:migrate --force --dry-run
+```
+
+### Retry/backoff de lock/deadlock
+Para falhas `LOCK_RETRYABLE` (deadlock, lock wait timeout, metadata lock), o updater aplica retry com backoff progressivo
+(`retry_sleep_base * 2^(tentativa-1) + (tentativa-1)`), por exemplo base=3: `3s`, `7s`, `15s`.
+
+### Quando usar modo strict
+Use `strict` em ambientes novos/limpos, onde drift não é esperado. Em produção com histórico heterogêneo,
+`mode=tolerant` tende a reduzir falhas por objetos já existentes sem editar migrations antigas.
+
+
+
+### Nota sobre manutenção whitelabel
+A view `laravel-updater::maintenance` agora possui fallback seguro: se o armazenamento de branding não estiver acessível no momento do `artisan down --render`, ela renderiza com valores de config (`updater.app.*` e `updater.maintenance.*`) em vez de falhar. Isso evita o cenário em que a aplicação não entra corretamente em manutenção por erro de renderização da view.
+
+### Caso idempotente adicional: DROP INDEX inexistente (MySQL errno 1091)
+O migrador idempotente trata `Can't DROP ... check that column/key exists` (`errno 1091`) como drift idempotente no modo tolerante. Nesse caso, valida no `information_schema.STATISTICS` se o índice já está ausente, reconcilia a migration e segue o pipeline sem editar migrations antigas.
+
+
+### Correção de entrada em manutenção (REQUEST_URI no CLI)
+Quando o host dispara erro `Undefined array key "REQUEST_URI"` durante `artisan down --render`, o updater agora injeta variáveis de servidor mínimas (`REQUEST_URI`, `HTTP_HOST`, `SERVER_NAME`, `SERVER_PORT`, `HTTPS`) no comando de manutenção. Com isso a aplicação volta a entrar em manutenção e exibir a view whitelabel do pacote.
+
+### Caso idempotente adicional: tabela inexistente em DROP (SQLSTATE 42S02 / errno 1146)
+O classificador considera `42S02/1146` como idempotente **somente** quando o SQL indica operação de remoção segura (`drop table`, `drop index`, `alter table ... drop`, etc.).
+Se for consulta/uso normal (`select`, `update`, etc.), permanece `NON_RETRYABLE` para não mascarar erro real.
+
+
+### Correção definitiva para erro de `ENCRYPTION_KEY` no `route:cache`
+Em alguns projetos, providers/helpers consultam `ENCRYPTION_KEY` via `env()/getenv()` durante comandos Artisan. Em execução não-interativa do updater, isso pode falhar mesmo com chave no `.env`.
+
+O `ShellRunner` do pacote agora preserva o ambiente do processo e também faz fallback de leitura do `.env` (chaves `ENCRYPTION_KEY` e `APP_KEY`) para o comando filho. Isso evita quebra no `cache_clear` por falso negativo de chave ausente.
