@@ -27,6 +27,14 @@ return [
         'tag' => env('UPDATER_GIT_TAG', ''),
         'auto_init' => (bool) env('UPDATER_GIT_AUTO_INIT', false),
         'default_update_mode' => env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge'),
+        // Lista de caminhos que NÃO devem bloquear o update mesmo com working tree "dirty".
+        // Aceita array via config (config/updater.php). Para ENV, use vírgula: "config/updater.php,.env,storage/".
+        'dirty_allowlist' => array_values(array_filter(array_map('trim', explode(',', (string) env('UPDATER_GIT_DIRTY_ALLOWLIST', 'config/updater.php,.env,storage/,bootstrap/cache/'))))),
+    ],
+
+    'composer' => [
+        // Pode ser: "composer", "composer2", "/usr/bin/composer" ou "/caminho/composer.phar".
+        'bin' => env('UPDATER_COMPOSER_BIN', 'composer'),
     ],
 
     'backup' => [

@@ -14,6 +14,18 @@ composer require argws/laravel-updater
 php artisan vendor:publish --tag=updater-config
 ```
 
+### Atualização do config após update do pacote
+
+Por padrão, o `vendor:publish` **não sobrescreve** `config/updater.php` se ele já existir no seu projeto.
+Se uma nova versão do pacote trouxer chaves novas no config, você tem 2 opções:
+
+```bash
+# atualizar o arquivo de config do projeto com a versão do pacote (sobrescreve)
+php artisan vendor:publish --tag=updater-config --force
+```
+
+> Dica: se você personaliza `config/updater.php`, recomendo versionar esse arquivo no seu repositório.
+
 > Os assets do updater são sincronizados automaticamente para `public/vendor/laravel-updater` durante o boot do pacote.
 > Assim, você não precisa rodar `php artisan vendor:publish --tag=updater-assets --force` a cada instalação/atualização.
 
@@ -53,6 +65,13 @@ UPDATER_GIT_REMOTE_URL=
 
 UPDATER_GIT_DEFAULT_UPDATE_MODE=merge
 UPDATER_SOURCES_ALLOW_MULTIPLE=false
+
+# Composer (quando "composer" não está no PATH do processo PHP)
+UPDATER_COMPOSER_BIN=/usr/bin/composer
+
+# Se você edita arquivos em produção (ex.: config/updater.php), isso pode deixar o repositório "dirty".
+# Defina quais caminhos podem ficar sujos sem bloquear a atualização.
+UPDATER_GIT_DIRTY_ALLOWLIST="config/updater.php,.env,storage/,bootstrap/cache/"
 
 UPDATER_APP_NAME=APP_NAME
 UPDATER_APP_SUFIX_NAME=APP_SUFIX_NAME

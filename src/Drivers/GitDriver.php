@@ -97,9 +97,44 @@ class GitDriver implements CodeDriverInterface
             return true;
         }
 
-        $result = $this->shellRunner->runOrFail(['git', 'status', '--porcelain', '--untracked-files=no'], $this->cwd());
+        $config = $this->runtimeConfig();
+        $allowlist = (array) ($config['dirty_allowlist'] ?? []);
+        // Defaults úteis (sem bloquear update por alterações típicas de ambiente)
+        if ($allowlist === []) {
+            $allowlist = ['config/updater.php', '.env', 'storage/', 'bootstrap/cache/'];
+        }
 
-        return trim($result['stdout']) === '';
+        $result = $this->shellRunner->runOrFail(['git', 'status', '--porcelain'], $this->cwd());
+        $lines = array_filter(array_map('trim', explode("\n", (string) $result['stdout'])));
+
+        foreach ($lines as $line) {
+            // Formato: "XY path" ou "XY path -> path"
+            $path = trim((string) preg_replace('/^[A-Z\?\!\s]{1,3}/', '', $line));
+            $path = trim((string) preg_replace('/^\s*\"?(.*?)\"?$/', '$1', $path));
+            // Se houver rename "a -> b", pega o destino
+            if (str_contains($path, '->')) {
+                $parts = array_map('trim', explode('->', $path));
+                $path = end($parts) ?: $path;
+            }
+
+            $ignored = false;
+            foreach ($allowlist as $prefix) {
+                $prefix = (string) $prefix;
+                if ($prefix === '') {
+                    continue;
+                }
+                if ($path === $prefix || str_starts_with($path, rtrim($prefix, '/').'/') || str_starts_with($path, $prefix)) {
+                    $ignored = true;
+                    break;
+                }
+            }
+
+            if (!$ignored) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function update(): string
