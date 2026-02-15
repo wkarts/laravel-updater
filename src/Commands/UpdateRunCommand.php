@@ -75,6 +75,7 @@ class UpdateRunCommand extends Command
         }
 
         $options = [
+            'force' => (bool) $this->option('force'),
             'seed' => (bool) $this->option('seed'),
             'install_seed_default' => (bool) $this->option('install-seed-default'),
             'seeders' => array_values(array_filter($seeders)),
@@ -90,6 +91,7 @@ class UpdateRunCommand extends Command
             'strict_migrate' => (bool) $this->option('strict-migrate'),
             'source_id' => $sourceId > 0 ? $sourceId : null,
             'profile_id' => $profileId > 0 ? $profileId : null,
+            'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
             'pre_update_commands' => $this->resolvePreUpdateCommands($profile, (array) $this->option('pre-command')),
             'post_update_commands' => $this->resolvePostUpdateCommands($profile, (array) $this->option('post-command')),
         ];

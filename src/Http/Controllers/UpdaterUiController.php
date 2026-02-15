@@ -73,6 +73,7 @@ class UpdaterUiController extends Controller
             'post_update_commands' => $postUpdateCommands,
             'allow_dirty' => false,
             'dry_run' => (bool) ($activeProfile['dry_run'] ?? false),
+            'rollback_on_fail' => (bool) ($activeProfile['rollback_on_fail'] ?? true),
             'profile_id' => $activeProfile['id'] ?? null,
             'source_id' => $this->managerStore->activeSource()['id'] ?? null,
             'check_only' => $request->boolean('check_only'),

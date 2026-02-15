@@ -25,7 +25,10 @@ class GitUpdateStep implements PipelineStepInterface
     {
         $activeSource = $this->managerStore?->activeSource();
         $isDryRun = (bool) ($context['options']['dry_run'] ?? false);
-        $requestedUpdateType = (string) ($context['options']['update_type'] ?? config('updater.git.update_type', 'git_ff_only'));
+        $requestedUpdateType = trim((string) ($context['options']['update_type'] ?? ''));
+        if ($requestedUpdateType === '') {
+            $requestedUpdateType = (string) config('updater.git.update_type', 'git_ff_only');
+        }
         $requestedTag = trim((string) ($context['options']['target_tag'] ?? config('updater.git.tag', '')));
         $context['git_update_log'][] = sprintf('tipo solicitado: %s', $requestedUpdateType);
         if ($requestedTag !== '') {
@@ -107,6 +110,12 @@ class GitUpdateStep implements PipelineStepInterface
 
         if (($context['revision_before'] ?? null) === ($context['revision_after'] ?? null)) {
             $context['git_update_warning'] = 'Revisão inalterada após update. Isso pode ocorrer se já estava na versão/tag alvo.';
+
+            $allowNoChange = (bool) ($context['options']['allow_no_change_success'] ?? false);
+            $hadPreviousRevision = !empty($context['revision_before']) && (string) $context['revision_before'] !== 'N/A';
+            if (!$allowNoChange && $hadPreviousRevision) {
+                throw new \RuntimeException('Nenhuma atualização real foi aplicada (revision_before == revision_after). Cancelando execução para evitar falso sucesso.');
+            }
         }
 
         $context['git_update_log'][] = sprintf('revision_before: %s', (string) ($context['revision_before'] ?? 'N/A'));
