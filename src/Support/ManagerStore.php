@@ -16,21 +16,23 @@ class ManagerStore
     {
         $row = $this->branding();
 
-        $appName = (string) config('updater.app.name', 'APP_NAME');
-        $suffix = (string) config('updater.app.sufix_name', 'APP_SUFIX_NAME');
-        $desc = (string) config('updater.app.desc', 'APP_DESC');
-
-        $envName = $appName === 'APP_NAME' ? (string) env('APP_NAME', 'Laravel') : $appName;
-        $envSuffix = $suffix === 'APP_SUFIX_NAME' ? (string) env('APP_SUFIX_NAME', '') : $suffix;
-        $envDesc = $desc === 'APP_DESC' ? (string) env('APP_DESC', '') : $desc;
+        $envName = (string) config('updater.app.name', (string) config('app.name', 'Laravel'));
+        $envSuffix = (string) config('updater.app.sufix_name', '');
+        $envDesc = (string) config('updater.app.desc', '');
+        $envLogoUrl = (string) config('updater.app.logo_url', '');
+        $envFaviconUrl = (string) config('updater.app.favicon_url', '');
+        $envPrimary = (string) config('updater.app.primary_color', '#3b82f6');
 
         return [
             'app_name' => (string) ($row['app_name'] ?? $envName),
             'app_sufix_name' => (string) ($row['app_sufix_name'] ?? $envSuffix),
             'app_desc' => (string) ($row['app_desc'] ?? $envDesc),
+            'app_name_full' => trim(((string) ($row['app_name'] ?? $envName)).' '.((string) ($row['app_sufix_name'] ?? $envSuffix))),
             'logo_path' => $row['logo_path'] ?? null,
             'favicon_path' => $row['favicon_path'] ?? null,
-            'primary_color' => (string) ($row['primary_color'] ?? '#3b82f6'),
+            'logo_url' => (string) ($row['logo_url'] ?? $envLogoUrl),
+            'favicon_url' => (string) ($row['favicon_url'] ?? $envFaviconUrl),
+            'primary_color' => (string) ($row['primary_color'] ?? $envPrimary),
             'maintenance_title' => (string) ($row['maintenance_title'] ?? config('updater.maintenance.default_title', 'Atualização em andamento')),
             'maintenance_message' => (string) ($row['maintenance_message'] ?? config('updater.maintenance.default_message', 'Estamos atualizando o sistema. Volte em alguns minutos.')),
             'maintenance_footer' => (string) ($row['maintenance_footer'] ?? config('updater.maintenance.default_footer', 'Obrigado pela compreensão.')),

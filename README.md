@@ -66,16 +66,23 @@ UPDATER_GIT_REMOTE_URL=
 UPDATER_GIT_DEFAULT_UPDATE_MODE=merge
 UPDATER_SOURCES_ALLOW_MULTIPLE=false
 
-# Composer (quando "composer" não está no PATH do processo PHP)
+# Composer (somente se necessário)
+# Em alguns servidores (Supervisor/cron), o PATH pode vir reduzido. O updater tenta normalizar o PATH
+# e também detecta composer em locais comuns. Se ainda assim falhar, informe o caminho completo.
 UPDATER_COMPOSER_BIN=/usr/bin/composer
 
 # Se você edita arquivos em produção (ex.: config/updater.php), isso pode deixar o repositório "dirty".
 # Defina quais caminhos podem ficar sujos sem bloquear a atualização.
 UPDATER_GIT_DIRTY_ALLOWLIST="config/updater.php,.env,storage/,bootstrap/cache/"
 
-UPDATER_APP_NAME=APP_NAME
-UPDATER_APP_SUFIX_NAME=APP_SUFIX_NAME
-UPDATER_APP_DESC=APP_DESC
+UPDATER_APP_NAME="Fersoft ERP"      # opcional (default: APP_NAME)
+UPDATER_APP_SUFIX_NAME="Homolog"   # opcional
+UPDATER_APP_DESC="Sistema em atualização" # opcional
+
+# Whitelabel (opcional) - URLs diretas (sem upload)
+UPDATER_BRAND_LOGO_URL="https://seu-dominio.com.br/assets/logo.png"
+UPDATER_BRAND_FAVICON_URL="https://seu-dominio.com.br/assets/favicon.ico"
+UPDATER_BRAND_PRIMARY_COLOR="#0d6efd"
 UPDATER_SYNC_TOKEN=
 ```
 
@@ -242,6 +249,48 @@ Como resolver:
 ```bash
 php artisan config:clear
 php artisan cache:clear
+```
+
+---
+
+## Página de manutenção (503) e Whitelabel
+
+Durante uma atualização, o updater ativa o *maintenance mode* e exibe uma página 503 própria.
+
+### Default (sem .env)
+
+Se você não configurar nada, o updater usa automaticamente a view padrão do pacote:
+
+- `laravel-updater::maintenance`
+
+### Whitelabel por `.env` (URLs diretas)
+
+Você pode apontar logo/ícone por URL (sem upload/Storage):
+
+```dotenv
+UPDATER_BRAND_LOGO_URL=https://seu-dominio.com.br/assets/logo.png
+UPDATER_BRAND_FAVICON_URL=https://seu-dominio.com.br/assets/favicon.ico
+UPDATER_BRAND_PRIMARY_COLOR=#0d6efd
+```
+
+### Whitelabel por painel (upload)
+
+No painel `/_updater/settings` você pode configurar:
+
+- textos de manutenção;
+- cor primária;
+- upload de logo/favicon.
+
+Se existir upload no painel, ele tem prioridade sobre as URLs do `.env`.
+
+## Atualização de arquivos publicados (config/views)
+
+O Laravel não sobrescreve automaticamente arquivos publicados em `config/` e `resources/views/`.
+Se você publicou `config/updater.php` ou views e quer atualizar para a versão mais recente do pacote (atenção: isso pode sobrescrever alterações), rode:
+
+```bash
+php artisan vendor:publish --tag=updater-config --force
+php artisan vendor:publish --tag=updater-views --force
 ```
 
 ### Erro: `.git` não é criado automaticamente

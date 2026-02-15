@@ -104,9 +104,14 @@ return [
 
 
     'app' => [
-        'name' => env('UPDATER_APP_NAME', 'APP_NAME'),
-        'sufix_name' => env('UPDATER_APP_SUFIX_NAME', 'APP_SUFIX_NAME'),
-        'desc' => env('UPDATER_APP_DESC', 'APP_DESC'),
+        'name' => env('UPDATER_APP_NAME', env('APP_NAME', 'Laravel')),
+        'sufix_name' => env('UPDATER_APP_SUFIX_NAME', env('APP_SUFIX_NAME', '')),
+        'desc' => env('UPDATER_APP_DESC', env('APP_DESC', '')),
+
+        // Whitelabel (opcional): URLs diretas (sem upload)
+        'logo_url' => env('UPDATER_BRAND_LOGO_URL', ''),
+        'favicon_url' => env('UPDATER_BRAND_FAVICON_URL', ''),
+        'primary_color' => env('UPDATER_BRAND_PRIMARY_COLOR', ''),
     ],
 
     'branding' => [
@@ -161,6 +166,15 @@ return [
         'enabled' => (bool) env('UPDATER_LOG_ENABLED', true),
         'channel' => env('UPDATER_LOG_CHANNEL', 'updater'),
         'path' => env('UPDATER_LOG_PATH', storage_path('logs/updater.log')),
+    ],
+
+    // Whitelabel (opcional)
+    // Se você não informar nada no .env, o updater continua usando o default.
+    'whitelabel' => [
+        'app_name' => env('UPDATER_BRAND_APP_NAME', env('APP_NAME', 'Laravel')),
+        'logo_url' => env('UPDATER_BRAND_LOGO_URL', ''),
+        'favicon_url' => env('UPDATER_BRAND_FAVICON_URL', ''),
+        'primary_color' => env('UPDATER_BRAND_PRIMARY_COLOR', ''),
     ],
 
 
