@@ -77,12 +77,11 @@ class UpdaterKernel
         $this->store->ensureSchema();
         $isDryRun = (bool) ($options['dry_run'] ?? false);
         if (!$isDryRun) {
+            // IMPORTANTE:
+            // - Não bloqueamos a execução aqui por ausência de .git.
+            // - O próprio GitDriver pode bootstrapar (auto_init) durante o step de git_update.
+            // - Se auto_init estiver desabilitado, a falha ocorrerá no step com mensagem mais assertiva.
             $this->preflight->validate($options);
-
-            $canAutoInit = (bool) config('updater.git.auto_init', false) || (bool) env('UPDATER_GIT_AUTO_INIT', false);
-            if (!$canAutoInit && $this->codeDriver->currentRevision() === 'N/A') {
-                throw new \RuntimeException('Repositório Git inválido antes de iniciar pipeline. Ajuste UPDATER_GIT_PATH para a raiz do projeto versionado e rode php artisan config:clear.');
-            }
         }
 
         $runId = $this->store->createRun($options);
