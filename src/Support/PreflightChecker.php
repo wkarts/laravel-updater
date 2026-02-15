@@ -27,7 +27,9 @@ class PreflightChecker
 
         $requireClean = (bool) ($this->config['require_clean_git'] ?? true);
         $allowDirty = (bool) ($options['allow_dirty'] ?? false);
-        $allowDirtyByDefault = (bool) ($this->config['allow_dirty_updates'] ?? false);
+        // Compatibilidade com config publicada antiga (sem allow_dirty_updates):
+        // padrão permissivo para não bloquear update por working tree dirty.
+        $allowDirtyByDefault = (bool) ($this->config['allow_dirty_updates'] ?? true);
         $report['git_clean'] = !$requireClean || $allowDirty || $allowDirtyByDefault || $this->git->isWorkingTreeClean();
 
         $minFree = (int) ($this->config['min_free_disk_mb'] ?? 200);
@@ -60,7 +62,8 @@ class PreflightChecker
 
         $requireClean = (bool) ($this->config['require_clean_git'] ?? true);
         $allowDirty = (bool) ($options['allow_dirty'] ?? false);
-        $allowDirtyByDefault = (bool) ($this->config['allow_dirty_updates'] ?? false);
+        // Mesmo fallback no validate() para evitar quebra em projetos com config legado.
+        $allowDirtyByDefault = (bool) ($this->config['allow_dirty_updates'] ?? true);
         if ($requireClean && !$allowDirty && !$allowDirtyByDefault && !$this->git->isWorkingTreeClean()) {
             throw new UpdaterException('Repositório git possui alterações locais (dirty). Use --allow-dirty para sobrescrever esta validação.');
         }
