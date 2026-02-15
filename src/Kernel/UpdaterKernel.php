@@ -61,7 +61,7 @@ class UpdaterKernel
         ];
 
         if ($maintenanceEarly) {
-            $steps[] = new MaintenanceOnStep($services['shell']);
+            $steps[] = new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null);
         }
 
         $steps = array_merge($steps, [
@@ -71,7 +71,7 @@ class UpdaterKernel
         ]);
 
         if (!$maintenanceEarly) {
-            $steps[] = new MaintenanceOnStep($services['shell']);
+            $steps[] = new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null);
         }
 
         $steps = array_merge($steps, [

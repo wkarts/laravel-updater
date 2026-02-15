@@ -30,6 +30,7 @@ use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\FileLock;
 use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\LoggerFactory;
+use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\PreflightChecker;
 use Argws\LaravelUpdater\Support\RunReportMailer;
@@ -59,6 +60,7 @@ class UpdaterServiceProvider extends ServiceProvider
         });
         $this->app->singleton(AuthStore::class, fn () => new AuthStore($this->app->make(StateStore::class)));
         $this->app->singleton(ManagerStore::class, fn () => new ManagerStore($this->app->make(StateStore::class)));
+        $this->app->singleton(MaintenanceMode::class, fn () => new MaintenanceMode());
         $this->app->singleton('updater.store', fn () => $this->app->make(StateStore::class));
         $this->app->singleton(Totp::class, fn () => new Totp());
 
@@ -127,6 +129,7 @@ class UpdaterServiceProvider extends ServiceProvider
                 'logger' => $this->app->make(LoggerInterface::class),
                 'store' => $this->app->make(StateStore::class),
                 'manager_store' => $this->app->make(ManagerStore::class),
+                'maintenance_mode' => $this->app->make(MaintenanceMode::class),
             ];
 
             $kernel = new UpdaterKernel(

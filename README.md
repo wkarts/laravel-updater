@@ -383,6 +383,8 @@ Critérios de segurança aplicados:
 - confirmação obrigatória digitando `MANUTENCAO`;
 - quando autenticação da UI está habilitada, a ação exige usuário com 2FA ativo.
 
+Além disso, o updater adiciona automaticamente exceção de manutenção para o prefixo configurado em `UPDATER_UI_PREFIX` (ex.: `/_updater`), para que o painel continue acessível durante a janela de manutenção.
+
 ## Atualização de arquivos publicados (config/views)
 
 O Laravel não sobrescreve automaticamente arquivos publicados em `config/` e `resources/views/`.

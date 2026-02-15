@@ -247,6 +247,13 @@ return [
         'default_message' => env('UPDATER_MAINTENANCE_MESSAGE', 'Estamos atualizando o sistema. Volte em alguns minutos.'),
         'default_footer' => env('UPDATER_MAINTENANCE_FOOTER', 'Obrigado pela compreensão.'),
         'enter_on_update_start' => (bool) env('UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START', true),
+
+        // Rotas que nunca devem ser bloqueadas pelo maintenance mode.
+        // Por padrão protege o prefixo da UI do updater.
+        'except_paths' => [
+            trim((string) config('updater.ui.prefix', '_updater'), '/'),
+            trim((string) config('updater.ui.prefix', '_updater'), '/') . '/*',
+        ],
     ],
 
 ];

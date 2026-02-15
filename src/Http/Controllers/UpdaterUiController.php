@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Http\Controllers;
 
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
+use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
@@ -17,8 +18,10 @@ use Throwable;
 
 class UpdaterUiController extends Controller
 {
-    public function __construct(private readonly ManagerStore $managerStore)
-    {
+    public function __construct(
+        private readonly ManagerStore $managerStore,
+        private readonly MaintenanceMode $maintenanceMode
+    ) {
     }
 
     public function index(UpdaterKernel $kernel)
@@ -111,7 +114,7 @@ class UpdaterUiController extends Controller
     {
         $this->requireTwoFactorEnabled($request);
         $this->validateMaintenanceConfirmation($request);
-        $shellRunner->runOrFail(['php', 'artisan', 'down']);
+        $shellRunner->runOrFail($this->maintenanceMode->downCommand((string) config('updater.maintenance.render_view', 'laravel-updater::maintenance')));
 
         return back()->with('status', 'Modo manutenção habilitado com sucesso.');
     }
