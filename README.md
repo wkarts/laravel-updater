@@ -147,7 +147,8 @@ Se ambos existirem, o formato novo (`UPDATER_UI_RATE_LIMIT_*`) tem prioridade.
 ## CI e release
 
 - CI valida matrix real: PHP 8.2/8.3/8.4 + Laravel 10/11/12.
-- `release-after-ci.yml` cria tag automática após CI verde na `main`.
+- `release-after-ci.yml` cria tag automática após CI verde na `main` (evento `push`).
+- Para evitar erro 403 no push de tag, configure o secret `RELEASE_TOKEN` com permissão de `contents:write` (fallback automático para `GITHUB_TOKEN`).
 - Notificação Packagist usa `PACKAGIST_USERNAME` e `PACKAGIST_TOKEN` como secrets.
 
 ## Segurança
