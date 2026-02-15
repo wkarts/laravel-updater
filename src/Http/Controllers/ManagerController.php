@@ -185,7 +185,12 @@ class ManagerController extends Controller
 
     public function profilesCreate()
     {
-        return view('laravel-updater::profiles.create');
+        return view('laravel-updater::profiles.create', [
+            'profile' => [
+                'pre_update_commands' => $this->defaultPreUpdateCommands(),
+                'post_update_commands' => $this->defaultPostUpdateCommands(),
+            ],
+        ]);
     }
 
     public function profilesStore(Request $request): RedirectResponse
@@ -430,6 +435,8 @@ class ManagerController extends Controller
             'seed' => ['nullable', 'boolean'],
             'rollback_on_fail' => ['nullable', 'boolean'],
             'active' => ['nullable', 'boolean'],
+            'pre_update_commands' => ['nullable', 'string', 'max:8000'],
+            'post_update_commands' => ['nullable', 'string', 'max:8000'],
         ], [
             'name.required' => 'Informe o nome do perfil.',
             'retention_backups.integer' => 'A retenção deve ser numérica.',
@@ -438,6 +445,16 @@ class ManagerController extends Controller
         $toggles = ['backup_enabled', 'dry_run', 'force', 'composer_install', 'migrate', 'seed', 'rollback_on_fail', 'active'];
         foreach ($toggles as $toggle) {
             $data[$toggle] = (int) $request->boolean($toggle);
+        }
+
+        $data['pre_update_commands'] = trim((string) ($data['pre_update_commands'] ?? ''));
+        if ($data['pre_update_commands'] === '') {
+            $data['pre_update_commands'] = null;
+        }
+
+        $data['post_update_commands'] = trim((string) ($data['post_update_commands'] ?? ''));
+        if ($data['post_update_commands'] === '') {
+            $data['post_update_commands'] = null;
         }
 
         return $data;
@@ -473,6 +490,24 @@ class ManagerController extends Controller
         }
 
         return $repoUrl;
+    }
+
+    private function defaultPreUpdateCommands(): string
+    {
+        return implode("\n", [
+            '# php artisan optimize:clear',
+            '# php artisan config:clear',
+        ]);
+    }
+
+    private function defaultPostUpdateCommands(): string
+    {
+        return implode("\n", [
+            '# composer update',
+            '# php artisan db:seed --class=Database\\Seeders\\ReformaTributariaSeeder --force',
+            '# php artisan vendor:publish --tag=updater-config --force',
+            '# php artisan vendor:publish --tag=updater-views --force',
+        ]);
     }
 
     /** @return array<int,string> */
