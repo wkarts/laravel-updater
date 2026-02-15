@@ -105,6 +105,26 @@ return [
         'max_upload_kb' => (int) env('UPDATER_BRANDING_MAX_UPLOAD_KB', 1024),
     ],
 
+'maintenance' => [
+    // Quando true, tenta usar `php artisan down --render=<view>`. Se falhar, pode fazer fallback.
+    'use_render' => (bool) env('UPDATER_MAINTENANCE_USE_RENDER', true),
+    // View usada no `--render`. Pode ser "errors::503" (do app) ou "laravel-updater::maintenance" (do pacote).
+    'render_view' => env('UPDATER_MAINTENANCE_RENDER_VIEW', 'errors::503'),
+    // Retry (segundos) passado ao `artisan down`.
+    'retry' => (int) env('UPDATER_MAINTENANCE_RETRY', 60),
+    // Se `down --render=...` falhar, tenta `down` simples.
+    'fallback_no_render' => (bool) env('UPDATER_MAINTENANCE_FALLBACK_NO_RENDER', true),
+
+    // Whitelabel da página de manutenção do pacote (quando render_view = "laravel-updater::maintenance")
+    'whitelabel' => [
+        'title' => env('UPDATER_MAINTENANCE_TITLE', env('APP_NAME', 'Aplicação')),
+        'message' => env('UPDATER_MAINTENANCE_MESSAGE', 'Estamos realizando uma atualização. Volte em alguns instantes.'),
+        'footer' => env('UPDATER_MAINTENANCE_FOOTER', 'Atualização em andamento'),
+    ],
+],
+
+
+
     'sync_token' => env('UPDATER_SYNC_TOKEN', ''),
 
     'sources' => [
