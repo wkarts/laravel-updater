@@ -77,11 +77,10 @@ class UpdaterKernel
         $this->store->ensureSchema();
         $isDryRun = (bool) ($options['dry_run'] ?? false);
         if (!$isDryRun) {
-            // IMPORTANTE:
-            // - Não bloqueamos a execução aqui por ausência de .git.
-            // - O próprio GitDriver pode bootstrapar (auto_init) durante o step de git_update.
-            // - Se auto_init estiver desabilitado, a falha ocorrerá no step com mensagem mais assertiva.
             $this->preflight->validate($options);
+            // OBS: o bootstrap do repositório (git init/remote/fetch) é responsabilidade do CodeDriver.
+            // Não bloqueie a pipeline aqui, pois instalações via ZIP/FTP não possuem .git inicialmente.
+            // Se o auto-init estiver desativado, a falha ocorrerá no step git_update com mensagem mais específica.
         }
 
         $runId = $this->store->createRun($options);
