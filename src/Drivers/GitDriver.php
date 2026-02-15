@@ -31,14 +31,19 @@ class GitDriver implements CodeDriverInterface
     public function statusUpdates(): array
     {
         if (!$this->isGitRepository()) {
+            $cfg = $this->runtimeConfig();
+            $assumeBehind = (bool) ($cfg['first_run_assume_behind'] ?? true);
+            $assumedCommits = max(1, (int) ($cfg['first_run_assume_behind_commits'] ?? 1));
+
             return [
                 'local' => 'N/A',
                 'remote' => 'N/A',
-                'behind_by_commits' => 0,
+                'behind_by_commits' => $assumeBehind ? $assumedCommits : 0,
                 'ahead_by_commits' => 0,
-                'has_updates' => false,
+                'has_updates' => $assumeBehind,
                 'latest_tag' => null,
                 'has_update_by_tag' => false,
+                'first_run_assumed_update' => $assumeBehind,
             ];
         }
 
@@ -152,11 +157,11 @@ class GitDriver implements CodeDriverInterface
         }
 
         if ($updateType === 'git_tag' && !empty($config['tag'])) {
-            $result = $this->shellRunner->run(['git', 'fetch', '--tags', $remote], $this->cwd());
+            $result = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', $remote], $this->cwd());
             if ($result['exit_code'] !== 0) {
                 throw new GitException($result['stderr'] ?: 'Falha ao buscar tags.');
             }
-            $result = $this->shellRunner->run(['git', 'checkout', 'tags/' . (string) $config['tag']], $this->cwd());
+            $result = $this->shellRunner->run(['git', 'checkout', '--force', 'tags/' . (string) $config['tag']], $this->cwd());
             if ($result['exit_code'] !== 0) {
                 throw new GitException($result['stderr'] ?: 'Falha ao realizar checkout da tag.');
             }
@@ -284,6 +289,23 @@ class GitDriver implements CodeDriverInterface
         $setRemote = $this->shellRunner->run(['git', 'remote', 'add', $remote, $remoteUrl], $cwd, $env);
         if ($setRemote['exit_code'] !== 0) {
             return false;
+        }
+
+        $updateType = (string) ($config['update_type'] ?? 'git_ff_only');
+        $targetTag = trim((string) ($config['tag'] ?? ''));
+
+        if ($updateType === 'git_tag' && $targetTag !== '') {
+            $fetchTags = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', $remote], $cwd, $env);
+            if ($fetchTags['exit_code'] !== 0) {
+                return false;
+            }
+
+            $checkoutTag = $this->shellRunner->run(['git', 'checkout', '--force', 'tags/' . $targetTag], $cwd, $env);
+            if ($checkoutTag['exit_code'] !== 0) {
+                return false;
+            }
+
+            return $this->isGitRepository();
         }
 
         $fetch = $this->shellRunner->run(['git', 'fetch', '--depth=1', $remote, $branch], $cwd, $env);
