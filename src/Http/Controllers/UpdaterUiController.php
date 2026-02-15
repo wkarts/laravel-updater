@@ -63,9 +63,19 @@ class UpdaterUiController extends Controller
     public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher): RedirectResponse
     {
         $activeProfile = $this->managerStore->activeProfile();
+        $profileCommands = [];
+        foreach (preg_split('/\r\n|\r|\n/', (string) ($activeProfile['post_update_commands'] ?? '')) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $profileCommands[] = $line;
+        }
+
         $dispatcher->triggerUpdate([
             'seed' => (bool) ($activeProfile['seed'] ?? false),
             'seeders' => $request->filled('seed') ? [$request->string('seed')->toString()] : [],
+            'post_update_commands' => $profileCommands,
             'allow_dirty' => false,
             'dry_run' => (bool) ($activeProfile['dry_run'] ?? false),
             'profile_id' => $activeProfile['id'] ?? null,
