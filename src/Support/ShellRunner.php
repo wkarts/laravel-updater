@@ -88,11 +88,47 @@ class ShellRunner
             '/snap/bin',
         ];
 
-        $home = getenv('HOME') ?: null;
-        if ($home) {
-            $common[] = rtrim($home, '/').'/bin';
-            $common[] = rtrim($home, '/').'/.composer/vendor/bin';
+        // Composer exige HOME ou COMPOSER_HOME. Em ambientes não-interativos (cron/supervisor/PHP-FPM)
+        // isso pode vir vazio e o comando falha com: "The HOME or COMPOSER_HOME environment variable must be set".
+        $home = $final['HOME'] ?? (getenv('HOME') ?: ($_SERVER['HOME'] ?? null));
+
+        if ($home === null || trim((string) $home) === '') {
+            // tenta descobrir pelo usuário efetivo do SO
+            if (function_exists('posix_getpwuid') && function_exists('posix_geteuid')) {
+                $pw = @posix_getpwuid(@posix_geteuid());
+                if (is_array($pw) && !empty($pw['dir'])) {
+                    $home = (string) $pw['dir'];
+                }
+            }
         }
+
+        if ($home === null || trim((string) $home) === '') {
+            // fallback seguro quando não existe home (ex.: usuário sem shell)
+            $home = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'laravel-updater-home';
+        }
+
+        if (!is_dir($home)) {
+            @mkdir($home, 0775, true);
+        }
+
+        $final['HOME'] = $final['HOME'] ?? $home;
+
+        $composerHome = $final['COMPOSER_HOME'] ?? (getenv('COMPOSER_HOME') ?: null);
+        if ($composerHome === null || trim((string) $composerHome) === '') {
+            $composerHome = rtrim((string) $final['HOME'], DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.composer';
+        }
+        if (!is_dir($composerHome)) {
+            @mkdir($composerHome, 0775, true);
+        }
+        $final['COMPOSER_HOME'] = $final['COMPOSER_HOME'] ?? $composerHome;
+
+        $final['COMPOSER_CACHE_DIR'] = $final['COMPOSER_CACHE_DIR'] ?? (rtrim((string) $composerHome, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'cache');
+        if (!is_dir($final['COMPOSER_CACHE_DIR'])) {
+            @mkdir($final['COMPOSER_CACHE_DIR'], 0775, true);
+        }
+
+        $common[] = rtrim((string) $final['HOME'], '/').'/bin';
+        $common[] = rtrim((string) $final['COMPOSER_HOME'], '/').'/vendor/bin';
 
         $parts = array_values(array_filter(explode(':', (string) $path), static fn ($p) => trim((string) $p) !== ''));
 

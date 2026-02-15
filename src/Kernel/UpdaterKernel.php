@@ -62,6 +62,12 @@ class UpdaterKernel
     public function check(bool $allowDirty = false): array
     {
         $this->store->ensureSchema();
+        // "check" é somente leitura. Por padrão, não bloqueie a consulta por repositório dirty,
+        // senão a UI fica inutilizável quando há alterações locais (muito comum em produção).
+        if ($allowDirty === false) {
+            $allowDirty = (bool) config('updater.git.allow_dirty_check', true);
+        }
+
         $this->preflight->validate(['allow_dirty' => $allowDirty]);
 
         return [
