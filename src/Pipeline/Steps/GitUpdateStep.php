@@ -70,6 +70,10 @@ class GitUpdateStep implements PipelineStepInterface
 
         $context['revision_before'] = $this->codeDriver->currentRevision();
 
+        if (!$isDryRun) {
+            $this->backupDotEnv($context);
+        }
+
         if ($isDryRun) {
             $context['dry_run_plan']['git'] = [
                 'atual' => $context['revision_before'],
@@ -81,12 +85,57 @@ class GitUpdateStep implements PipelineStepInterface
         }
 
         $context['revision_after'] = $this->codeDriver->update();
+        $this->restoreDotEnv($context);
     }
 
     public function rollback(array &$context): void
     {
         if (!empty($context['revision_before']) && !(bool) ($context['options']['dry_run'] ?? false)) {
             $this->codeDriver->rollback($context['revision_before']);
+        }
+
+        $this->restoreDotEnv($context);
+    }
+
+
+    private function backupDotEnv(array &$context): void
+    {
+        $base = function_exists('base_path') ? base_path() : (getcwd() ?: '.');
+        $envPath = rtrim((string) $base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.env';
+
+        if (!is_file($envPath)) {
+            return;
+        }
+
+        $storage = function_exists('storage_path')
+            ? storage_path('app/updater/env')
+            : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'laravel-updater-env';
+
+        if (!is_dir($storage)) {
+            @mkdir($storage, 0775, true);
+        }
+
+        $backupPath = rtrim((string) $storage, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR
+            . 'env_backup_' . ($context['run_id'] ?? 'manual') . '_' . date('Ymd_His') . '.env';
+
+        if (@copy($envPath, $backupPath)) {
+            $context['env_backup_file'] = $backupPath;
+        }
+    }
+
+    private function restoreDotEnv(array &$context): void
+    {
+        $backupPath = (string) ($context['env_backup_file'] ?? '');
+        if ($backupPath === '' || !is_file($backupPath)) {
+            return;
+        }
+
+        $base = function_exists('base_path') ? base_path() : (getcwd() ?: '.');
+        $envPath = rtrim((string) $base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.env';
+
+        if (@copy($backupPath, $envPath)) {
+            $context['env_restored'] = true;
         }
     }
 
