@@ -18,7 +18,15 @@ class HealthCheckStep implements PipelineStepInterface
 
     public function handle(array &$context): void
     {
-        $url = $this->config['url'];
+        $url = (string) ($this->config['url'] ?? '');
+        if ($url === '') {
+            return;
+        }
+
+        if ($this->shouldSkipForLocalhost($url)) {
+            $context['healthcheck_warning'][] = ['url' => $url, 'reason' => 'localhost_skipped'];
+            return;
+        }
         $timeout = (int) ($this->config['timeout'] ?? 5);
         $contextOptions = stream_context_create(['http' => ['timeout' => $timeout, 'ignore_errors' => true]]);
         $content = @file_get_contents($url, false, $contextOptions);
@@ -32,4 +40,16 @@ class HealthCheckStep implements PipelineStepInterface
     public function rollback(array &$context): void
     {
     }
+
+    private function shouldSkipForLocalhost(string $url): bool
+    {
+        if (!((bool) ($this->config['skip_localhost'] ?? true))) {
+            return false;
+        }
+
+        $host = (string) (parse_url($url, PHP_URL_HOST) ?: '');
+
+        return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+    }
 }
+

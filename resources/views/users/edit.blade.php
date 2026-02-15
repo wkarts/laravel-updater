@@ -7,6 +7,7 @@
 <div class="grid">
     <div class="card">
         <h3>Editar usuário</h3>
+        @if(!empty($masterEmail))<p class="muted">Usuário master definido em <code>UPDATER_UI_MASTER_EMAIL</code>: <strong>{{ $masterEmail }}</strong>.</p>@endif
         <form method="POST" action="{{ route('updater.users.update', $user['id']) }}" class="form-grid" style="margin-top: 10px;">
             @csrf @method('PUT')
             @include('laravel-updater::users.form', ['user' => $user])

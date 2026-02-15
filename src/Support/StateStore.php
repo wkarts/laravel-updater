@@ -53,6 +53,7 @@ class StateStore
             name TEXT NULL,
             is_admin INTEGER NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
+            permissions_json TEXT NULL,
             totp_secret TEXT NULL,
             totp_enabled INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
@@ -94,10 +95,14 @@ class StateStore
             app_desc TEXT NULL,
             logo_path TEXT NULL,
             favicon_path TEXT NULL,
+            maintenance_logo_path TEXT NULL,
             primary_color TEXT NULL,
             maintenance_title TEXT NULL,
             maintenance_message TEXT NULL,
             maintenance_footer TEXT NULL,
+            first_run_assume_behind INTEGER NULL,
+            first_run_assume_behind_commits INTEGER NULL,
+            enter_maintenance_on_update_start INTEGER NULL,
             updated_at TEXT NOT NULL
         )');
 
@@ -109,6 +114,10 @@ class StateStore
                 // ignore
             }
         }
+
+        $this->ensureColumn('updater_branding', 'first_run_assume_behind', 'INTEGER NULL');
+        $this->ensureColumn('updater_branding', 'first_run_assume_behind_commits', 'INTEGER NULL');
+        $this->ensureColumn('updater_branding', 'enter_maintenance_on_update_start', 'INTEGER NULL');
 
 
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_sources (
@@ -140,7 +149,9 @@ class StateStore
             health_check INTEGER NOT NULL DEFAULT 1,
             rollback_on_fail INTEGER NOT NULL DEFAULT 0,
             retention_backups INTEGER NOT NULL DEFAULT 10,
-            active INTEGER NOT NULL DEFAULT 0
+            active INTEGER NOT NULL DEFAULT 0,
+            pre_update_commands TEXT NULL,
+            post_update_commands TEXT NULL
         )');
 
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_backups (
@@ -197,12 +208,16 @@ class StateStore
 
         $this->connect()->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_updater_login_attempts_email_ip ON updater_login_attempts(email, ip)');
 
+        $this->ensureColumn('updater_branding', 'maintenance_logo_path', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'name', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'last_login_at', 'TEXT NULL');
+        $this->ensureColumn('updater_users', 'permissions_json', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_secret', 'TEXT NULL');
         $this->ensureColumn('updater_users', 'totp_enabled', 'INTEGER NOT NULL DEFAULT 0');
         $this->ensureColumn('updater_sources', 'auth_username', 'TEXT NULL');
         $this->ensureColumn('updater_sources', 'auth_password', 'TEXT NULL');
+        $this->ensureColumn('updater_profiles', 'pre_update_commands', 'TEXT NULL');
+        $this->ensureColumn('updater_profiles', 'post_update_commands', 'TEXT NULL');
     }
 
     public function createRun(array $options): int

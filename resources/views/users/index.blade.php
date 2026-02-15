@@ -11,7 +11,7 @@
     </div>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Nome</th><th>E-mail</th><th>Admin?</th><th>Ativo?</th><th>2FA?</th><th>Último login</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Nome</th><th>E-mail</th><th>Admin?</th><th>Ativo?</th><th>2FA?</th><th>Permissões</th><th>Último login</th><th>Ações</th></tr></thead>
             <tbody>
             @forelse($users as $user)
                 <tr>
@@ -20,6 +20,10 @@
                     <td>{{ (int) $user['is_admin'] === 1 ? 'Sim' : 'Não' }}</td>
                     <td>{{ (int) $user['is_active'] === 1 ? 'Sim' : 'Não' }}</td>
                     <td>{{ (int) $user['totp_enabled'] === 1 ? 'Ativo' : 'Inativo' }}</td>
+                    <td>
+                        @php($perms = json_decode((string) ($user['permissions_json'] ?? '[]'), true))
+                        {{ is_array($perms) ? count($perms) : 0 }}
+                    </td>
                     <td>{{ $user['last_login_at'] ?? '-' }}</td>
                     <td>
                         <div class="form-inline">
@@ -32,7 +36,7 @@
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="muted">Nenhum usuário encontrado.</td></tr>
+                <tr><td colspan="8" class="muted">Nenhum usuário encontrado.</td></tr>
             @endforelse
             </tbody>
         </table>
