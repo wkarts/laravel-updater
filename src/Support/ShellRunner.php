@@ -111,8 +111,7 @@ class ShellRunner
             @mkdir($home, 0775, true);
         }
 
-        // garante que HOME nunca fique vazio (composer falha se estiver vazio)
-        $final['HOME'] = $home;
+        $final['HOME'] = $final['HOME'] ?? $home;
 
         $composerHome = $final['COMPOSER_HOME'] ?? (getenv('COMPOSER_HOME') ?: null);
         if ($composerHome === null || trim((string) $composerHome) === '') {
@@ -121,8 +120,7 @@ class ShellRunner
         if (!is_dir($composerHome)) {
             @mkdir($composerHome, 0775, true);
         }
-        // garante que COMPOSER_HOME nunca fique vazio (composer falha se estiver vazio)
-        $final['COMPOSER_HOME'] = $composerHome;
+        $final['COMPOSER_HOME'] = $final['COMPOSER_HOME'] ?? $composerHome;
 
         $final['COMPOSER_CACHE_DIR'] = $final['COMPOSER_CACHE_DIR'] ?? (rtrim((string) $composerHome, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'cache');
         if (!is_dir($final['COMPOSER_CACHE_DIR'])) {
