@@ -88,7 +88,7 @@ UPDATER_COMPOSER_BIN=/usr/bin/composer
 # Defina quais caminhos podem ficar sujos sem bloquear a atualização.
 UPDATER_GIT_DIRTY_ALLOWLIST="config/updater.php,.env,storage/,bootstrap/cache/"
 
-UPDATER_APP_NAME="Fersoft ERP"      # opcional (default: APP_NAME)
+UPDATER_APP_NAME="ARGWS ERP - Updater"      # opcional (default: APP_NAME)
 UPDATER_APP_SUFIX_NAME="Homolog"   # opcional
 UPDATER_APP_DESC="Sistema em atualização" # opcional
 
