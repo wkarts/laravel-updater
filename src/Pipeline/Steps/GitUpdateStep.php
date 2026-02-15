@@ -52,11 +52,15 @@ class GitUpdateStep implements PipelineStepInterface
                 $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
 
                 if (!$this->isGitRepository($cwd, $env)) {
-                    if (!(bool) config('updater.git.auto_init', false)) {
-                        throw new \RuntimeException('Repositório git ausente em ' . $cwd . '. Habilite UPDATER_GIT_AUTO_INIT=true para bootstrap automático.');
+                    $autoInit = (bool) config('updater.git.auto_init', false);
+                    $forceBootstrap = (bool) ($context['options']['force'] ?? false);
+
+                    if (!$autoInit && !$forceBootstrap) {
+                        throw new \RuntimeException('Repositório git ausente em ' . $cwd . '. Habilite UPDATER_GIT_AUTO_INIT=true ou execute com --force para bootstrap automático.');
                     }
 
                     $this->bootstrapRepository($cwd, $url, $branch, $env);
+                    $context['git_bootstrapped'] = true;
                 } else {
                     $this->shellRunner->runOrFail(['git', 'remote', 'set-url', 'origin', $url], $cwd, $env);
                     $this->shellRunner->runOrFail(['git', 'fetch', 'origin', $branch], $cwd, $env);
