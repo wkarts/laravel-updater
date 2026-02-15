@@ -34,9 +34,17 @@ class MaintenanceOnStep implements PipelineStepInterface
 
         $entered = false;
 
+        $downEnv = [
+            'REQUEST_URI' => '/',
+            'HTTP_HOST' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
+            'SERVER_NAME' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
+            'SERVER_PORT' => (string) (parse_url((string) config('app.url', 'http://localhost'), PHP_URL_PORT) ?: 80),
+            'HTTPS' => str_starts_with((string) config('app.url', 'http://localhost'), 'https://') ? 'on' : 'off',
+        ];
+
         foreach ($candidates as $view) {
             try {
-                $this->shellRunner->runOrFail(['php', 'artisan', 'down', '--render=' . $view]);
+                $this->shellRunner->runOrFail(['php', 'artisan', 'down', '--render=' . $view], env: $downEnv);
                 $entered = true;
                 break;
             } catch (\Throwable $e) {
@@ -50,7 +58,7 @@ class MaintenanceOnStep implements PipelineStepInterface
 
         if (!$entered) {
             // Last resort: enter maintenance without custom render.
-            $this->shellRunner->runOrFail(['php', 'artisan', 'down']);
+$this->shellRunner->runOrFail(['php', 'artisan', 'down'], env: $downEnv);
         }
 
         $context['maintenance'] = true;
