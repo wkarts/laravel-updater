@@ -18,7 +18,22 @@ class MigrateStep implements PipelineStepInterface
 
     public function handle(array &$context): void
     {
-        $this->shellRunner->runOrFail(['php', 'artisan', 'migrate', '--force']);
+        $options = $context['options'] ?? [];
+        $command = ['php', 'artisan', 'updater:migrate', '--force'];
+
+        if (($context['run_id'] ?? null) !== null) {
+            $command[] = '--run-id=' . $context['run_id'];
+        }
+
+        if ((bool) ($options['strict_migrate'] ?? config('updater.migrate.strict_mode', false))) {
+            $command[] = '--strict';
+        }
+
+        if ((bool) ($options['dry_run'] ?? false)) {
+            $command[] = '--dry-run';
+        }
+
+        $this->shellRunner->runOrFail($command);
     }
 
     public function rollback(array &$context): void
