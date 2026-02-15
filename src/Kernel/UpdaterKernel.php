@@ -109,7 +109,7 @@ class UpdaterKernel
                         'git fetch origin <branch>',
                         'git rev-list --count HEAD..origin/<branch>',
                         'composer install --no-interaction --prefer-dist',
-                        'php artisan migrate --force',
+                        'php artisan updater:migrate --force',
                         'php artisan db:seed --force',
                     ],
                     'preflight' => $this->preflight->report($options),

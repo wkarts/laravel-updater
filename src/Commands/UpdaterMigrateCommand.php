@@ -15,10 +15,11 @@ class UpdaterMigrateCommand extends Command
     protected $signature = 'updater:migrate
         {--database= : Conexão de banco alvo}
         {--path= : Caminho customizado de migrations (arquivo ou diretório)}
-        {--strict : Não reconcilia drift de already exists}
+        {--mode= : Modo de execução tolerant|strict}
+        {--strict : Atalho para --mode=strict}
         {--dry-run : Não executa SQL, apenas simula}
-        {--max-retries= : Máximo de retries para lock/deadlock}
-        {--backoff-ms= : Backoff base em milissegundos}
+        {--retry-locks= : Máximo de retries para lock/deadlock}
+        {--retry-sleep-base= : Backoff base em segundos}
         {--run-id= : Vincula logs ao run_id do updater}
         {--force : Compatibilidade com chamadas não interativas}';
 
@@ -36,13 +37,19 @@ class UpdaterMigrateCommand extends Command
 
         $reporter = new MigrationRunReporter($store, $logFile, $runId);
 
+        $mode = (string) ($this->option('mode') ?: config('updater.migrate.mode', 'tolerant'));
+        if ((bool) $this->option('strict')) {
+            $mode = 'strict';
+        }
+
         $options = [
             'database' => $this->option('database') ?: config('database.default'),
             'path' => $this->option('path') ?: null,
-            'strict' => (bool) ($this->option('strict') ?: config('updater.migrate.strict_mode', false)),
+            'mode' => in_array($mode, ['tolerant', 'strict'], true) ? $mode : 'tolerant',
             'dry_run' => (bool) ($this->option('dry-run') ?: config('updater.migrate.dry_run', false)),
-            'max_retries' => $this->option('max-retries') ?? config('updater.migrate.max_retries', 3),
-            'backoff_ms' => $this->option('backoff-ms') ?? config('updater.migrate.backoff_ms', 500),
+            'max_retries' => $this->option('retry-locks') ?? config('updater.migrate.retry_locks', 2),
+            'retry_sleep_base' => $this->option('retry-sleep-base') ?? config('updater.migrate.retry_sleep_base', 3),
+            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', true),
         ];
 
         try {

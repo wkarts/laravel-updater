@@ -25,11 +25,11 @@ class MigrateStep implements PipelineStepInterface
             $command[] = '--run-id=' . $context['run_id'];
         }
 
-        if ((bool) ($options['strict_migrate'] ?? config('updater.migrate.strict_mode', false))) {
-            $command[] = '--strict';
+        if ((bool) ($options['strict_migrate'] ?? false)) {
+            $command[] = '--mode=strict';
         }
 
-        if ((bool) ($options['dry_run'] ?? false)) {
+        if ((bool) ($options['dry_run'] ?? false) || (bool) config('updater.migrate.dry_run', false)) {
             $command[] = '--dry-run';
         }
 

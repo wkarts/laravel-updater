@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Migration;
 
 use Argws\LaravelUpdater\Support\StateStore;
+use Illuminate\Support\Facades\Log;
 
 class MigrationRunReporter
 {
@@ -30,6 +31,14 @@ class MigrationRunReporter
         $this->events[] = $payload;
 
         @file_put_contents($this->logFile, json_encode($payload, JSON_UNESCAPED_UNICODE) . PHP_EOL, FILE_APPEND);
+
+        $channel = (string) config('updater.migrate.log_channel', config('logging.default', 'stack'));
+        try {
+            Log::channel($channel)->log($level, $message, $context);
+        } catch (\Throwable) {
+            // fallback silencioso para não impactar o fluxo principal.
+        }
+
         $this->store?->addRunLog($this->runId, $level, $message, $context);
     }
 

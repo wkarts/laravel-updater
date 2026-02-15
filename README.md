@@ -372,25 +372,32 @@ php artisan cache:clear
 
 ## Migrador idempotente definitivo (`updater:migrate`)
 
-### O que é drift de migration
-Drift acontece quando o estado real do banco não bate com o histórico da tabela `migrations` (ex.: tabela já existe, mas a migration não está marcada como executada).
+### Por que ocorre o erro `SQLSTATE[42S01]` com errno `1050`
+Esse erro aparece quando uma migration tenta criar tabela/view que já existe fisicamente no banco, mas sem o registro correspondente em `migrations`.
+Cenários típicos: restore de dump, merge manual, run interrompido, ou banco “adiantado” em relação ao histórico de migrations.
 
-### Estratégia implementada
-- Executa **uma migration por vez** (determinístico), identificando exatamente qual arquivo falhou.
-- Classifica falhas em:
-  - `ALREADY_EXISTS` (reconciliável no modo tolerante);
-  - `LOCK_RETRYABLE` (retry com backoff);
-  - `NON_RETRYABLE` (falha real, interrompe).
-- Em `ALREADY_EXISTS` e modo tolerante, reconcilia com validação mínima e registra a migration como executada.
-- Gera log JSONL em arquivo + logs no `StateStore` (tabela `updater_logs`).
-- Em caso de aplicação parcial, registra divergência no relatório final (`divergences`).
+### O que a reconciliação faz
+- Executa **exatamente uma migration por vez** (`Migrator::run([$path], ['step' => true])`) para garantir fluxo determinístico.
+- Classifica falhas usando `SQLSTATE`, `errno` e texto da mensagem em:
+  - `ALREADY_EXISTS` (inclui 42S01/1050, 42S21, 42S11, duplicate key/index/column, errno 1826 e errno 121 para constraint duplicada);
+  - `LOCK_RETRYABLE` (deadlock, lock wait timeout, metadata lock, restart transaction);
+  - `NON_RETRYABLE`.
+- Em `ALREADY_EXISTS` no modo tolerante:
+  - valida existência do objeto quando possível (`Schema::hasTable`, `information_schema.TABLE_CONSTRAINTS` para constraint/FK);
+  - evita duplicidade: se migration já está em `migrations`, só loga e segue;
+  - se não estiver, insere com batch atual via repository.
+- Em indício de partial apply, marca `DIVERGENCE_SUSPECTED` no relatório.
+- Em modo `strict`, qualquer incerteza/deriva relevante falha para intervenção manual.
 
 ### Configuração
 ```dotenv
-UPDATER_MIGRATE_STRICT_MODE=false
+UPDATER_MIGRATE_IDEMPOTENT=true
+UPDATER_MIGRATE_MODE=tolerant
+UPDATER_MIGRATE_RETRY_LOCKS=2
+UPDATER_MIGRATE_RETRY_SLEEP_BASE=3
 UPDATER_MIGRATE_DRY_RUN=false
-UPDATER_MIGRATE_MAX_RETRIES=3
-UPDATER_MIGRATE_BACKOFF_MS=500
+UPDATER_MIGRATE_LOG_CHANNEL=stack
+UPDATER_MIGRATE_RECONCILE_ALREADY_EXISTS=true
 UPDATER_MIGRATE_REPORT_PATH="storage/logs/updater-migrate-{timestamp}.log"
 ```
 
@@ -400,24 +407,24 @@ php artisan updater:migrate --force
 ```
 
 Opções úteis:
-- `--strict`: modo estrito (não reconcilia `ALREADY_EXISTS`)
-- `--dry-run`: simula sem executar SQL
-- `--max-retries=` e `--backoff-ms=`: controle de retry de lock/deadlock
-- `--database=` e `--path=`: conexão/caminho específicos
-- `--run-id=`: vincula auditoria ao run do updater
+- `--mode=tolerant|strict` (ou `--strict` como atalho)
+- `--dry-run` para simulação sem SQL
+- `--retry-locks=` e `--retry-sleep-base=` para retries de lock/deadlock
+- `--database=` e `--path=` para alvo específico
+- `--run-id=` para vincular auditoria ao run do updater
 
-### Exemplos reais
+### Exemplos
 ```bash
-# Modo tolerante padrão
+# execução tolerante (default)
 php artisan updater:migrate --force
 
-# Modo estrito para ambiente limpo
-php artisan updater:migrate --force --strict
+# execução estrita
+php artisan updater:migrate --force --mode=strict
 
-# Simulação prévia
-php artisan updater:migrate --dry-run --force
+# dry-run antes do update real
+php artisan updater:migrate --force --dry-run
 ```
 
-### Riscos e quando usar modo estrito
-- Modo tolerante resolve cenários comuns de produção com drift, mas pode mascarar inconsistências semânticas profundas quando a migration está parcialmente aplicada.
-- Em ambientes novos/limpos, prefira `--strict` para falhar rápido e exigir correção explícita.
+### Quando usar modo strict
+- Use `strict` em ambientes novos/controlados para detectar drift cedo e bloquear reconciliação incerta.
+- Use `tolerant` em produção com histórico legado, mantendo logs e relatório para auditoria pós-run.

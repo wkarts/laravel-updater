@@ -38,10 +38,12 @@ class IdempotentMigrationService
             ARRAY_FILTER_USE_BOTH
         );
 
-        $strict = (bool) ($options['strict'] ?? false);
+        $mode = (string) ($options['mode'] ?? 'tolerant');
+        $strict = $mode === 'strict';
         $dryRun = (bool) ($options['dry_run'] ?? false);
-        $maxRetries = max(0, (int) ($options['max_retries'] ?? 3));
-        $backoffMs = max(1, (int) ($options['backoff_ms'] ?? 500));
+        $maxRetries = max(0, (int) ($options['max_retries'] ?? 2));
+        $sleepBaseSeconds = max(1, (int) ($options['retry_sleep_base'] ?? 3));
+        $reconcileEnabled = (bool) ($options['reconcile_already_exists'] ?? true);
 
         $stats = [
             'total' => count($pending),
@@ -49,15 +51,17 @@ class IdempotentMigrationService
             'reconciled' => 0,
             'retried' => 0,
             'failed' => 0,
+            'warnings' => 0,
             'skipped_dry_run' => 0,
             'divergences' => [],
         ];
 
         $reporter->log('info', 'Iniciando updater:migrate.', [
-            'strict' => $strict,
+            'mode' => $mode,
             'dry_run' => $dryRun,
             'pending' => array_keys($pending),
             'connection' => $connection,
+            'reconcile_already_exists' => $reconcileEnabled,
         ]);
 
         foreach ($pending as $name => $path) {
@@ -74,35 +78,46 @@ class IdempotentMigrationService
                 $reporter->log('info', 'Executando migration.', ['migration' => $name, 'path' => $path, 'attempt' => $attempt]);
 
                 try {
-                    $this->migrator->run([$path], ['step' => false]);
+                    $this->migrator->run([$path], ['step' => true]);
                     $stats['executed']++;
                     $reporter->log('info', 'Migration executada com sucesso.', ['migration' => $name, 'attempt' => $attempt]);
                     break;
                 } catch (Throwable $throwable) {
-                    $classification = $this->classifier->classify($throwable);
+                    $classified = $this->classifier->classifyWithContext($throwable);
+                    $classification = (string) $classified['classification'];
                     $object = $this->classifier->inferObject($throwable);
                     $reporter->log('warning', 'Falha classificada durante migration.', [
                         'migration' => $name,
                         'attempt' => $attempt,
                         'classification' => $classification,
                         'object' => $object,
+                        'sqlstate' => $classified['sqlstate'],
+                        'errno' => $classified['errno'],
                         'error' => $throwable->getMessage(),
                     ]);
 
                     if ($classification === MigrationFailureClassifier::LOCK_RETRYABLE && $attempt <= $maxRetries) {
                         $stats['retried']++;
-                        $sleepMs = $backoffMs * $attempt;
-                        usleep($sleepMs * 1000);
+                        $sleepSeconds = $this->calculateBackoffSeconds($sleepBaseSeconds, $attempt);
+                        $reporter->log('warning', 'Retry por lock/deadlock.', ['migration' => $name, 'attempt' => $attempt, 'sleep_seconds' => $sleepSeconds]);
+                        sleep($sleepSeconds);
                         continue;
                     }
 
-                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && !$strict) {
-                        $reconciled = $this->reconciler->reconcile($repository, $name, $object, is_string($connection) ? $connection : null);
+                    if (
+                        $classification === MigrationFailureClassifier::ALREADY_EXISTS
+                        && $strict === false
+                        && $reconcileEnabled
+                    ) {
+                        $reconciled = $this->reconciler->reconcile($repository, $name, $object, is_string($connection) ? $connection : null, $strict);
                         if (($reconciled['reconciled'] ?? false) === true) {
                             $stats['reconciled']++;
+                            if (($reconciled['validation']['warning'] ?? false) === true) {
+                                $stats['warnings']++;
+                            }
                             $stats['divergences'][] = [
                                 'migration' => $name,
-                                'type' => 'already_exists',
+                                'type' => 'DIVERGENCE_SUSPECTED',
                                 'object' => $object,
                                 'note' => 'partial_apply_possible',
                             ];
@@ -140,5 +155,10 @@ class IdempotentMigrationService
         }
 
         return $paths;
+    }
+
+    private function calculateBackoffSeconds(int $base, int $attempt): int
+    {
+        return max(1, ($base * (2 ** $attempt)) - 1);
     }
 }

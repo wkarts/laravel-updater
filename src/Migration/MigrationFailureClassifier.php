@@ -14,18 +14,27 @@ class MigrationFailureClassifier
 
     public function classify(Throwable $throwable): string
     {
+        return $this->classifyWithContext($throwable)['classification'];
+    }
+
+    /**
+     * @return array{classification:string,sqlstate:?string,errno:?int,message:string}
+     */
+    public function classifyWithContext(Throwable $throwable): array
+    {
         $message = mb_strtolower($throwable->getMessage());
-        $code = (string) $throwable->getCode();
+        $sqlstate = $this->extractSqlState($message);
+        $errno = $this->extractErrno($throwable, $message);
 
-        if ($this->matchesAlreadyExists($message, $code)) {
-            return self::ALREADY_EXISTS;
+        if ($this->matchesAlreadyExists($message, $sqlstate, $errno)) {
+            return ['classification' => self::ALREADY_EXISTS, 'sqlstate' => $sqlstate, 'errno' => $errno, 'message' => $message];
         }
 
-        if ($this->matchesLockRetryable($message, $code)) {
-            return self::LOCK_RETRYABLE;
+        if ($this->matchesLockRetryable($message, $sqlstate, $errno)) {
+            return ['classification' => self::LOCK_RETRYABLE, 'sqlstate' => $sqlstate, 'errno' => $errno, 'message' => $message];
         }
 
-        return self::NON_RETRYABLE;
+        return ['classification' => self::NON_RETRYABLE, 'sqlstate' => $sqlstate, 'errno' => $errno, 'message' => $message];
     }
 
     public function inferObject(Throwable $throwable): array
@@ -37,19 +46,19 @@ class MigrationFailureClassifier
             'view' => "/view ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i",
             'index' => "/(?:index|key) ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? (?:already exists|duplicate)/i",
             'column' => "/duplicate column name:? ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i",
-            'constraint' => "/constraint ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i",
+            'constraint' => "/(?:constraint|foreign key) ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? (?:already exists|duplicate)/i",
         ];
 
         foreach ($patterns as $type => $pattern) {
             if (preg_match($pattern, $message, $matches) === 1) {
-                return ['type' => $type, 'name' => $matches[1]];
+                return ['type' => $type, 'name' => $matches[1], 'table' => $this->inferTable($message)];
             }
         }
 
-        return ['type' => 'unknown', 'name' => null];
+        return ['type' => 'unknown', 'name' => null, 'table' => $this->inferTable($message)];
     }
 
-    private function matchesAlreadyExists(string $message, string $code): bool
+    private function matchesAlreadyExists(string $message, ?string $sqlstate, ?int $errno): bool
     {
         $phrases = [
             'already exists',
@@ -63,7 +72,8 @@ class MigrationFailureClassifier
             'duplicate index',
         ];
 
-        $errorCodes = ['42s01', '42p07', '42701', '1060', '1050', '1061'];
+        $sqlStates = ['42s01', '42s21', '42s11', '42000', '42p07', '42701'];
+        $errnoList = [1050, 1060, 1061, 1826];
 
         foreach ($phrases as $phrase) {
             if (str_contains($message, $phrase)) {
@@ -71,10 +81,18 @@ class MigrationFailureClassifier
             }
         }
 
-        return in_array(mb_strtolower($code), $errorCodes, true);
+        if ($errno === 121 && str_contains($message, 'constraint')) {
+            return true;
+        }
+
+        if ($errno !== null && in_array($errno, $errnoList, true)) {
+            return true;
+        }
+
+        return $sqlstate !== null && in_array(mb_strtolower($sqlstate), $sqlStates, true);
     }
 
-    private function matchesLockRetryable(string $message, string $code): bool
+    private function matchesLockRetryable(string $message, ?string $sqlstate, ?int $errno): bool
     {
         $phrases = [
             'deadlock found',
@@ -84,9 +102,11 @@ class MigrationFailureClassifier
             'database is locked',
             'could not obtain lock',
             'serialization failure',
+            'try restarting transaction',
         ];
 
-        $errorCodes = ['40001', '40p01', '1205', '1213'];
+        $sqlStates = ['40001', '40p01'];
+        $errnoList = [1205, 1213];
 
         foreach ($phrases as $phrase) {
             if (str_contains($message, $phrase)) {
@@ -94,6 +114,41 @@ class MigrationFailureClassifier
             }
         }
 
-        return in_array(mb_strtolower($code), $errorCodes, true);
+        if ($errno !== null && in_array($errno, $errnoList, true)) {
+            return true;
+        }
+
+        return $sqlstate !== null && in_array(mb_strtolower($sqlstate), $sqlStates, true);
+    }
+
+    private function extractSqlState(string $message): ?string
+    {
+        if (preg_match('/sqlstate\[([a-z0-9]{5})\]/i', $message, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    private function extractErrno(Throwable $throwable, string $message): ?int
+    {
+        if (is_numeric($throwable->getCode())) {
+            return (int) $throwable->getCode();
+        }
+
+        if (preg_match('/:\s*(\d{3,5})\s+/', $message, $matches) === 1) {
+            return (int) $matches[1];
+        }
+
+        return null;
+    }
+
+    private function inferTable(string $message): ?string
+    {
+        if (preg_match('/(?:on table|table)\s+["`\']?([a-z0-9_.$-]+)["`\']?/i', $message, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return null;
     }
 }
