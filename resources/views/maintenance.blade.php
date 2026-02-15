@@ -6,12 +6,18 @@
     <title>{{ $title ?? config('updater.maintenance.default_title') }}</title>
 
     @php
-        $branding = app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding();
-        $primary = $branding['primary_color'] ?? '#0d6efd';
-        $logoUrl = $branding['logo_url'] ?? null;
-        $faviconUrl = $branding['favicon_url'] ?? null;
+        $branding = [];
+        try {
+            $branding = app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding();
+        } catch (\Throwable $e) {
+            $branding = [];
+        }
+
+        $primary = $branding['primary_color'] ?? (string) config('updater.app.primary_color', '#0d6efd');
+        $logoUrl = $branding['logo_url'] ?? ((string) config('updater.app.logo_url', '') ?: null);
+        $faviconUrl = $branding['favicon_url'] ?? ((string) config('updater.app.favicon_url', '') ?: null);
         $appName = $branding['app_name_full'] ?? ($branding['app_name'] ?? config('app.name', 'Aplicação'));
-        $appDesc = $branding['app_desc'] ?? null;
+        $appDesc = $branding['app_desc'] ?? (string) config('updater.app.desc', '');
         $message = $branding['maintenance_message'] ?? config('updater.maintenance.default_message');
         $footer  = $branding['maintenance_footer']  ?? config('updater.maintenance.default_footer');
     @endphp
