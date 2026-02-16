@@ -55,6 +55,7 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::get('/backups/log/download', [OperationsController::class, 'downloadUpdaterLog'])->name('updater.backups.log.download');
                 Route::get('/backups/progress/status', [OperationsController::class, 'progressStatus'])->name('updater.backups.progress.status');
                 Route::get('/backups/{id}/download', [OperationsController::class, 'downloadBackup'])->whereNumber('id')->name('updater.backups.download');
+                Route::post('/backups/{id}/upload', [OperationsController::class, 'uploadBackup'])->whereNumber('id')->name('updater.backups.upload');
                 Route::get('/backups/{id}/restore', [OperationsController::class, 'showRestoreForm'])->whereNumber('id')->name('updater.backups.restore.form');
                 Route::post('/backups/{id}/restore', [OperationsController::class, 'restoreBackup'])->whereNumber('id')->name('updater.backups.restore');
 
@@ -83,6 +84,7 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/settings/branding/reset', [ManagerController::class, 'resetBranding'])->name('updater.settings.branding.reset');
                 Route::post('/settings/tokens', [ManagerController::class, 'createApiToken'])->name('updater.settings.tokens.create');
                 Route::delete('/settings/tokens/{id}', [ManagerController::class, 'revokeApiToken'])->name('updater.settings.tokens.revoke');
+                Route::post('/settings/backup-upload', [ManagerController::class, 'saveBackupUploadSettings'])->name('updater.settings.backup-upload.save');
 
                 Route::post('/sources/save', [ManagerController::class, 'saveSource'])->name('updater.sources.save');
                 Route::post('/sources/{id}/activate', [ManagerController::class, 'activateSource'])->name('updater.sources.activate');
