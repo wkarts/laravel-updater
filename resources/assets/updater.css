@@ -615,7 +615,7 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 .settings-top-grid {
     display: grid;
     gap: 14px;
-    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);
+    grid-template-columns: minmax(0, 1.08fr) minmax(420px, .92fr);
     align-items: start;
 }
 
