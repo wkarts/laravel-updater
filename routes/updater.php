@@ -16,6 +16,7 @@ if ((bool) config('updater.ui.enabled', true)) {
         Route::get('/assets/updater.js', [UpdaterUiController::class, 'assetJs'])->name('updater.asset.js');
         Route::get('/assets/branding/logo', [UpdaterUiController::class, 'brandingLogo'])->name('updater.branding.logo');
         Route::get('/assets/branding/favicon', [UpdaterUiController::class, 'brandingFavicon'])->name('updater.branding.favicon');
+        Route::get('/assets/branding/maintenance-logo', [UpdaterUiController::class, 'brandingMaintenanceLogo'])->name('updater.branding.maintenance_logo');
         Route::post('/api/trigger', [UpdaterUiController::class, 'apiTrigger'])->name('updater.api.trigger');
     });
 
@@ -30,7 +31,7 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/2fa', [AuthController::class, 'verifyTwoFactor'])->name('updater.2fa.verify');
             Route::post('/logout', [AuthController::class, 'logout'])->name('updater.logout');
 
-            Route::group(['middleware' => ['updater.auth']], function (): void {
+            Route::group(['middleware' => ['updater.auth', 'updater.authorize']], function (): void {
                 Route::get('/', [UpdaterUiController::class, 'index'])->name('updater.index');
                 Route::get('/profile', [AuthController::class, 'profile'])->name('updater.profile');
                 Route::post('/profile/password', [AuthController::class, 'updatePassword'])->name('updater.profile.password');
@@ -41,6 +42,8 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/check', [UpdaterUiController::class, 'check'])->name('updater.check');
                 Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
                 Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
+                Route::post('/maintenance/on', [UpdaterUiController::class, 'maintenanceOn'])->name('updater.maintenance.on');
+                Route::post('/maintenance/off', [UpdaterUiController::class, 'maintenanceOff'])->name('updater.maintenance.off');
 
                 Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->name('updater.runs.show');
 
@@ -76,7 +79,7 @@ if ((bool) config('updater.ui.enabled', true)) {
 
                 Route::get('/settings', [ManagerController::class, 'settingsIndex'])->name('updater.settings.index');
                 Route::post('/settings/branding', [ManagerController::class, 'saveBranding'])->name('updater.settings.branding.save');
-                Route::delete('/settings/branding/{asset}', [ManagerController::class, 'removeBrandingAsset'])->whereIn('asset', ['logo', 'favicon'])->name('updater.settings.branding.asset.remove');
+                Route::delete('/settings/branding/{asset}', [ManagerController::class, 'removeBrandingAsset'])->whereIn('asset', ['logo', 'favicon', 'maintenance-logo'])->name('updater.settings.branding.asset.remove');
                 Route::post('/settings/branding/reset', [ManagerController::class, 'resetBranding'])->name('updater.settings.branding.reset');
                 Route::post('/settings/tokens', [ManagerController::class, 'createApiToken'])->name('updater.settings.tokens.create');
                 Route::delete('/settings/tokens/{id}', [ManagerController::class, 'revokeApiToken'])->name('updater.settings.tokens.revoke');
@@ -99,6 +102,8 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/check', [UpdaterUiController::class, 'check'])->name('updater.check');
             Route::post('/trigger-update', [UpdaterUiController::class, 'triggerUpdate'])->name('updater.trigger.update');
             Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
+            Route::post('/maintenance/on', [UpdaterUiController::class, 'maintenanceOn'])->name('updater.maintenance.on');
+            Route::post('/maintenance/off', [UpdaterUiController::class, 'maintenanceOff'])->name('updater.maintenance.off');
             Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds'])->name('updater.section');
         });
     }
