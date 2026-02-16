@@ -4,49 +4,53 @@
 @section('breadcrumbs', 'Configurações')
 
 @section('content')
-<div class="card" style="padding:0; border:none; box-shadow:none; background:transparent;">
-    @include('laravel-updater::settings.branding', ['branding' => $branding])
-</div>
+<div class="settings-stack">
+    <section class="settings-block settings-branding">
+        @include('laravel-updater::settings.branding', ['branding' => $branding])
+    </section>
 
-<div class="grid" style="margin-top: 14px; align-items:start;">
-    @include('laravel-updater::settings.security')
-    @include('laravel-updater::settings.tokens', ['tokens' => $tokens])
-</div>
+    <section class="settings-grid-two">
+        @include('laravel-updater::settings.security')
+        @include('laravel-updater::settings.tokens', ['tokens' => $tokens])
+    </section>
 
-<div class="card" style="margin-top: 14px;">
-    <h3>Fonte ativa e limpeza</h3>
-    <p>Fonte ativa: <strong>{{ $activeSource['name'] ?? 'Nenhuma' }}</strong></p>
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Nome</th><th>Tipo</th><th>Ativa</th><th>Ações</th></tr></thead>
-            <tbody>
-            @forelse($sources as $source)
-                <tr>
-                    <td>{{ $source['name'] }}</td>
-                    <td>{{ strtoupper($source['type']) }}</td>
-                    <td>{{ (int) $source['active'] === 1 ? 'Sim' : 'Não' }}</td>
-                    <td>
-                        <div class="form-inline">
-                            <form method="POST" action="{{ route('updater.sources.activate', $source['id']) }}">@csrf <button class="btn btn-secondary" type="submit">Ativar</button></form>
-                            <form method="POST" action="{{ route('updater.sources.delete', $source['id']) }}" onsubmit="return confirm('Deseja remover esta fonte?')">@csrf @method('DELETE')<button class="btn btn-danger" type="submit">Excluir</button></form>
-                        </div>
-                    </td>
-                </tr>
-            @empty
-                <tr><td colspan="4" class="muted">Nenhuma fonte cadastrada.</td></tr>
-            @endforelse
-            </tbody>
-        </table>
-    </div>
+    <section class="settings-block">
+        <div class="card">
+            <h3>Fonte ativa e limpeza</h3>
+            <p>Fonte ativa: <strong>{{ $activeSource['name'] ?? 'Nenhuma' }}</strong></p>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Nome</th><th>Tipo</th><th>Ativa</th><th>Ações</th></tr></thead>
+                    <tbody>
+                    @forelse($sources as $source)
+                        <tr>
+                            <td>{{ $source['name'] }}</td>
+                            <td>{{ strtoupper($source['type']) }}</td>
+                            <td>{{ (int) $source['active'] === 1 ? 'Sim' : 'Não' }}</td>
+                            <td>
+                                <div class="form-inline">
+                                    <form method="POST" action="{{ route('updater.sources.activate', $source['id']) }}">@csrf <button class="btn btn-secondary" type="submit">Ativar</button></form>
+                                    <form method="POST" action="{{ route('updater.sources.delete', $source['id']) }}" onsubmit="return confirm('Deseja remover esta fonte?')">@csrf @method('DELETE')<button class="btn btn-danger" type="submit">Excluir</button></form>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="4" class="muted">Nenhuma fonte cadastrada.</td></tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
 
-    <h4 style="margin-top: 12px;">Remover perfil</h4>
-    <div class="form-inline">
-        @foreach($profiles as $profile)
-            <form method="POST" action="{{ route('updater.profiles.delete', $profile['id']) }}" onsubmit="return confirm('Deseja remover o perfil {{ $profile['name'] }}?')">
-                @csrf @method('DELETE')
-                <button class="btn btn-ghost" type="submit">Excluir {{ $profile['name'] }}</button>
-            </form>
-        @endforeach
-    </div>
+            <h4 style="margin-top: 12px;">Remover perfil</h4>
+            <div class="form-inline">
+                @foreach($profiles as $profile)
+                    <form method="POST" action="{{ route('updater.profiles.delete', $profile['id']) }}" onsubmit="return confirm('Deseja remover o perfil {{ $profile['name'] }}?')">
+                        @csrf @method('DELETE')
+                        <button class="btn btn-ghost" type="submit">Excluir {{ $profile['name'] }}</button>
+                    </form>
+                @endforeach
+            </div>
+        </div>
+    </section>
 </div>
 @endsection

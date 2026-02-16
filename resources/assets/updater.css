@@ -601,3 +601,30 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+
+.settings-stack {
+    display: grid;
+    gap: 14px;
+}
+
+.settings-block .card {
+    margin: 0;
+}
+
+.settings-grid-two {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+}
+
+.settings-branding .card {
+    min-height: auto;
+}
+
+@media (max-width: 980px) {
+    .settings-grid-two {
+        grid-template-columns: 1fr;
+    }
+}

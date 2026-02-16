@@ -1,14 +1,16 @@
 @php($branding = $branding ?? app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding())
 @php($user = request()->attributes->get('updater_user'))
 @php($perm = app(\Argws\LaravelUpdater\Support\UiPermission::class))
+@php($panelLogoUrl = !empty($branding['logo_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null))
+@php($panelFaviconUrl = !empty($branding['favicon_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null))
 <!doctype html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>@yield('title', 'Updater Manager')</title>
-    @if(!empty($branding['favicon_path'] ?? null))
-        <link rel="icon" href="{{ \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() }}">
+    @if(!empty($panelFaviconUrl))
+        <link rel="icon" href="{{ $panelFaviconUrl }}">
     @endif
     <link rel="stylesheet" href="{{ \Argws\LaravelUpdater\Support\UiAssets::cssUrl() }}">
 </head>
@@ -17,8 +19,8 @@
     <aside class="updater-sidebar" data-drawer>
         <div class="sidebar-brand">
             <div class="sidebar-logo-wrap">
-                @if(!empty($branding['logo_path'] ?? null))
-                    <img src="{{ \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() }}" alt="Logo" class="sidebar-logo">
+                @if(!empty($panelLogoUrl))
+                    <img src="{{ $panelLogoUrl }}" alt="Logo" class="sidebar-logo" referrerpolicy="no-referrer">
                 @else
                     <div class="sidebar-logo-fallback">UP</div>
                 @endif
