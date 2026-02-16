@@ -91,6 +91,56 @@ body {
 .sidebar-nav a:hover { background: var(--surface-soft); border-color: var(--line); }
 .sidebar-nav a.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
 
+.sidebar-meta-wrap {
+    margin-top: 16px;
+    padding-bottom: 10px;
+}
+
+.sidebar-meta-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    padding: 10px;
+}
+
+.sidebar-meta-card h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+}
+
+.sidebar-meta-card ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 6px;
+}
+
+.sidebar-meta-card li {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    border-bottom: 1px dashed var(--line);
+    padding-bottom: 4px;
+}
+
+.sidebar-meta-card li:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.sidebar-meta-card li span {
+    color: var(--muted);
+}
+
+.sidebar-meta-card li strong {
+    text-align: right;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+
 .updater-main { margin-left: 278px; min-height: 100vh; }
 
 .updater-topbar {
@@ -534,6 +584,7 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         flex: 0 0 auto;
     }
     .sidebar-brand small { display: none; }
+    .sidebar-meta-card li { font-size: 12px; }
     .card { padding: 12px; }
     .permission-item { padding: 8px; }
 
@@ -680,4 +731,27 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     .settings-compact-field {
         max-width: 100%;
     }
+}
+
+
+.updater-modal[hidden] { display: none; }
+.updater-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+}
+.updater-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(2, 6, 23, .5);
+}
+.updater-modal-card {
+    position: relative;
+    max-width: 460px;
+    margin: 10vh auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 16px;
 }

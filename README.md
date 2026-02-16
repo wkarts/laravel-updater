@@ -559,3 +559,44 @@ Controle por `.env`:
 ```dotenv
 UPDATER_HEALTHCHECK_SKIP_LOCALHOST=true
 ```
+
+## Painel lateral técnico (novo)
+
+A barra superior de versões/hash foi removida da interface.
+
+Agora, o updater exibe o resumo técnico em um card responsivo no menu lateral (abaixo da navegação), incluindo:
+
+- nuvem conectada e status de credenciais,
+- upload automático de backup,
+- fonte e perfil ativos,
+- status de serviços (cURL, OpenSSL, ZIP),
+- versões relevantes (Laravel, updater e PHP),
+- tag/hash git da aplicação alvo,
+- usuário autenticado (nome, quando disponível),
+- data/hora atual em tempo real.
+
+Esse card foi desenhado para manter legibilidade em desktop e mobile sem poluição visual.
+
+## Upload em nuvem autocontido (Dropbox / Google Drive / S3 / MinIO)
+
+O `laravel-updater` possui fluxo próprio de upload em nuvem para backups, sem depender de `Storage::disk(...)` da aplicação hospedeira.
+
+### Configuração na UI
+
+Em `/_updater/settings` você encontra os campos específicos por provedor:
+
+- **Dropbox**: Access Token;
+- **Google Drive**: Client ID, Client Secret, Refresh Token e Folder ID opcional;
+- **S3 / MinIO**: Endpoint, Region, Bucket, Access Key, Secret Key e Path-Style.
+
+Também é possível definir:
+
+- **provider** ativo,
+- **prefix** remoto,
+- **auto_upload** (upload automático pós-backup).
+
+### Comportamento
+
+- O backup local continua concluindo mesmo se o upload em nuvem falhar.
+- Upload manual por item de backup continua disponível na seção de backups.
+- Configurações de nuvem são persistidas em runtime no banco do updater (`updater_runtime_settings`).

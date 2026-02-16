@@ -26,6 +26,7 @@ use Argws\LaravelUpdater\Migration\MigrationFailureClassifier;
 use Argws\LaravelUpdater\Migration\MigrationReconciler;
 use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\AuthStore;
+use Argws\LaravelUpdater\Support\BackupCloudUploader;
 use Argws\LaravelUpdater\Support\CacheLock;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\FileLock;
@@ -62,6 +63,7 @@ class UpdaterServiceProvider extends ServiceProvider
         });
         $this->app->singleton(AuthStore::class, fn () => new AuthStore($this->app->make(StateStore::class)));
         $this->app->singleton(ManagerStore::class, fn () => new ManagerStore($this->app->make(StateStore::class)));
+        $this->app->singleton(BackupCloudUploader::class, fn () => new BackupCloudUploader());
         $this->app->singleton(MaintenanceMode::class, fn () => new MaintenanceMode());
         $this->app->singleton('updater.store', fn () => $this->app->make(StateStore::class));
         $this->app->singleton(Totp::class, fn () => new Totp());
