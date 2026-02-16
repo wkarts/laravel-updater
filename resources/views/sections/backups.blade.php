@@ -37,6 +37,7 @@
                     <td>{{ $backup['created_at'] }}</td>
                     <td>
                         <a class="btn" href="{{ route('updater.backups.download', ['id' => $backup['id']]) }}">Baixar backup</a>
+                        <form method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem</button></form>
                         <a class="btn btn-danger" href="{{ route('updater.backups.restore.form', ['id' => $backup['id']]) }}">Restaurar</a>
                     </td>
                 </tr>

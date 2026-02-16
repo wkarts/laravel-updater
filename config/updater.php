@@ -66,11 +66,10 @@ return [
     'paths' => [
         'exclude_snapshot' => [
             '.env',
-            'storage',
             'bootstrap/cache',
-            'vendor',
             'node_modules',
             'public/uploads',
+            'storage/app/updater',
             'storage/app/updater/backups',
             'storage/app/updater/snapshots',
         ],
@@ -256,6 +255,11 @@ return [
             trim((string) config('updater.ui.prefix', '_updater'), '/'),
             trim((string) config('updater.ui.prefix', '_updater'), '/') . '/*',
         ],
+    ],
+
+    'version_bar' => [
+        'enabled' => true,
+        'position' => 'top',
     ],
 
 ];

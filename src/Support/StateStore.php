@@ -136,6 +136,13 @@ class StateStore
             updated_at TEXT NOT NULL
         )');
 
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_runtime_settings (
+            key TEXT PRIMARY KEY,
+            value_json TEXT NULL,
+            updated_at TEXT NOT NULL
+        )');
+
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
