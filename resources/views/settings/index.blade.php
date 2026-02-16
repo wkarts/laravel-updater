@@ -13,6 +13,7 @@
         <div class="settings-side-stack">
             @include('laravel-updater::settings.security')
             @include('laravel-updater::settings.tokens', ['tokens' => $tokens])
+            @include('laravel-updater::settings.backup-upload', ['backupUpload' => $backupUpload])
             @include('laravel-updater::settings.sources', [
                 'activeSource' => $activeSource,
                 'sources' => $sources,

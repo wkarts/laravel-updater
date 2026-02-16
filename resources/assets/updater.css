@@ -681,3 +681,48 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         max-width: 100%;
     }
 }
+
+.updater-version-bar {
+    height: 18px;
+    font-size: 11px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--muted);
+    overflow-x: auto;
+    white-space: nowrap;
+}
+.updater-version-bar-bottom {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 0;
+    z-index: 50;
+}
+
+.updater-modal[hidden] { display: none; }
+.updater-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+}
+.updater-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(2, 6, 23, .5);
+}
+.updater-modal-card {
+    position: relative;
+    max-width: 460px;
+    margin: 10vh auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 16px;
+}

@@ -114,6 +114,92 @@ class ManagerStore
         ];
     }
 
+
+    public function backupUploadSettings(): array
+    {
+        $stored = $this->getRuntimeOption('backup_upload', []);
+
+        return [
+            'provider' => (string) ($stored['provider'] ?? 'none'),
+            'prefix' => (string) ($stored['prefix'] ?? 'updater/backups'),
+            'auto_upload' => (bool) ($stored['auto_upload'] ?? false),
+            'dropbox' => [
+                'access_token' => (string) (($stored['dropbox']['access_token'] ?? '')),
+            ],
+            'google_drive' => [
+                'client_id' => (string) (($stored['google_drive']['client_id'] ?? '')),
+                'client_secret' => (string) (($stored['google_drive']['client_secret'] ?? '')),
+                'refresh_token' => (string) (($stored['google_drive']['refresh_token'] ?? '')),
+                'folder_id' => (string) (($stored['google_drive']['folder_id'] ?? '')),
+            ],
+            's3' => [
+                'endpoint' => (string) (($stored['s3']['endpoint'] ?? '')),
+                'region' => (string) (($stored['s3']['region'] ?? 'us-east-1')),
+                'bucket' => (string) (($stored['s3']['bucket'] ?? '')),
+                'access_key' => (string) (($stored['s3']['access_key'] ?? '')),
+                'secret_key' => (string) (($stored['s3']['secret_key'] ?? '')),
+                'path_style' => (bool) (($stored['s3']['path_style'] ?? true)),
+            ],
+        ];
+    }
+
+    public function saveBackupUploadSettings(array $data): void
+    {
+        $payload = [
+            'provider' => (string) ($data['provider'] ?? 'none'),
+            'prefix' => trim((string) ($data['prefix'] ?? 'updater/backups'), '/'),
+            'auto_upload' => (bool) ($data['auto_upload'] ?? false),
+            'dropbox' => [
+                'access_token' => trim((string) ($data['dropbox']['access_token'] ?? '')),
+            ],
+            'google_drive' => [
+                'client_id' => trim((string) ($data['google_drive']['client_id'] ?? '')),
+                'client_secret' => trim((string) ($data['google_drive']['client_secret'] ?? '')),
+                'refresh_token' => trim((string) ($data['google_drive']['refresh_token'] ?? '')),
+                'folder_id' => trim((string) ($data['google_drive']['folder_id'] ?? '')),
+            ],
+            's3' => [
+                'endpoint' => rtrim(trim((string) ($data['s3']['endpoint'] ?? '')), '/'),
+                'region' => trim((string) ($data['s3']['region'] ?? 'us-east-1')),
+                'bucket' => trim((string) ($data['s3']['bucket'] ?? '')),
+                'access_key' => trim((string) ($data['s3']['access_key'] ?? '')),
+                'secret_key' => trim((string) ($data['s3']['secret_key'] ?? '')),
+                'path_style' => (bool) ($data['s3']['path_style'] ?? true),
+            ],
+        ];
+
+        if ($payload['provider'] === 'none') {
+            $payload['auto_upload'] = false;
+        }
+
+        $this->setRuntimeOption('backup_upload', $payload);
+    }
+
+    public function getRuntimeOption(string $key, mixed $default = null): mixed
+    {
+        $stmt = $this->pdo()->prepare('SELECT value_json FROM updater_runtime_settings WHERE key = :key LIMIT 1');
+        $stmt->execute([':key' => $key]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || !array_key_exists('value_json', $row)) {
+            return $default;
+        }
+
+        $decoded = json_decode((string) $row['value_json'], true);
+
+        return $decoded ?? $default;
+    }
+
+    public function setRuntimeOption(string $key, mixed $value): void
+    {
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_runtime_settings (key, value_json, updated_at) VALUES (:key, :value_json, :updated_at)
+            ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at');
+        $stmt->execute([
+            ':key' => $key,
+            ':value_json' => json_encode($value, JSON_UNESCAPED_UNICODE),
+            ':updated_at' => date(DATE_ATOM),
+        ]);
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function users(): array
     {
