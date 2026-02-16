@@ -615,7 +615,7 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 .settings-top-grid {
     display: grid;
     gap: 14px;
-    grid-template-columns: minmax(0, 1.08fr) minmax(420px, .92fr);
+    grid-template-columns: minmax(0, .98fr) minmax(500px, 1.02fr);
     align-items: start;
 }
 
@@ -623,6 +623,16 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     display: grid;
     gap: 14px;
     align-content: start;
+}
+
+
+.settings-side-stack > .settings-block,
+.settings-side-stack > .card {
+    margin: 0;
+}
+
+.settings-subcard {
+    margin-top: 0;
 }
 
 .settings-branding .card {

@@ -69,17 +69,10 @@
                         </table>
                     </div>
 
-                    <h4 style="margin-top: 12px;">Remover perfil</h4>
-                    <div class="form-inline">
-                        @foreach($profiles as $profile)
-                            <form method="POST" action="{{ route('updater.profiles.delete', $profile['id']) }}" onsubmit="return confirm('Deseja remover o perfil {{ $profile['name'] }}?')">
-                                @csrf @method('DELETE')
-                                <button class="btn btn-ghost" type="submit">Excluir {{ $profile['name'] }}</button>
-                            </form>
-                        @endforeach
-                    </div>
-                </div>
-            </section>
+        <div class="settings-side-stack">
+            @include('laravel-updater::settings.sources', ['activeSource' => $activeSource, 'sources' => $sources, 'profiles' => $profiles])
+            @include('laravel-updater::settings.security')
+            @include('laravel-updater::settings.tokens', ['tokens' => $tokens])
         </div>
     </section>
 </div>
