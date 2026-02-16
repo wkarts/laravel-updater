@@ -10,52 +10,39 @@
         ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl()
         : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null);
 
-    // Fallback defensivo: o card técnico nunca deve quebrar o carregamento do dashboard.
-    $backupUpload = ['provider' => 'none', 'auto_upload' => false, 'dropbox' => [], 'google_drive' => [], 's3' => []];
-    $activeProfile = null;
-    $activeSource = null;
-    $runtime = ['maintenance' => ['enter_on_update_start' => true]];
-    $connectedProvider = 'none';
-    $autoUpload = false;
+    $backupUpload = $managerStore->backupUploadSettings();
+    $activeProfile = $managerStore->activeProfile();
+    $activeSource = $managerStore->activeSource();
+    $runtime = $managerStore->runtimeSettings();
+    $connectedProvider = (string) ($backupUpload['provider'] ?? 'none');
+    $autoUpload = (bool) ($backupUpload['auto_upload'] ?? false);
+
     $credentialsConfigured = false;
+    if ($connectedProvider === 'dropbox') {
+        $credentialsConfigured = !empty($backupUpload['dropbox']['access_token']);
+    } elseif ($connectedProvider === 'google-drive') {
+        $credentialsConfigured = !empty($backupUpload['google_drive']['client_id'])
+            && !empty($backupUpload['google_drive']['client_secret'])
+            && !empty($backupUpload['google_drive']['refresh_token']);
+    } elseif ($connectedProvider === 's3' || $connectedProvider === 'minio') {
+        $credentialsConfigured = !empty($backupUpload['s3']['endpoint'])
+            && !empty($backupUpload['s3']['bucket'])
+            && !empty($backupUpload['s3']['access_key'])
+            && !empty($backupUpload['s3']['secret_key']);
+    }
+
     $updaterInstalled = 'n/d';
-    $appGitHash = 'n/d';
-    $appGitTag = '';
+    $appGitHash = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' rev-parse --short HEAD 2>/dev/null'));
+    $appGitTag = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' describe --tags --abbrev=0 2>/dev/null'));
 
-    try {
-        $backupUpload = $managerStore->backupUploadSettings();
-        $activeProfile = $managerStore->activeProfile();
-        $activeSource = $managerStore->activeSource();
-        $runtime = $managerStore->runtimeSettings();
-
-        $connectedProvider = (string) ($backupUpload['provider'] ?? 'none');
-        $autoUpload = (bool) ($backupUpload['auto_upload'] ?? false);
-
-        if ($connectedProvider === 'dropbox') {
-            $credentialsConfigured = !empty($backupUpload['dropbox']['access_token']);
-        } elseif ($connectedProvider === 'google-drive') {
-            $credentialsConfigured = !empty($backupUpload['google_drive']['client_id'])
-                && !empty($backupUpload['google_drive']['client_secret'])
-                && !empty($backupUpload['google_drive']['refresh_token']);
-        } elseif ($connectedProvider === 's3' || $connectedProvider === 'minio') {
-            $credentialsConfigured = !empty($backupUpload['s3']['endpoint'])
-                && !empty($backupUpload['s3']['bucket'])
-                && !empty($backupUpload['s3']['access_key'])
-                && !empty($backupUpload['s3']['secret_key']);
-        }
-
-        $gitHash = @shell_exec('git -C ' . escapeshellarg(base_path()) . ' rev-parse --short HEAD 2>/dev/null');
-        $gitTag = @shell_exec('git -C ' . escapeshellarg(base_path()) . ' describe --tags --abbrev=0 2>/dev/null');
-        $appGitHash = trim((string) $gitHash) !== '' ? trim((string) $gitHash) : 'n/d';
-        $appGitTag = trim((string) $gitTag);
-
-        if (class_exists('Composer\\InstalledVersions')) {
+    if (class_exists('Composer\\InstalledVersions')) {
+        try {
             if (\Composer\InstalledVersions::isInstalled('argws/laravel-updater')) {
                 $updaterInstalled = \Composer\InstalledVersions::getPrettyVersion('argws/laravel-updater') ?: 'n/d';
             }
+        } catch (\Throwable $e) {
+            $updaterInstalled = 'n/d';
         }
-    } catch (\Throwable $e) {
-        // Mantém fallback para não quebrar renderização.
     }
 @endphp
 
