@@ -262,6 +262,7 @@ class ManagerController extends Controller
             'sources' => $this->managerStore->sources(),
             'activeSource' => $this->managerStore->activeSource(),
             'profiles' => $this->managerStore->profiles(),
+            'backupUpload' => $this->managerStore->backupUploadSettings(),
         ]);
     }
 
@@ -456,6 +457,32 @@ class ManagerController extends Controller
         $this->audit($request, $this->actorId($request), 'Token de API revogado.', ['token_id' => $id]);
 
         return back()->with('status', 'Registro removido com sucesso.');
+    }
+
+
+    public function saveBackupUploadSettings(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'provider' => ['required', 'in:none,dropbox,google-drive,s3,minio'],
+            'disk' => ['nullable', 'string', 'max:120'],
+            'prefix' => ['nullable', 'string', 'max:190'],
+            'auto_upload' => ['nullable', 'boolean'],
+        ]);
+
+        $this->managerStore->saveBackupUploadSettings([
+            'provider' => $data['provider'],
+            'disk' => (string) ($data['disk'] ?? ''),
+            'prefix' => (string) ($data['prefix'] ?? 'updater/backups'),
+            'auto_upload' => $request->boolean('auto_upload'),
+        ]);
+
+        $this->audit($request, $this->actorId($request), 'Configuração de upload de backups atualizada.', [
+            'provider' => $data['provider'],
+            'disk' => (string) ($data['disk'] ?? ''),
+            'auto_upload' => $request->boolean('auto_upload'),
+        ]);
+
+        return back()->with('status', 'Configuração de upload salva com sucesso.');
     }
 
     private function validateProfile(Request $request): array
