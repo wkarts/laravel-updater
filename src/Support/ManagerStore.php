@@ -121,9 +121,25 @@ class ManagerStore
 
         return [
             'provider' => (string) ($stored['provider'] ?? 'none'),
-            'disk' => (string) ($stored['disk'] ?? ''),
             'prefix' => (string) ($stored['prefix'] ?? 'updater/backups'),
             'auto_upload' => (bool) ($stored['auto_upload'] ?? false),
+            'dropbox' => [
+                'access_token' => (string) (($stored['dropbox']['access_token'] ?? '')),
+            ],
+            'google_drive' => [
+                'client_id' => (string) (($stored['google_drive']['client_id'] ?? '')),
+                'client_secret' => (string) (($stored['google_drive']['client_secret'] ?? '')),
+                'refresh_token' => (string) (($stored['google_drive']['refresh_token'] ?? '')),
+                'folder_id' => (string) (($stored['google_drive']['folder_id'] ?? '')),
+            ],
+            's3' => [
+                'endpoint' => (string) (($stored['s3']['endpoint'] ?? '')),
+                'region' => (string) (($stored['s3']['region'] ?? 'us-east-1')),
+                'bucket' => (string) (($stored['s3']['bucket'] ?? '')),
+                'access_key' => (string) (($stored['s3']['access_key'] ?? '')),
+                'secret_key' => (string) (($stored['s3']['secret_key'] ?? '')),
+                'path_style' => (bool) (($stored['s3']['path_style'] ?? true)),
+            ],
         ];
     }
 
@@ -131,13 +147,28 @@ class ManagerStore
     {
         $payload = [
             'provider' => (string) ($data['provider'] ?? 'none'),
-            'disk' => trim((string) ($data['disk'] ?? '')),
             'prefix' => trim((string) ($data['prefix'] ?? 'updater/backups'), '/'),
             'auto_upload' => (bool) ($data['auto_upload'] ?? false),
+            'dropbox' => [
+                'access_token' => trim((string) ($data['dropbox']['access_token'] ?? '')),
+            ],
+            'google_drive' => [
+                'client_id' => trim((string) ($data['google_drive']['client_id'] ?? '')),
+                'client_secret' => trim((string) ($data['google_drive']['client_secret'] ?? '')),
+                'refresh_token' => trim((string) ($data['google_drive']['refresh_token'] ?? '')),
+                'folder_id' => trim((string) ($data['google_drive']['folder_id'] ?? '')),
+            ],
+            's3' => [
+                'endpoint' => rtrim(trim((string) ($data['s3']['endpoint'] ?? '')), '/'),
+                'region' => trim((string) ($data['s3']['region'] ?? 'us-east-1')),
+                'bucket' => trim((string) ($data['s3']['bucket'] ?? '')),
+                'access_key' => trim((string) ($data['s3']['access_key'] ?? '')),
+                'secret_key' => trim((string) ($data['s3']['secret_key'] ?? '')),
+                'path_style' => (bool) ($data['s3']['path_style'] ?? true),
+            ],
         ];
 
         if ($payload['provider'] === 'none') {
-            $payload['disk'] = '';
             $payload['auto_upload'] = false;
         }
 

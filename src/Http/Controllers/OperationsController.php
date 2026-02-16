@@ -6,6 +6,7 @@ namespace Argws\LaravelUpdater\Http\Controllers;
 
 use Argws\LaravelUpdater\Contracts\BackupDriverInterface;
 use Argws\LaravelUpdater\Support\ArchiveManager;
+use Argws\LaravelUpdater\Support\BackupCloudUploader;
 use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
@@ -15,7 +16,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Storage;
 
 class OperationsController extends Controller
 {
@@ -25,7 +25,8 @@ class OperationsController extends Controller
         private readonly ShellRunner $shell,
         private readonly BackupDriverInterface $backupDriver,
         private readonly FileManager $fileManager,
-        private readonly ArchiveManager $archiveManager
+        private readonly ArchiveManager $archiveManager,
+        private readonly BackupCloudUploader $cloudUploader
     ) {
     }
 
@@ -216,20 +217,6 @@ class OperationsController extends Controller
         $path = (string) ($backup['path'] ?? '');
         if (is_file($path)) {
             return response()->download($path, basename($path));
-        }
-
-        $upload = $this->managerStore->backupUploadSettings();
-        $disk = (string) ($upload['disk'] ?? config('updater.backup.upload_disk', ''));
-        $prefix = trim((string) ($upload['prefix'] ?? config('updater.backup.upload_prefix', 'updater/backups')), '/');
-        $remote = $prefix . '/' . basename($path);
-        if ($disk !== '' && Storage::disk($disk)->exists($remote)) {
-            return response()->streamDownload(function () use ($disk, $remote): void {
-                $stream = Storage::disk($disk)->readStream($remote);
-                if (is_resource($stream)) {
-                    fpassthru($stream);
-                    fclose($stream);
-                }
-            }, basename($path));
         }
 
         abort(404);
@@ -489,11 +476,10 @@ class OperationsController extends Controller
         ]);
 
         $upload = $this->managerStore->backupUploadSettings();
-        $disk = (string) ($upload['disk'] ?? config('updater.backup.upload_disk', ''));
         $prefix = trim((string) ($upload['prefix'] ?? config('updater.backup.upload_prefix', 'updater/backups')), '/');
         $autoUpload = (bool) ($upload['auto_upload'] ?? false);
         if ($autoUpload) {
-            $this->tryUploadBackupFile($path, $disk, $prefix);
+            $this->tryUploadBackupFile($path, $prefix);
         }
 
         return [
@@ -509,11 +495,10 @@ class OperationsController extends Controller
         abort_if($backup === null, 404);
 
         $upload = $this->managerStore->backupUploadSettings();
-        $disk = (string) ($upload['disk'] ?? config('updater.backup.upload_disk', ''));
         $prefix = trim((string) ($upload['prefix'] ?? config('updater.backup.upload_prefix', 'updater/backups')), '/');
 
-        if ($disk === '') {
-            return back()->withErrors(['backup' => 'Nenhum disk configurado para upload em nuvem.']);
+        if ((string) ($upload['provider'] ?? 'none') === 'none') {
+            return back()->withErrors(['backup' => 'Nenhum provedor de nuvem configurado para upload.']);
         }
 
         $path = (string) ($backup['path'] ?? '');
@@ -522,10 +507,10 @@ class OperationsController extends Controller
         }
 
         try {
-            $this->tryUploadBackupFile($path, $disk, $prefix, true);
+            $this->tryUploadBackupFile($path, $prefix, true);
             $this->managerStore->addAuditLog($this->actorId($request), 'backup_upload_manual', [
                 'backup_id' => $id,
-                'disk' => $disk,
+                'provider' => $upload['provider'] ?? 'none',
             ], $request->ip(), $request->userAgent());
         } catch (\Throwable $e) {
             return back()->withErrors(['backup' => 'Falha no upload manual: ' . $e->getMessage()]);
@@ -534,27 +519,32 @@ class OperationsController extends Controller
         return back()->with('status', 'Upload do backup concluído com sucesso.');
     }
 
-    private function tryUploadBackupFile(string $path, string $disk, string $prefix, bool $throwOnFailure = false): void
+    private function tryUploadBackupFile(string $path, string $prefix, bool $throwOnFailure = false): void
     {
-        if ($disk === '' || !is_file($path)) {
+        if (!is_file($path)) {
             return;
         }
 
-        $remote = trim($prefix, '/') . '/' . basename($path);
+        $settings = $this->managerStore->backupUploadSettings();
+        if (trim((string) ($settings['provider'] ?? 'none')) === 'none') {
+            return;
+        }
+
+        $settings['prefix'] = $prefix;
 
         try {
-            $stream = fopen($path, 'rb');
-            if (!is_resource($stream)) {
-                return;
-            }
-            Storage::disk($disk)->put($remote, $stream);
-            fclose($stream);
+            $result = $this->cloudUploader->upload($path, $settings);
+            $this->stateStore->addRunLog(null, 'info', 'Backup enviado para nuvem com sucesso.', [
+                'provider' => $result['provider'] ?? ($settings['provider'] ?? 'n/a'),
+                'arquivo' => $path,
+                'remoto' => $result['remote_path'] ?? null,
+            ]);
         } catch (\Throwable $e) {
             if ($throwOnFailure) {
                 throw $e;
             }
             $this->stateStore->addRunLog(null, 'warning', 'Upload em nuvem falhou, mas o backup foi concluído localmente.', [
-                'disk' => $disk,
+                'provider' => $settings['provider'] ?? 'n/a',
                 'arquivo' => $path,
                 'erro' => $e->getMessage(),
             ]);

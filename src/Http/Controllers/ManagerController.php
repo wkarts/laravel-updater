@@ -464,21 +464,46 @@ class ManagerController extends Controller
     {
         $data = $request->validate([
             'provider' => ['required', 'in:none,dropbox,google-drive,s3,minio'],
-            'disk' => ['nullable', 'string', 'max:120'],
             'prefix' => ['nullable', 'string', 'max:190'],
             'auto_upload' => ['nullable', 'boolean'],
+            'dropbox_access_token' => ['nullable', 'string', 'max:500'],
+            'google_client_id' => ['nullable', 'string', 'max:255'],
+            'google_client_secret' => ['nullable', 'string', 'max:255'],
+            'google_refresh_token' => ['nullable', 'string', 'max:500'],
+            'google_folder_id' => ['nullable', 'string', 'max:255'],
+            's3_endpoint' => ['nullable', 'string', 'max:255'],
+            's3_region' => ['nullable', 'string', 'max:120'],
+            's3_bucket' => ['nullable', 'string', 'max:255'],
+            's3_access_key' => ['nullable', 'string', 'max:255'],
+            's3_secret_key' => ['nullable', 'string', 'max:255'],
+            's3_path_style' => ['nullable', 'boolean'],
         ]);
 
         $this->managerStore->saveBackupUploadSettings([
             'provider' => $data['provider'],
-            'disk' => (string) ($data['disk'] ?? ''),
             'prefix' => (string) ($data['prefix'] ?? 'updater/backups'),
             'auto_upload' => $request->boolean('auto_upload'),
+            'dropbox' => [
+                'access_token' => (string) ($data['dropbox_access_token'] ?? ''),
+            ],
+            'google_drive' => [
+                'client_id' => (string) ($data['google_client_id'] ?? ''),
+                'client_secret' => (string) ($data['google_client_secret'] ?? ''),
+                'refresh_token' => (string) ($data['google_refresh_token'] ?? ''),
+                'folder_id' => (string) ($data['google_folder_id'] ?? ''),
+            ],
+            's3' => [
+                'endpoint' => (string) ($data['s3_endpoint'] ?? ''),
+                'region' => (string) ($data['s3_region'] ?? 'us-east-1'),
+                'bucket' => (string) ($data['s3_bucket'] ?? ''),
+                'access_key' => (string) ($data['s3_access_key'] ?? ''),
+                'secret_key' => (string) ($data['s3_secret_key'] ?? ''),
+                'path_style' => $request->boolean('s3_path_style', true),
+            ],
         ]);
 
         $this->audit($request, $this->actorId($request), 'Configuração de upload de backups atualizada.', [
             'provider' => $data['provider'],
-            'disk' => (string) ($data['disk'] ?? ''),
             'auto_upload' => $request->boolean('auto_upload'),
         ]);
 
