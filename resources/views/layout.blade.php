@@ -1,31 +1,51 @@
-@php($managerStore = app(\Argws\LaravelUpdater\Support\ManagerStore::class))
-@php($branding = $branding ?? $managerStore->resolvedBranding())
-@php($user = request()->attributes->get('updater_user'))
-@php($perm = app(\Argws\LaravelUpdater\Support\UiPermission::class))
-@php($panelLogoUrl = !empty($branding['logo_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null))
-@php($panelFaviconUrl = !empty($branding['favicon_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null))
+@php
+    $managerStore = app(\Argws\LaravelUpdater\Support\ManagerStore::class);
+    $branding = $branding ?? $managerStore->resolvedBranding();
+    $user = request()->attributes->get('updater_user');
+    $perm = app(\Argws\LaravelUpdater\Support\UiPermission::class);
+    $panelLogoUrl = !empty($branding['logo_path'] ?? null)
+        ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl()
+        : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null);
+    $panelFaviconUrl = !empty($branding['favicon_path'] ?? null)
+        ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl()
+        : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null);
 
-@php($backupUpload = $managerStore->backupUploadSettings())
-@php($activeProfile = $managerStore->activeProfile())
-@php($activeSource = $managerStore->activeSource())
-@php($runtime = $managerStore->runtimeSettings())
-@php($connectedProvider = (string) ($backupUpload['provider'] ?? 'none'))
-@php($autoUpload = (bool) ($backupUpload['auto_upload'] ?? false))
-@php($credentialsConfigured = match($connectedProvider) {
-    'dropbox' => !empty($backupUpload['dropbox']['access_token']),
-    'google-drive' => !empty($backupUpload['google_drive']['client_id']) && !empty($backupUpload['google_drive']['client_secret']) && !empty($backupUpload['google_drive']['refresh_token']),
-    's3', 'minio' => !empty($backupUpload['s3']['endpoint']) && !empty($backupUpload['s3']['bucket']) && !empty($backupUpload['s3']['access_key']) && !empty($backupUpload['s3']['secret_key']),
-    default => false,
-})
+    $backupUpload = $managerStore->backupUploadSettings();
+    $activeProfile = $managerStore->activeProfile();
+    $activeSource = $managerStore->activeSource();
+    $runtime = $managerStore->runtimeSettings();
+    $connectedProvider = (string) ($backupUpload['provider'] ?? 'none');
+    $autoUpload = (bool) ($backupUpload['auto_upload'] ?? false);
 
-@php($updaterInstalled = 'n/d')
-@php($appGitHash = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' rev-parse --short HEAD 2>/dev/null')))
-@php($appGitTag = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' describe --tags --abbrev=0 2>/dev/null')))
-@php(
-    function_exists('class_exists') && class_exists('Composer\\InstalledVersions') ?
-        ($updaterInstalled = (\Composer\InstalledVersions::isInstalled('argws/laravel-updater') ? (\Composer\InstalledVersions::getPrettyVersion('argws/laravel-updater') ?: 'n/d') : 'n/d')) :
-        null
-)
+    $credentialsConfigured = false;
+    if ($connectedProvider === 'dropbox') {
+        $credentialsConfigured = !empty($backupUpload['dropbox']['access_token']);
+    } elseif ($connectedProvider === 'google-drive') {
+        $credentialsConfigured = !empty($backupUpload['google_drive']['client_id'])
+            && !empty($backupUpload['google_drive']['client_secret'])
+            && !empty($backupUpload['google_drive']['refresh_token']);
+    } elseif ($connectedProvider === 's3' || $connectedProvider === 'minio') {
+        $credentialsConfigured = !empty($backupUpload['s3']['endpoint'])
+            && !empty($backupUpload['s3']['bucket'])
+            && !empty($backupUpload['s3']['access_key'])
+            && !empty($backupUpload['s3']['secret_key']);
+    }
+
+    $updaterInstalled = 'n/d';
+    $appGitHash = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' rev-parse --short HEAD 2>/dev/null'));
+    $appGitTag = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' describe --tags --abbrev=0 2>/dev/null'));
+
+    if (class_exists('Composer\\InstalledVersions')) {
+        try {
+            if (\Composer\InstalledVersions::isInstalled('argws/laravel-updater')) {
+                $updaterInstalled = \Composer\InstalledVersions::getPrettyVersion('argws/laravel-updater') ?: 'n/d';
+            }
+        } catch (\Throwable $e) {
+            $updaterInstalled = 'n/d';
+        }
+    }
+@endphp
+
 <!doctype html>
 <html lang="pt-BR">
 <head>
