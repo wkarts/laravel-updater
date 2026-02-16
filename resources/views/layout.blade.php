@@ -71,6 +71,15 @@
     <link rel="stylesheet" href="{{ \Argws\LaravelUpdater\Support\UiAssets::cssUrl() }}">
 </head>
 <body>
+@if(($versionBar['enabled'] ?? false) && (($versionBar['position'] ?? 'top') === 'top'))
+    <div class="updater-version-bar">
+        <span>Updater instalado: <strong>{{ $versionBar['updater']['installed'] ?? 'n/d' }}</strong></span>
+        <span>Packagist: <strong>{{ $versionBar['updater']['latest'] ?? 'n/d' }}</strong></span>
+        <span>Laravel: <strong>{{ $versionBar['application']['framework_version'] ?? 'n/d' }}</strong></span>
+        <span>Tag: <strong>{{ $versionBar['application']['git_tag'] ?: 'sem tag' }}</strong></span>
+        <span>Hash: <strong>{{ $versionBar['application']['git_revision'] ?? 'n/d' }}</strong></span>
+    </div>
+@endif
 <div class="updater-app">
     <aside class="updater-sidebar" data-drawer>
         <div class="sidebar-brand">
@@ -185,6 +194,13 @@
         </section>
     </main>
 </div>
+@if(($versionBar['enabled'] ?? false) && (($versionBar['position'] ?? 'top') === 'bottom'))
+    <div class="updater-version-bar updater-version-bar-bottom">
+        <span>Updater {{ $versionBar['updater']['installed'] ?? 'n/d' }} · Packagist {{ $versionBar['updater']['latest'] ?? 'n/d' }}</span>
+        <span>Laravel {{ $versionBar['application']['framework_version'] ?? 'n/d' }} · {{ $versionBar['application']['git_tag'] ?: 'sem tag' }} · {{ $versionBar['application']['git_revision'] ?? 'n/d' }}</span>
+    </div>
+@endif
+
 
 <script>
 window.UPDATER_PREFIX = @json(trim((string) config('updater.ui.prefix', '_updater'), '/'));
