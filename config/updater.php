@@ -244,9 +244,9 @@ return [
         'render_view' => env('UPDATER_MAINTENANCE_VIEW', 'laravel-updater::maintenance'),
 
         // Basic message defaults used by the package maintenance view.
-        'default_title' => env('UPDATER_MAINTENANCE_TITLE', 'Atualização em andamento'),
-        'default_message' => env('UPDATER_MAINTENANCE_MESSAGE', 'Estamos atualizando o sistema. Volte em alguns minutos.'),
-        'default_footer' => env('UPDATER_MAINTENANCE_FOOTER', 'Obrigado pela compreensão.'),
+        'default_title' => env('UPDATER_MAINTENANCE_TITLE', 'Manutenção Programada do Sistema'),
+        'default_message' => env('UPDATER_MAINTENANCE_MESSAGE', "Estamos realizando uma atualização programada em nosso sistema para aprimorar desempenho, segurança e estabilidade.\n\nDurante este período, o acesso poderá ficar temporariamente indisponível.\nNossa equipe técnica está trabalhando para concluir o processo o mais breve possível.\n\nPedimos que retorne em alguns minutos."),
+        'default_footer' => env('UPDATER_MAINTENANCE_FOOTER', "Agradecemos sua compreensão e confiança.\nSeguimos comprometidos em oferecer uma plataforma cada vez mais eficiente e segura para você."),
         'logo_url' => env('UPDATER_MAINTENANCE_LOGO_URL', env('UPDATER_BRAND_LOGO_URL', '')),
         'enter_on_update_start' => (bool) env('UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START', true),
 
