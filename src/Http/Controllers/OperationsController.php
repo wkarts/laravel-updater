@@ -119,11 +119,11 @@ class OperationsController extends Controller
         ]);
 
         $actor = request()->attributes->get('updater_user');
-        abort_if(!is_array($actor) || !(bool) ($actor['is_admin'] ?? false), 403);
+        abort_if(!is_array($actor), 403);
 
         $user = $this->managerStore->findUser((int) $actor['id']);
         if ($user === null || !password_verify((string) $request->input('password'), (string) $user['password_hash'])) {
-            return back()->withErrors(['password' => 'Senha de administrador inválida.']);
+            return back()->withErrors(['password' => 'Senha do usuário inválida.']);
         }
 
         $pending = session()->get('updater_pending_approval_' . $id);
@@ -258,11 +258,11 @@ class OperationsController extends Controller
         ]);
 
         $actor = request()->attributes->get('updater_user');
-        abort_if(!is_array($actor) || !(bool) ($actor['is_admin'] ?? false), 403);
+        abort_if(!is_array($actor), 403);
 
         $user = $this->managerStore->findUser((int) $actor['id']);
         if ($user === null || !password_verify((string) $request->input('password'), (string) $user['password_hash'])) {
-            return back()->withErrors(['password' => 'Senha de administrador inválida.']);
+            return back()->withErrors(['password' => 'Senha do usuário inválida.']);
         }
 
         $backup = $this->findBackup($id);
@@ -401,7 +401,7 @@ class OperationsController extends Controller
     public function reapplySeed(Request $request): RedirectResponse
     {
         $actor = request()->attributes->get('updater_user');
-        abort_if(!is_array($actor) || !(bool) ($actor['is_admin'] ?? false), 403);
+        abort_if(!is_array($actor), 403);
 
         $request->validate(['seeder_class' => ['required', 'string']]);
         $seederClass = (string) $request->input('seeder_class');

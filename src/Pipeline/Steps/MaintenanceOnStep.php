@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Pipeline\Steps;
 
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
+use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ShellRunner;
 
 class MaintenanceOnStep implements PipelineStepInterface
 {
-    public function __construct(private readonly ShellRunner $shellRunner)
+    public function __construct(private readonly ShellRunner $shellRunner, private readonly ?MaintenanceMode $maintenanceMode = null)
     {
     }
 
@@ -34,12 +35,37 @@ class MaintenanceOnStep implements PipelineStepInterface
 
         $entered = false;
 
+        $downEnv = [
+            'REQUEST_URI' => '/',
+            'HTTP_HOST' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
+            'SERVER_NAME' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
+            'SERVER_PORT' => (string) (parse_url((string) config('app.url', 'http://localhost'), PHP_URL_PORT) ?: 80),
+            'HTTPS' => str_starts_with((string) config('app.url', 'http://localhost'), 'https://') ? 'on' : 'off',
+        ];
+
+        $includeExcept = true;
+
         foreach ($candidates as $view) {
             try {
-                $this->shellRunner->runOrFail(['php', 'artisan', 'down', '--render=' . $view]);
+                $this->shellRunner->runOrFail($this->downCommand($view, $includeExcept), env: $downEnv);
                 $entered = true;
                 break;
             } catch (\Throwable $e) {
+                if ($includeExcept && $this->hasExceptOptionError($e)) {
+                    $includeExcept = false;
+                    try {
+                        $this->shellRunner->runOrFail($this->downCommand($view, false), env: $downEnv);
+                        $entered = true;
+                        break;
+                    } catch (\Throwable $retryError) {
+                        $context['maintenance_on_error'][] = [
+                            'view' => $view,
+                            'error' => $retryError->getMessage(),
+                        ];
+                        continue;
+                    }
+                }
+
                 // Try next candidate (common failure: host view expects REQUEST_URI in CLI).
                 $context['maintenance_on_error'][] = [
                     'view' => $view,
@@ -50,10 +76,36 @@ class MaintenanceOnStep implements PipelineStepInterface
 
         if (!$entered) {
             // Last resort: enter maintenance without custom render.
-            $this->shellRunner->runOrFail(['php', 'artisan', 'down']);
+            $this->shellRunner->runOrFail($this->downCommand(null, $includeExcept), env: $downEnv);
         }
 
         $context['maintenance'] = true;
+    }
+
+
+    /** @return array<int,string> */
+    private function downCommand(?string $view = null, bool $includeExcept = true): array
+    {
+        if ($this->maintenanceMode !== null) {
+            return $this->maintenanceMode->downCommand($view, $includeExcept);
+        }
+
+        $command = ['php', 'artisan', 'down'];
+        if ($view !== null && trim($view) !== '') {
+            $command[] = '--render=' . trim($view);
+        }
+
+        return $command;
+    }
+
+
+    private function hasExceptOptionError(\Throwable $e): bool
+    {
+        if ($this->maintenanceMode !== null) {
+            return $this->maintenanceMode->hasExceptOptionError($e);
+        }
+
+        return str_contains(mb_strtolower($e->getMessage()), '--except');
     }
 
     public function rollback(array &$context): void

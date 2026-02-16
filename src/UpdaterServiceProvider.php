@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater;
 
 use Argws\LaravelUpdater\Commands\UpdateCheckCommand;
+use Argws\LaravelUpdater\Commands\UpdateEnvSyncCommand;
 use Argws\LaravelUpdater\Commands\UpdateNotifyCommand;
 use Argws\LaravelUpdater\Commands\UpdateRollbackCommand;
 use Argws\LaravelUpdater\Commands\UpdateRunCommand;
 use Argws\LaravelUpdater\Commands\UpdateStatusCommand;
+use Argws\LaravelUpdater\Commands\UpdaterMigrateCommand;
 use Argws\LaravelUpdater\Contracts\BackupDriverInterface;
 use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
 use Argws\LaravelUpdater\Contracts\LockInterface;
@@ -16,7 +18,12 @@ use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Drivers\MysqlBackupDriver;
 use Argws\LaravelUpdater\Drivers\PgsqlBackupDriver;
 use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthMiddleware;
+use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthorizeMiddleware;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
+use Argws\LaravelUpdater\Migration\IdempotentMigrationService;
+use Argws\LaravelUpdater\Migration\MigrationDriftDetector;
+use Argws\LaravelUpdater\Migration\MigrationFailureClassifier;
+use Argws\LaravelUpdater\Migration\MigrationReconciler;
 use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\AuthStore;
 use Argws\LaravelUpdater\Support\CacheLock;
@@ -24,6 +31,7 @@ use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\FileLock;
 use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\LoggerFactory;
+use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\PreflightChecker;
 use Argws\LaravelUpdater\Support\RunReportMailer;
@@ -31,6 +39,7 @@ use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\Totp;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
+use Argws\LaravelUpdater\Support\UiPermission;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
@@ -53,8 +62,10 @@ class UpdaterServiceProvider extends ServiceProvider
         });
         $this->app->singleton(AuthStore::class, fn () => new AuthStore($this->app->make(StateStore::class)));
         $this->app->singleton(ManagerStore::class, fn () => new ManagerStore($this->app->make(StateStore::class)));
+        $this->app->singleton(MaintenanceMode::class, fn () => new MaintenanceMode());
         $this->app->singleton('updater.store', fn () => $this->app->make(StateStore::class));
         $this->app->singleton(Totp::class, fn () => new Totp());
+        $this->app->singleton(UiPermission::class, fn () => new UiPermission());
 
         $this->app->singleton(LockInterface::class, function () {
             if ((string) config('updater.lock.driver', 'file') === 'cache') {
@@ -94,6 +105,18 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->app->singleton(RunReportMailer::class, fn () => new RunReportMailer());
 
+        $this->app->singleton(MigrationFailureClassifier::class, fn () => new MigrationFailureClassifier());
+        $this->app->singleton(MigrationDriftDetector::class, fn () => new MigrationDriftDetector($this->app['db']));
+        $this->app->singleton(MigrationReconciler::class, fn () => new MigrationReconciler($this->app['db']));
+        $this->app->singleton(IdempotentMigrationService::class, function () {
+            return new IdempotentMigrationService(
+                $this->app->make('migrator'),
+                $this->app->make(MigrationFailureClassifier::class),
+                $this->app->make(MigrationReconciler::class),
+                $this->app->make(MigrationDriftDetector::class)
+            );
+        });
+
         $this->app->singleton(TriggerDispatcher::class, function () {
             return new TriggerDispatcher((string) config('updater.trigger.driver', 'queue'), $this->app->make(StateStore::class));
         });
@@ -109,6 +132,7 @@ class UpdaterServiceProvider extends ServiceProvider
                 'logger' => $this->app->make(LoggerInterface::class),
                 'store' => $this->app->make(StateStore::class),
                 'manager_store' => $this->app->make(ManagerStore::class),
+                'maintenance_mode' => $this->app->make(MaintenanceMode::class),
             ];
 
             $kernel = new UpdaterKernel(
@@ -132,6 +156,7 @@ class UpdaterServiceProvider extends ServiceProvider
     public function boot(Router $router): void
     {
         $router->aliasMiddleware('updater.auth', UpdaterAuthMiddleware::class);
+        $router->aliasMiddleware('updater.authorize', UpdaterAuthorizeMiddleware::class);
 
         $this->publishes([
             __DIR__ . '/../config/updater.php' => config_path('updater.php'),
@@ -147,6 +172,7 @@ class UpdaterServiceProvider extends ServiceProvider
         ], 'updater-assets');
 
         $this->syncAssetsIfNeeded();
+        $this->syncPublishedResourcesIfNeeded();
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-updater');
         $this->loadRoutesFrom(__DIR__ . '/../routes/updater.php');
@@ -162,6 +188,8 @@ class UpdaterServiceProvider extends ServiceProvider
                 UpdateRollbackCommand::class,
                 UpdateStatusCommand::class,
                 UpdateNotifyCommand::class,
+                UpdateEnvSyncCommand::class,
+                UpdaterMigrateCommand::class,
             ]);
         }
     }
@@ -179,6 +207,58 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->copyAssetIfStale($sourceCss, $targetCss);
         $this->copyAssetIfStale($sourceJs, $targetJs);
+    }
+
+
+    private function syncPublishedResourcesIfNeeded(): void
+    {
+        if (!$this->app->runningInConsole()) {
+            return;
+        }
+
+        if (!(bool) config('updater.auto_publish.enabled', true)) {
+            return;
+        }
+
+        if ((bool) config('updater.auto_publish.config', true)) {
+            $this->copyAssetIfStale(__DIR__ . '/../config/updater.php', config_path('updater.php'));
+        }
+
+        if ((bool) config('updater.auto_publish.views', true)) {
+            $this->copyDirectoryIfStale(__DIR__ . '/../resources/views', resource_path('views/vendor/laravel-updater'));
+        }
+    }
+
+    private function copyDirectoryIfStale(string $sourceDir, string $targetDir): void
+    {
+        if (!is_dir($sourceDir)) {
+            return;
+        }
+
+        if (!is_dir($targetDir)) {
+            @mkdir($targetDir, 0755, true);
+        }
+
+        $entries = @scandir($sourceDir);
+        if (!is_array($entries)) {
+            return;
+        }
+
+        foreach ($entries as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+
+            $source = $sourceDir . '/' . $entry;
+            $target = $targetDir . '/' . $entry;
+
+            if (is_dir($source)) {
+                $this->copyDirectoryIfStale($source, $target);
+                continue;
+            }
+
+            $this->copyAssetIfStale($source, $target);
+        }
     }
 
     private function copyAssetIfStale(string $source, string $target): void
