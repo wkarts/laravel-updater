@@ -525,14 +525,12 @@ A view `laravel-updater::maintenance` agora possui fallback seguro: se o armazen
 ### Caso idempotente adicional: DROP INDEX inexistente (MySQL errno 1091)
 O migrador idempotente trata `Can't DROP ... check that column/key exists` (`errno 1091`) como drift idempotente no modo tolerante. Nesse caso, valida no `information_schema.STATISTICS` se o índice já está ausente, reconcilia a migration e segue o pipeline sem editar migrations antigas.
 
-
 ### Correção de entrada em manutenção (REQUEST_URI no CLI)
 Quando o host dispara erro `Undefined array key "REQUEST_URI"` durante `artisan down --render`, o updater agora injeta variáveis de servidor mínimas (`REQUEST_URI`, `HTTP_HOST`, `SERVER_NAME`, `SERVER_PORT`, `HTTPS`) no comando de manutenção. Com isso a aplicação volta a entrar em manutenção e exibir a view whitelabel do pacote.
 
 ### Caso idempotente adicional: tabela inexistente em DROP (SQLSTATE 42S02 / errno 1146)
 O classificador considera `42S02/1146` como idempotente **somente** quando o SQL indica operação de remoção segura (`drop table`, `drop index`, `alter table ... drop`, etc.).
 Se for consulta/uso normal (`select`, `update`, etc.), permanece `NON_RETRYABLE` para não mascarar erro real.
-
 
 ### Correção definitiva para erro de `ENCRYPTION_KEY` no `route:cache`
 Em alguns projetos, providers/helpers consultam `ENCRYPTION_KEY` via `env()/getenv()` durante comandos Artisan. Em execução não-interativa do updater, isso pode falhar mesmo com chave no `.env`.
@@ -548,9 +546,6 @@ Controle por `.env`:
 ```dotenv
 UPDATER_CACHE_IGNORE_ROUTE_CACHE_DUPLICATE_NAME=true
 ```
-
-
-
 ### Healthcheck em localhost durante update
 Para evitar falso negativo em ambientes onde `APP_URL`/healthcheck fica em `localhost`, o updater ignora healthcheck local por padrão.
 
