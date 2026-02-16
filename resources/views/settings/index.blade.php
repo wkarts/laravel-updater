@@ -70,9 +70,11 @@
                     </div>
 
         <div class="settings-side-stack">
-            @include('laravel-updater::settings.sources', ['activeSource' => $activeSource, 'sources' => $sources, 'profiles' => $profiles])
             @include('laravel-updater::settings.security')
             @include('laravel-updater::settings.tokens', ['tokens' => $tokens])
+            @once
+                @include('laravel-updater::settings.sources', ['activeSource' => $activeSource, 'sources' => $sources, 'profiles' => $profiles])
+            @endonce
         </div>
     </section>
 </div>
