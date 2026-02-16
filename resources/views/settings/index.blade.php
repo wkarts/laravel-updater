@@ -5,13 +5,15 @@
 
 @section('content')
 <div class="settings-stack">
-    <section class="settings-block settings-branding">
-        @include('laravel-updater::settings.branding', ['branding' => $branding])
-    </section>
+    <section class="settings-top-grid">
+        <div class="settings-block settings-branding">
+            @include('laravel-updater::settings.branding', ['branding' => $branding])
+        </div>
 
-    <section class="settings-grid-two">
-        @include('laravel-updater::settings.security')
-        @include('laravel-updater::settings.tokens', ['tokens' => $tokens])
+        <div class="settings-side-stack">
+            @include('laravel-updater::settings.security')
+            @include('laravel-updater::settings.tokens', ['tokens' => $tokens])
+        </div>
     </section>
 
     <section class="settings-block">

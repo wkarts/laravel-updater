@@ -42,9 +42,22 @@
 
         <hr>
 
-        <label><input type="checkbox" name="first_run_assume_behind" value="1" {{ (int) ($branding['first_run_assume_behind'] ?? 1) === 1 ? 'checked' : '' }}> Na primeira execução sem .git, assumir atualização pendente</label>
-        <input type="number" min="1" max="9999" name="first_run_assume_behind_commits" value="{{ (int) ($branding['first_run_assume_behind_commits'] ?? 1) }}" placeholder="Commits assumidos na primeira execução">
-        <label><input type="checkbox" name="enter_maintenance_on_update_start" value="1" {{ (int) ($branding['enter_maintenance_on_update_start'] ?? 1) === 1 ? 'checked' : '' }}> Entrar em manutenção no início da atualização</label>
+        <div class="settings-runtime-grid">
+            <label class="settings-toggle" for="first_run_assume_behind">
+                <input id="first_run_assume_behind" type="checkbox" name="first_run_assume_behind" value="1" {{ (int) ($branding['first_run_assume_behind'] ?? 1) === 1 ? 'checked' : '' }}>
+                <span>Na primeira execução sem .git, assumir atualização pendente</span>
+            </label>
+
+            <div class="settings-compact-field">
+                <label for="first_run_assume_behind_commits">Commits assumidos na primeira execução</label>
+                <input id="first_run_assume_behind_commits" type="number" min="1" max="9999" name="first_run_assume_behind_commits" value="{{ (int) ($branding['first_run_assume_behind_commits'] ?? 1) }}" placeholder="1">
+            </div>
+
+            <label class="settings-toggle" for="enter_maintenance_on_update_start">
+                <input id="enter_maintenance_on_update_start" type="checkbox" name="enter_maintenance_on_update_start" value="1" {{ (int) ($branding['enter_maintenance_on_update_start'] ?? 1) === 1 ? 'checked' : '' }}>
+                <span>Entrar em manutenção no início da atualização</span>
+            </label>
+        </div>
 
         <button class="btn btn-primary" type="submit">Salvar branding e comportamento</button>
     </form>
