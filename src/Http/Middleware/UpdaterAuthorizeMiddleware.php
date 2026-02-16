@@ -21,6 +21,12 @@ class UpdaterAuthorizeMiddleware
         }
 
         $user = (array) $request->attributes->get('updater_user', []);
+
+        // Mantém a dashboard acessível após login para evitar bloqueio no landing.
+        if (($request->route()?->getName() ?? '') === 'updater.index') {
+            return $next($request);
+        }
+
         $required = $this->permission->requiredPermissionForRoute($request->route()?->getName());
 
         if ($required !== null && !$this->permission->has($user, $required)) {

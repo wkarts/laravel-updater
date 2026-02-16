@@ -17,6 +17,10 @@
     $activeProfileName = 'n/d';
     $activeSourceName = 'n/d';
 
+    $localTag = '';
+    $remoteTag = 'n/d';
+    $updaterInstalled = 'n/d';
+
     try {
         $backupUpload = $managerStore->backupUploadSettings();
         $provider = (string) ($backupUpload['provider'] ?? 'none');
@@ -39,6 +43,24 @@
         $activeSource = $managerStore->activeSource();
         $activeProfileName = (string) ($activeProfile['name'] ?? 'n/d');
         $activeSourceName = (string) ($activeSource['name'] ?? 'n/d');
+
+        if (class_exists('Composer\InstalledVersions')) {
+            if (\Composer\InstalledVersions::isInstalled('argws/laravel-updater')) {
+                $updaterInstalled = \Composer\InstalledVersions::getPrettyVersion('argws/laravel-updater') ?: 'n/d';
+            }
+        }
+
+        $localTagOut = @shell_exec('git -C ' . escapeshellarg(base_path()) . ' describe --tags --abbrev=0 2>/dev/null');
+        $localTag = trim((string) $localTagOut);
+
+        $repoUrl = trim((string) ($activeSource['repo_url'] ?? ''));
+        if ($repoUrl !== '') {
+            $remoteTagOut = @shell_exec('git ls-remote --tags --refs ' . escapeshellarg($repoUrl) . ' 2>/dev/null | tail -n 1 | awk -F/ "{print $3}"');
+            $candidate = trim((string) $remoteTagOut);
+            if ($candidate !== '') {
+                $remoteTag = $candidate;
+            }
+        }
     } catch (\Throwable $e) {
         // Não interrompe a renderização da view principal.
     }
@@ -83,9 +105,7 @@
         </div>
 
         <nav class="sidebar-nav">
-            @if(!is_array($user) || $perm->has($user, 'dashboard.view'))
-                <a class="{{ request()->routeIs('updater.index') ? 'active' : '' }}" href="{{ route('updater.index') }}">▣ Dashboard</a>
-            @endif
+            <a class="{{ request()->routeIs('updater.index') ? 'active' : '' }}" href="{{ route('updater.index') }}">▣ Dashboard</a>
             @if(!is_array($user) || $perm->has($user, 'updates.view'))
                 <a class="{{ request()->route('section') === 'updates' ? 'active' : '' }}" href="{{ route('updater.section', 'updates') }}">↻ Atualizações</a>
             @endif
@@ -124,6 +144,9 @@
                     <li><span>Upload auto</span><strong>{{ $autoUpload ? 'ativo' : 'inativo' }}</strong></li>
                     <li><span>Fonte</span><strong>{{ $activeSourceName }}</strong></li>
                     <li><span>Perfil</span><strong>{{ $activeProfileName }}</strong></li>
+                    <li><span>Updater</span><strong>{{ $updaterInstalled }}</strong></li>
+                    <li><span>Tag local</span><strong>{{ $localTag !== '' ? $localTag : 'n/d' }}</strong></li>
+                    <li><span>Tag remota</span><strong>{{ $remoteTag }}</strong></li>
                     <li><span>Usuário</span><strong>{{ is_array($user) ? (($user['name'] ?? '') !== '' ? $user['name'] : ($user['email'] ?? '-')) : '-' }}</strong></li>
                     <li><span>Agora</span><strong id="updater-sidebar-now">{{ now()->format('d/m/Y H:i:s') }}</strong></li>
                 </ul>
