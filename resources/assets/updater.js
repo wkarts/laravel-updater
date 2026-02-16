@@ -41,20 +41,6 @@
         }
     });
 
-
-    const sidebarNow = document.getElementById('updater-sidebar-now');
-    function tickSidebarNow() {
-        if (!sidebarNow) {
-            return;
-        }
-        const now = new Date();
-        const d = now.toLocaleDateString('pt-BR');
-        const t = now.toLocaleTimeString('pt-BR');
-        sidebarNow.textContent = d + ' ' + t;
-    }
-    tickSidebarNow();
-    window.setInterval(tickSidebarNow, 1000);
-
     const progressFill = document.getElementById('update-progress-fill');
     const progressMessage = document.getElementById('update-progress-message');
     const progressLogs = document.getElementById('update-progress-logs');
