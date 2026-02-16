@@ -91,6 +91,75 @@ body {
 .sidebar-nav a:hover { background: var(--surface-soft); border-color: var(--line); }
 .sidebar-nav a.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
 
+.sidebar-meta-wrap {
+    margin-top: 10px;
+    padding-bottom: 6px;
+}
+
+.sidebar-meta-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface-soft);
+    padding: 8px;
+}
+
+.sidebar-meta-card h4 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.sidebar-meta-card ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 4px;
+}
+
+.sidebar-meta-card li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    border-bottom: 1px dashed var(--line);
+    padding-bottom: 3px;
+}
+
+.sidebar-meta-card li:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.sidebar-meta-card li span {
+    color: var(--muted);
+    line-height: 1.2;
+}
+
+.sidebar-meta-card li strong {
+    text-align: right;
+    font-weight: 600;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.status-led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex: 0 0 auto;
+}
+
+.status-led.led-ok { background: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,.18); }
+.status-led.led-error { background: #dc2626; box-shadow: 0 0 0 2px rgba(220,38,38,.18); }
+.status-led.led-off { background: #94a3b8; box-shadow: 0 0 0 2px rgba(148,163,184,.2); }
+
+
 .updater-main { margin-left: 278px; min-height: 100vh; }
 
 .updater-topbar {
@@ -534,6 +603,7 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         flex: 0 0 auto;
     }
     .sidebar-brand small { display: none; }
+    .sidebar-meta-card li { font-size: 11px; }
     .card { padding: 12px; }
     .permission-item { padding: 8px; }
 
@@ -682,28 +752,6 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     }
 }
 
-.updater-version-bar {
-    height: 18px;
-    font-size: 11px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    padding: 0 12px;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface-soft);
-    color: var(--muted);
-    overflow-x: auto;
-    white-space: nowrap;
-}
-.updater-version-bar-bottom {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-top: 1px solid var(--line);
-    border-bottom: 0;
-    z-index: 50;
-}
 
 .updater-modal[hidden] { display: none; }
 .updater-modal {

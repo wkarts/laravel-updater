@@ -174,69 +174,6 @@ class UpdaterUiController extends Controller
         }
     }
 
-    private function resolveVersionBarData(UpdaterKernel $kernel, array $status): array
-    {
-        $updaterInstalled = $this->installedPackageVersion('argws/laravel-updater') ?? 'desconhecida';
-        $updaterLatest = $this->fetchPackagistVersion('argws/laravel-updater');
-
-        $appVersion = app()->version();
-        $appHash = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' rev-parse --short HEAD 2>/dev/null'));
-        $appTag = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' describe --tags --abbrev=0 2>/dev/null'));
-
-        return [
-            'enabled' => (bool) config('updater.version_bar.enabled', true),
-            'position' => (string) config('updater.version_bar.position', 'top'),
-            'updater' => [
-                'installed' => $updaterInstalled,
-                'latest' => $updaterLatest,
-            ],
-            'application' => [
-                'framework_version' => $appVersion,
-                'git_revision' => $appHash !== '' ? $appHash : ($status['revision'] ?? 'N/A'),
-                'git_tag' => $appTag,
-            ],
-        ];
-    }
-
-    private function installedPackageVersion(string $package): ?string
-    {
-        if (!class_exists('Composer\InstalledVersions')) {
-            return null;
-        }
-
-        try {
-            if (!\Composer\InstalledVersions::isInstalled($package)) {
-                return null;
-            }
-
-            return \Composer\InstalledVersions::getPrettyVersion($package);
-        } catch (\Throwable $e) {
-            return null;
-        }
-    }
-
-    private function fetchPackagistVersion(string $package): string
-    {
-        $url = 'https://repo.packagist.org/p2/' . rawurlencode($package) . '.json';
-
-        try {
-            $response = @file_get_contents($url);
-            if (!is_string($response) || $response === '') {
-                return 'indisponível';
-            }
-
-            $data = json_decode($response, true);
-            $packages = (array) ($data['packages'][$package] ?? []);
-            if ($packages === []) {
-                return 'indisponível';
-            }
-
-            return (string) ($packages[0]['version'] ?? 'indisponível');
-        } catch (\Throwable $e) {
-            return 'indisponível';
-        }
-    }
-
     public function apiTrigger(Request $request, TriggerDispatcher $dispatcher): JsonResponse
     {
         $token = (string) $request->bearerToken();

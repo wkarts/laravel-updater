@@ -1,8 +1,59 @@
-@php($branding = $branding ?? app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding())
-@php($user = request()->attributes->get('updater_user'))
-@php($perm = app(\Argws\LaravelUpdater\Support\UiPermission::class))
-@php($panelLogoUrl = !empty($branding['logo_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null))
-@php($panelFaviconUrl = !empty($branding['favicon_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null))
+@php
+    $managerStore = app(\Argws\LaravelUpdater\Support\ManagerStore::class);
+    $branding = $branding ?? $managerStore->resolvedBranding();
+    $user = request()->attributes->get('updater_user');
+    $perm = app(\Argws\LaravelUpdater\Support\UiPermission::class);
+    $panelLogoUrl = !empty($branding['logo_path'] ?? null)
+        ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl()
+        : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null);
+    $panelFaviconUrl = !empty($branding['favicon_path'] ?? null)
+        ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl()
+        : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null);
+
+    // Card lateral: cálculo simples, sem alterar fluxo da aplicação.
+    $provider = 'none';
+    $autoUpload = false;
+    $cloudConnected = false;
+    $activeProfileName = 'n/d';
+    $activeSourceName = 'n/d';
+
+    try {
+        $backupUpload = $managerStore->backupUploadSettings();
+        $provider = (string) ($backupUpload['provider'] ?? 'none');
+        $autoUpload = (bool) ($backupUpload['auto_upload'] ?? false);
+
+        if ($provider === 'dropbox') {
+            $cloudConnected = !empty($backupUpload['dropbox']['access_token']);
+        } elseif ($provider === 'google-drive') {
+            $cloudConnected = !empty($backupUpload['google_drive']['client_id'])
+                && !empty($backupUpload['google_drive']['client_secret'])
+                && !empty($backupUpload['google_drive']['refresh_token']);
+        } elseif ($provider === 's3' || $provider === 'minio') {
+            $cloudConnected = !empty($backupUpload['s3']['endpoint'])
+                && !empty($backupUpload['s3']['bucket'])
+                && !empty($backupUpload['s3']['access_key'])
+                && !empty($backupUpload['s3']['secret_key']);
+        }
+
+        $activeProfile = $managerStore->activeProfile();
+        $activeSource = $managerStore->activeSource();
+        $activeProfileName = (string) ($activeProfile['name'] ?? 'n/d');
+        $activeSourceName = (string) ($activeSource['name'] ?? 'n/d');
+    } catch (\Throwable $e) {
+        // Não interrompe a renderização da view principal.
+    }
+
+    $cloudLedClass = 'led-off';
+    $cloudStatusText = 'desligado';
+    if ($provider !== 'none' && $cloudConnected) {
+        $cloudLedClass = 'led-ok';
+        $cloudStatusText = 'conectado';
+    } elseif ($provider !== 'none' && !$cloudConnected) {
+        $cloudLedClass = 'led-error';
+        $cloudStatusText = 'erro';
+    }
+@endphp
+
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -60,6 +111,24 @@
                 <a class="{{ request()->routeIs('updater.settings.*') ? 'active' : '' }}" href="{{ route('updater.settings.index') }}">✦ Configurações</a>
             @endif
         </nav>
+
+        <div class="sidebar-meta-wrap">
+            <section class="sidebar-meta-card">
+                <h4>Status</h4>
+                <ul>
+                    <li>
+                        <span>Nuvem backup</span>
+                        <strong><i class="status-led {{ $cloudLedClass }}"></i>{{ strtoupper($provider === 'none' ? 'desligado' : $provider) }}</strong>
+                    </li>
+                    <li><span>Conexão</span><strong>{{ $cloudStatusText }}</strong></li>
+                    <li><span>Upload auto</span><strong>{{ $autoUpload ? 'ativo' : 'inativo' }}</strong></li>
+                    <li><span>Fonte</span><strong>{{ $activeSourceName }}</strong></li>
+                    <li><span>Perfil</span><strong>{{ $activeProfileName }}</strong></li>
+                    <li><span>Usuário</span><strong>{{ is_array($user) ? (($user['name'] ?? '') !== '' ? $user['name'] : ($user['email'] ?? '-')) : '-' }}</strong></li>
+                    <li><span>Agora</span><strong id="updater-sidebar-now">{{ now()->format('d/m/Y H:i:s') }}</strong></li>
+                </ul>
+            </section>
+        </div>
     </aside>
 
     <div class="drawer-backdrop" data-close-drawer></div>
@@ -76,7 +145,7 @@
 
             <div class="topbar-actions">
                 @if(is_array($user))
-                    <span class="badge">{{ $user['email'] ?? '-' }}</span>
+                    <span class="badge">{{ ($user['name'] ?? '') !== '' ? $user['name'] : ($user['email'] ?? '-') }}</span>
                     <a class="btn btn-ghost" href="{{ route('updater.profile') }}">Perfil</a>
                     <form method="POST" action="{{ route('updater.logout') }}">@csrf <button class="btn btn-secondary" type="submit">Sair</button></form>
                 @endif
