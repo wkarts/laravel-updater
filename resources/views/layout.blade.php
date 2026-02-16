@@ -1,13 +1,16 @@
 @php($branding = $branding ?? app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding())
 @php($user = request()->attributes->get('updater_user'))
+@php($perm = app(\Argws\LaravelUpdater\Support\UiPermission::class))
+@php($panelLogoUrl = !empty($branding['logo_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null))
+@php($panelFaviconUrl = !empty($branding['favicon_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null))
 <!doctype html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>@yield('title', 'Updater Manager')</title>
-    @if(!empty($branding['favicon_path'] ?? null))
-        <link rel="icon" href="{{ \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() }}">
+    @if(!empty($panelFaviconUrl))
+        <link rel="icon" href="{{ $panelFaviconUrl }}">
     @endif
     <link rel="stylesheet" href="{{ \Argws\LaravelUpdater\Support\UiAssets::cssUrl() }}">
 </head>
@@ -16,8 +19,8 @@
     <aside class="updater-sidebar" data-drawer>
         <div class="sidebar-brand">
             <div class="sidebar-logo-wrap">
-                @if(!empty($branding['logo_path'] ?? null))
-                    <img src="{{ \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() }}" alt="Logo" class="sidebar-logo">
+                @if(!empty($panelLogoUrl))
+                    <img src="{{ $panelLogoUrl }}" alt="Logo" class="sidebar-logo" referrerpolicy="no-referrer">
                 @else
                     <div class="sidebar-logo-fallback">UP</div>
                 @endif
@@ -29,15 +32,33 @@
         </div>
 
         <nav class="sidebar-nav">
-            <a class="{{ request()->routeIs('updater.index') ? 'active' : '' }}" href="{{ route('updater.index') }}">▣ Dashboard</a>
-            <a class="{{ request()->route('section') === 'updates' ? 'active' : '' }}" href="{{ route('updater.section', 'updates') }}">↻ Atualizações</a>
-            <a class="{{ request()->route('section') === 'runs' ? 'active' : '' }}" href="{{ route('updater.section', 'runs') }}">◷ Execuções</a>
-            <a class="{{ request()->route('section') === 'sources' ? 'active' : '' }}" href="{{ route('updater.section', 'sources') }}">⌁ Fontes</a>
-            <a class="{{ request()->routeIs('updater.profiles.*') ? 'active' : '' }}" href="{{ route('updater.profiles.index') }}">⚙ Perfis</a>
-            <a class="{{ request()->route('section') === 'backups' ? 'active' : '' }}" href="{{ route('updater.section', 'backups') }}">⛁ Backups</a>
-            <a class="{{ request()->route('section') === 'logs' ? 'active' : '' }}" href="{{ route('updater.section', 'logs') }}">☰ Logs</a>
-            <a class="{{ request()->routeIs('updater.users.*') ? 'active' : '' }}" href="{{ route('updater.users.index') }}">👤 Usuários</a>
-            <a class="{{ request()->routeIs('updater.settings.*') ? 'active' : '' }}" href="{{ route('updater.settings.index') }}">✦ Configurações</a>
+            @if(!is_array($user) || $perm->has($user, 'dashboard.view'))
+                <a class="{{ request()->routeIs('updater.index') ? 'active' : '' }}" href="{{ route('updater.index') }}">▣ Dashboard</a>
+            @endif
+            @if(!is_array($user) || $perm->has($user, 'updates.view'))
+                <a class="{{ request()->route('section') === 'updates' ? 'active' : '' }}" href="{{ route('updater.section', 'updates') }}">↻ Atualizações</a>
+            @endif
+            @if(!is_array($user) || $perm->has($user, 'runs.view'))
+                <a class="{{ request()->route('section') === 'runs' ? 'active' : '' }}" href="{{ route('updater.section', 'runs') }}">◷ Execuções</a>
+            @endif
+            @if(!is_array($user) || $perm->has($user, 'sources.manage'))
+                <a class="{{ request()->route('section') === 'sources' ? 'active' : '' }}" href="{{ route('updater.section', 'sources') }}">⌁ Fontes</a>
+            @endif
+            @if(!is_array($user) || $perm->has($user, 'profiles.manage'))
+                <a class="{{ request()->routeIs('updater.profiles.*') ? 'active' : '' }}" href="{{ route('updater.profiles.index') }}">⚙ Perfis</a>
+            @endif
+            @if(!is_array($user) || $perm->has($user, 'backups.manage'))
+                <a class="{{ request()->route('section') === 'backups' ? 'active' : '' }}" href="{{ route('updater.section', 'backups') }}">⛁ Backups</a>
+            @endif
+            @if(!is_array($user) || $perm->has($user, 'logs.view'))
+                <a class="{{ request()->route('section') === 'logs' ? 'active' : '' }}" href="{{ route('updater.section', 'logs') }}">☰ Logs</a>
+            @endif
+            @if(!is_array($user) || $perm->has($user, 'users.manage'))
+                <a class="{{ request()->routeIs('updater.users.*') ? 'active' : '' }}" href="{{ route('updater.users.index') }}">👤 Usuários</a>
+            @endif
+            @if(!is_array($user) || $perm->has($user, 'settings.manage'))
+                <a class="{{ request()->routeIs('updater.settings.*') ? 'active' : '' }}" href="{{ route('updater.settings.index') }}">✦ Configurações</a>
+            @endif
         </nav>
     </aside>
 
