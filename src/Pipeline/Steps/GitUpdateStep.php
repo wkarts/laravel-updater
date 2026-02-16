@@ -117,8 +117,11 @@ class GitUpdateStep implements PipelineStepInterface
                 && $requestedTag !== ''
                 && (string) ($context['git_tag_before'] ?? '') === $requestedTag
                 && (string) ($context['git_tag_after'] ?? '') === $requestedTag;
+            $nowAtRequestedTag = $requestedUpdateType === 'git_tag'
+                && $requestedTag !== ''
+                && (string) ($context['git_tag_after'] ?? '') === $requestedTag;
 
-            if (!$allowNoChange && $hadPreviousRevision && !$alreadyAtRequestedTag) {
+            if (!$allowNoChange && $hadPreviousRevision && !$alreadyAtRequestedTag && !$nowAtRequestedTag) {
                 throw new \RuntimeException('Nenhuma atualização real foi aplicada (revision_before == revision_after). Cancelando execução para evitar falso sucesso.');
             }
         }
