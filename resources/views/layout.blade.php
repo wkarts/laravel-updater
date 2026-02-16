@@ -1,51 +1,8 @@
-@php
-    $managerStore = app(\Argws\LaravelUpdater\Support\ManagerStore::class);
-    $branding = $branding ?? $managerStore->resolvedBranding();
-    $user = request()->attributes->get('updater_user');
-    $perm = app(\Argws\LaravelUpdater\Support\UiPermission::class);
-    $panelLogoUrl = !empty($branding['logo_path'] ?? null)
-        ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl()
-        : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null);
-    $panelFaviconUrl = !empty($branding['favicon_path'] ?? null)
-        ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl()
-        : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null);
-
-    $backupUpload = $managerStore->backupUploadSettings();
-    $activeProfile = $managerStore->activeProfile();
-    $activeSource = $managerStore->activeSource();
-    $runtime = $managerStore->runtimeSettings();
-    $connectedProvider = (string) ($backupUpload['provider'] ?? 'none');
-    $autoUpload = (bool) ($backupUpload['auto_upload'] ?? false);
-
-    $credentialsConfigured = false;
-    if ($connectedProvider === 'dropbox') {
-        $credentialsConfigured = !empty($backupUpload['dropbox']['access_token']);
-    } elseif ($connectedProvider === 'google-drive') {
-        $credentialsConfigured = !empty($backupUpload['google_drive']['client_id'])
-            && !empty($backupUpload['google_drive']['client_secret'])
-            && !empty($backupUpload['google_drive']['refresh_token']);
-    } elseif ($connectedProvider === 's3' || $connectedProvider === 'minio') {
-        $credentialsConfigured = !empty($backupUpload['s3']['endpoint'])
-            && !empty($backupUpload['s3']['bucket'])
-            && !empty($backupUpload['s3']['access_key'])
-            && !empty($backupUpload['s3']['secret_key']);
-    }
-
-    $updaterInstalled = 'n/d';
-    $appGitHash = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' rev-parse --short HEAD 2>/dev/null'));
-    $appGitTag = trim((string) @shell_exec('git -C ' . escapeshellarg(base_path()) . ' describe --tags --abbrev=0 2>/dev/null'));
-
-    if (class_exists('Composer\\InstalledVersions')) {
-        try {
-            if (\Composer\InstalledVersions::isInstalled('argws/laravel-updater')) {
-                $updaterInstalled = \Composer\InstalledVersions::getPrettyVersion('argws/laravel-updater') ?: 'n/d';
-            }
-        } catch (\Throwable $e) {
-            $updaterInstalled = 'n/d';
-        }
-    }
-@endphp
-
+@php($branding = $branding ?? app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding())
+@php($user = request()->attributes->get('updater_user'))
+@php($perm = app(\Argws\LaravelUpdater\Support\UiPermission::class))
+@php($panelLogoUrl = !empty($branding['logo_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null))
+@php($panelFaviconUrl = !empty($branding['favicon_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null))
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -58,15 +15,6 @@
     <link rel="stylesheet" href="{{ \Argws\LaravelUpdater\Support\UiAssets::cssUrl() }}">
 </head>
 <body>
-@if(($versionBar['enabled'] ?? false) && (($versionBar['position'] ?? 'top') === 'top'))
-    <div class="updater-version-bar">
-        <span>Updater instalado: <strong>{{ $versionBar['updater']['installed'] ?? 'n/d' }}</strong></span>
-        <span>Packagist: <strong>{{ $versionBar['updater']['latest'] ?? 'n/d' }}</strong></span>
-        <span>Laravel: <strong>{{ $versionBar['application']['framework_version'] ?? 'n/d' }}</strong></span>
-        <span>Tag: <strong>{{ $versionBar['application']['git_tag'] ?: 'sem tag' }}</strong></span>
-        <span>Hash: <strong>{{ $versionBar['application']['git_revision'] ?? 'n/d' }}</strong></span>
-    </div>
-@endif
 <div class="updater-app">
     <aside class="updater-sidebar" data-drawer>
         <div class="sidebar-brand">
@@ -112,30 +60,6 @@
                 <a class="{{ request()->routeIs('updater.settings.*') ? 'active' : '' }}" href="{{ route('updater.settings.index') }}">✦ Configurações</a>
             @endif
         </nav>
-
-        <div class="sidebar-meta-wrap">
-            <section class="sidebar-meta-card">
-                <h4>Resumo técnico</h4>
-                <ul>
-                    <li><span>Nuvem conectada</span><strong>{{ $connectedProvider === 'none' ? 'Desabilitada' : strtoupper($connectedProvider) }}</strong></li>
-                    <li><span>Credenciais</span><strong>{{ $credentialsConfigured ? 'Configuradas' : 'Incompletas' }}</strong></li>
-                    <li><span>Upload automático</span><strong>{{ $autoUpload ? 'Ativo' : 'Inativo' }}</strong></li>
-                    <li><span>Fonte ativa</span><strong>{{ $activeSource['name'] ?? 'n/d' }}</strong></li>
-                    <li><span>Perfil ativo</span><strong>{{ $activeProfile['name'] ?? 'n/d' }}</strong></li>
-                    <li><span>Manutenção no update</span><strong>{{ ((bool) ($runtime['maintenance']['enter_on_update_start'] ?? true)) ? 'Ativa' : 'Inativa' }}</strong></li>
-                    <li><span>Status cURL</span><strong>{{ extension_loaded('curl') ? 'OK' : 'Indisponível' }}</strong></li>
-                    <li><span>Status OpenSSL</span><strong>{{ extension_loaded('openssl') ? 'OK' : 'Indisponível' }}</strong></li>
-                    <li><span>Status ZIP</span><strong>{{ extension_loaded('zip') ? 'OK' : 'Indisponível' }}</strong></li>
-                    <li><span>Laravel</span><strong>{{ app()->version() }}</strong></li>
-                    <li><span>Updater</span><strong>{{ $updaterInstalled }}</strong></li>
-                    <li><span>PHP</span><strong>{{ PHP_VERSION }}</strong></li>
-                    <li><span>Tag Git</span><strong>{{ $appGitTag !== '' ? $appGitTag : 'sem tag' }}</strong></li>
-                    <li><span>Hash Git</span><strong>{{ $appGitHash !== '' ? $appGitHash : 'n/d' }}</strong></li>
-                    <li><span>Usuário</span><strong>{{ is_array($user) ? (($user['name'] ?? '') !== '' ? $user['name'] : ($user['email'] ?? '-')) : '-' }}</strong></li>
-                    <li><span>Data/Hora</span><strong id="updater-sidebar-now">{{ now()->format('d/m/Y H:i:s') }}</strong></li>
-                </ul>
-            </section>
-        </div>
     </aside>
 
     <div class="drawer-backdrop" data-close-drawer></div>
@@ -152,7 +76,7 @@
 
             <div class="topbar-actions">
                 @if(is_array($user))
-                    <span class="badge">{{ ($user['name'] ?? '') !== '' ? $user['name'] : ($user['email'] ?? '-') }}</span>
+                    <span class="badge">{{ $user['email'] ?? '-' }}</span>
                     <a class="btn btn-ghost" href="{{ route('updater.profile') }}">Perfil</a>
                     <form method="POST" action="{{ route('updater.logout') }}">@csrf <button class="btn btn-secondary" type="submit">Sair</button></form>
                 @endif
@@ -181,13 +105,6 @@
         </section>
     </main>
 </div>
-@if(($versionBar['enabled'] ?? false) && (($versionBar['position'] ?? 'top') === 'bottom'))
-    <div class="updater-version-bar updater-version-bar-bottom">
-        <span>Updater {{ $versionBar['updater']['installed'] ?? 'n/d' }} · Packagist {{ $versionBar['updater']['latest'] ?? 'n/d' }}</span>
-        <span>Laravel {{ $versionBar['application']['framework_version'] ?? 'n/d' }} · {{ $versionBar['application']['git_tag'] ?: 'sem tag' }} · {{ $versionBar['application']['git_revision'] ?? 'n/d' }}</span>
-    </div>
-@endif
-
 
 <script>
 window.UPDATER_PREFIX = @json(trim((string) config('updater.ui.prefix', '_updater'), '/'));

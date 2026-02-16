@@ -91,56 +91,6 @@ body {
 .sidebar-nav a:hover { background: var(--surface-soft); border-color: var(--line); }
 .sidebar-nav a.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
 
-.sidebar-meta-wrap {
-    margin-top: 16px;
-    padding-bottom: 10px;
-}
-
-.sidebar-meta-card {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--surface-soft);
-    padding: 10px;
-}
-
-.sidebar-meta-card h4 {
-    margin: 0 0 8px;
-    font-size: 13px;
-}
-
-.sidebar-meta-card ul {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 6px;
-}
-
-.sidebar-meta-card li {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 11px;
-    border-bottom: 1px dashed var(--line);
-    padding-bottom: 4px;
-}
-
-.sidebar-meta-card li:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
-}
-
-.sidebar-meta-card li span {
-    color: var(--muted);
-}
-
-.sidebar-meta-card li strong {
-    text-align: right;
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
-
 .updater-main { margin-left: 278px; min-height: 100vh; }
 
 .updater-topbar {
@@ -584,7 +534,6 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         flex: 0 0 auto;
     }
     .sidebar-brand small { display: none; }
-    .sidebar-meta-card li { font-size: 12px; }
     .card { padding: 12px; }
     .permission-item { padding: 8px; }
 
@@ -733,6 +682,28 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     }
 }
 
+.updater-version-bar {
+    height: 18px;
+    font-size: 11px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--muted);
+    overflow-x: auto;
+    white-space: nowrap;
+}
+.updater-version-bar-bottom {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 0;
+    z-index: 50;
+}
 
 .updater-modal[hidden] { display: none; }
 .updater-modal {

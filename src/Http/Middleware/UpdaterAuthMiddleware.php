@@ -40,7 +40,6 @@ class UpdaterAuthMiddleware
         $user = [
             'id' => (int) $session['user_id'],
             'email' => $session['email'],
-            'name' => $session['name'] ?? null,
             'is_admin' => (int) $session['is_admin'] === 1,
             'permissions' => $permissions,
             'permissions_json' => $session['permissions_json'] ?? null,
