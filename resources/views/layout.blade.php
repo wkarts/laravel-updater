@@ -1,15 +1,10 @@
+@php($branding = $branding ?? app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding())
+@php($user = request()->attributes->get('updater_user'))
+@php($perm = app(\Argws\LaravelUpdater\Support\UiPermission::class))
+@php($panelLogoUrl = !empty($branding['logo_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl() : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null))
+@php($panelFaviconUrl = !empty($branding['favicon_path'] ?? null) ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl() : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null))
 @php
     $managerStore = app(\Argws\LaravelUpdater\Support\ManagerStore::class);
-    $branding = $branding ?? $managerStore->resolvedBranding();
-    $user = request()->attributes->get('updater_user');
-    $perm = app(\Argws\LaravelUpdater\Support\UiPermission::class);
-    $panelLogoUrl = !empty($branding['logo_path'] ?? null)
-        ? \Argws\LaravelUpdater\Support\UiAssets::brandingLogoUrl()
-        : (!empty($branding['logo_url'] ?? null) ? (string) $branding['logo_url'] : null);
-    $panelFaviconUrl = !empty($branding['favicon_path'] ?? null)
-        ? \Argws\LaravelUpdater\Support\UiAssets::faviconUrl()
-        : (!empty($branding['favicon_url'] ?? null) ? (string) $branding['favicon_url'] : null);
-
     $backupUpload = $managerStore->backupUploadSettings();
     $activeProfile = $managerStore->activeProfile();
     $activeSource = $managerStore->activeSource();
