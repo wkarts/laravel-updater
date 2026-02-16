@@ -41,15 +41,15 @@ class ShellRunner
             throw new UpdaterException('Comando inválido: vazio.');
         }
 
-        // Em ambientes não-interativos (Supervisor, cron, PHP-FPM), o PATH pode vir reduzido.
-        // Isso causa exit code 127 (command not found) mesmo com o binário instalado.
-        // Aqui fazemos um fallback seguro, preservando o PATH original e garantindo diretórios comuns.
-        $env = $this->normalizeEnv($env);
-
-        $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
         $workingDirectory = $cwd ?? getcwd();
 
-        $process = @proc_open($command, $descriptor, $pipes, $workingDirectory ?: '.', $env === [] ? null : $env);
+        // Em ambientes não-interativos (Supervisor, cron, PHP-FPM), o PATH pode vir reduzido.
+        // Isso causa exit code 127 (command not found) mesmo com o binário instalado.
+        // Também fazemos merge com o ambiente já existente do processo para não perder variáveis do host.
+        $env = $this->normalizeEnv($env, $workingDirectory ?: '.');
+
+        $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
+        $process = @proc_open($command, $descriptor, $pipes, $workingDirectory ?: '.', $env);
 
         if (!is_resource($process)) {
             // Quando o executável não existe (ex.: composer não está no PATH), o proc_open pode falhar.
@@ -72,9 +72,10 @@ class ShellRunner
     }
 
     /** @param array<string, string> $env */
-    private function normalizeEnv(array $env): array
+    private function normalizeEnv(array $env, ?string $cwd = null): array
     {
-        $final = $env;
+        $inherited = $this->inheritedEnvironment();
+        $final = array_merge($inherited, $env);
 
         $path = $final['PATH'] ?? (getenv('PATH') ?: '');
 
@@ -127,8 +128,13 @@ class ShellRunner
             @mkdir($final['COMPOSER_CACHE_DIR'], 0775, true);
         }
 
-        $common[] = rtrim((string) $final['HOME'], '/').'/bin';
-        $common[] = rtrim((string) $final['COMPOSER_HOME'], '/').'/vendor/bin';
+        // Fallback para chaves lidas via getenv()/env() em providers/helpers do host.
+        // Evita falha de comandos de cache quando o host usa ENCRYPTION_KEY fora de config.
+        $this->hydrateKeyFromDotEnv($final, 'ENCRYPTION_KEY', $cwd);
+        $this->hydrateKeyFromDotEnv($final, 'APP_KEY', $cwd);
+
+        $common[] = rtrim((string) $final['HOME'], '/') . '/bin';
+        $common[] = rtrim((string) $final['COMPOSER_HOME'], '/') . '/vendor/bin';
 
         $parts = array_values(array_filter(explode(':', (string) $path), static fn ($p) => trim((string) $p) !== ''));
 
@@ -141,6 +147,69 @@ class ShellRunner
         $final['PATH'] = implode(':', $parts);
 
         return $final;
+    }
+
+    /** @param array<string, string> $env */
+    private function hydrateKeyFromDotEnv(array &$env, string $key, ?string $cwd = null): void
+    {
+        if (($env[$key] ?? '') !== '') {
+            return;
+        }
+
+        $root = $cwd ?: (getcwd() ?: '.');
+        $dotEnvPath = rtrim($root, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.env';
+        if (!is_file($dotEnvPath)) {
+            return;
+        }
+
+        $contents = @file_get_contents($dotEnvPath);
+        if (!is_string($contents) || $contents === '') {
+            return;
+        }
+
+        $pattern = '/^' . preg_quote($key, '/') . '=([^\r\n]*)/m';
+        if (preg_match($pattern, $contents, $matches) !== 1) {
+            return;
+        }
+
+        $value = trim((string) $matches[1]);
+        $value = trim($value, "\"'");
+        if ($value !== '') {
+            $env[$key] = $value;
+        }
+    }
+
+    /** @return array<string,string> */
+    private function inheritedEnvironment(): array
+    {
+        $base = [];
+        $all = getenv();
+        if (is_array($all)) {
+            foreach ($all as $k => $v) {
+                if (!is_string($k)) {
+                    continue;
+                }
+                if (is_string($v) || is_numeric($v)) {
+                    $base[$k] = (string) $v;
+                }
+            }
+        }
+
+        foreach ([$_ENV ?? [], $_SERVER ?? []] as $source) {
+            if (!is_array($source)) {
+                continue;
+            }
+            foreach ($source as $k => $v) {
+                if (!is_string($k)) {
+                    continue;
+                }
+                if (is_string($v) || is_numeric($v)) {
+                    $base[$k] = (string) $v;
+                }
+            }
+        }
+
+        return $base;
     }
 
     /** @param array<string, string> $env */

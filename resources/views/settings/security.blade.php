@@ -7,7 +7,7 @@
 </div>
 
 
-<div class="card" style="margin-top:12px;">
+<div class="card settings-subcard">
     <h3>Guia rápido de ambiente</h3>
     <p class="muted"><strong>Produção:</strong> prefira <code>UPDATER_TRIGGER_DRIVER=queue</code> e <code>UPDATER_UI_FORCE_SYNC=false</code>.</p>
     <p class="muted"><strong>Homologação:</strong> use <code>UPDATER_TRIGGER_DRIVER=sync</code> para retorno imediato na interface.</p>
