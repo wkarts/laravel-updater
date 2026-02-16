@@ -174,6 +174,30 @@ class UpdaterUiController extends Controller
         }
     }
 
+
+    /**
+     * Retrocompatibilidade com instalações antigas/publicadas que ainda chamam este método.
+     *
+     * @param array<string,mixed> $status
+     * @return array<string,mixed>
+     */
+    public function resolveVersionBarData(UpdaterKernel $kernel, array $status = []): array
+    {
+        return [
+            'enabled' => false,
+            'position' => 'top',
+            'updater' => [
+                'installed' => 'n/d',
+                'latest' => 'n/d',
+            ],
+            'application' => [
+                'framework_version' => app()->version(),
+                'git_revision' => (string) ($status['revision'] ?? 'n/d'),
+                'git_tag' => '',
+            ],
+        ];
+    }
+
     public function apiTrigger(Request $request, TriggerDispatcher $dispatcher): JsonResponse
     {
         $token = (string) $request->bearerToken();

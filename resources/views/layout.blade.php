@@ -53,13 +53,11 @@
         $localTagOut = @shell_exec('git -C ' . escapeshellarg(base_path()) . ' describe --tags --abbrev=0 2>/dev/null');
         $localTag = trim((string) $localTagOut);
 
-        $repoUrl = trim((string) ($activeSource['repo_url'] ?? ''));
-        if ($repoUrl !== '') {
-            $remoteTagOut = @shell_exec('git ls-remote --tags --refs ' . escapeshellarg($repoUrl) . ' 2>/dev/null | tail -n 1 | awk -F/ "{print $3}"');
-            $candidate = trim((string) $remoteTagOut);
-            if ($candidate !== '') {
-                $remoteTag = $candidate;
-            }
+        // Evita bloqueio/timeout de renderização da sidebar por consulta remota.
+        // Exibe apenas um indicativo rápido baseado na fonte ativa.
+        $remoteTag = trim((string) ($activeSource['branch'] ?? ''));
+        if ($remoteTag === '') {
+            $remoteTag = 'n/d';
         }
     } catch (\Throwable $e) {
         // Não interrompe a renderização da view principal.
@@ -146,7 +144,7 @@
                     <li><span>Perfil</span><strong>{{ $activeProfileName }}</strong></li>
                     <li><span>Updater</span><strong>{{ $updaterInstalled }}</strong></li>
                     <li><span>Tag local</span><strong>{{ $localTag !== '' ? $localTag : 'n/d' }}</strong></li>
-                    <li><span>Tag remota</span><strong>{{ $remoteTag }}</strong></li>
+                    <li><span>Ref remota</span><strong>{{ $remoteTag }}</strong></li>
                     <li><span>Usuário</span><strong>{{ is_array($user) ? (($user['name'] ?? '') !== '' ? $user['name'] : ($user['email'] ?? '-')) : '-' }}</strong></li>
                     <li><span>Agora</span><strong id="updater-sidebar-now">{{ now()->format('d/m/Y H:i:s') }}</strong></li>
                 </ul>
