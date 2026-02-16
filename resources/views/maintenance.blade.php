@@ -15,11 +15,30 @@
 
         $primary = $branding['primary_color'] ?? (string) config('updater.app.primary_color', '#0d6efd');
 
-        // Mesma parametrização de branding do painel, com prioridade para logo dedicado da manutenção.
+        // Mesma parametrização do branding, com prioridade para logo dedicada da manutenção.
+        // Importante: durante manutenção nem sempre as rotas do updater estão acessíveis,
+        // então priorizamos data URI para uploads locais.
         $logoUrl = null;
+
+        $buildDataUri = static function (string $path): ?string {
+            if (!is_file($path) || !is_readable($path)) {
+                return null;
+            }
+
+            $content = @file_get_contents($path);
+            if ($content === false || $content === '') {
+                return null;
+            }
+
+            $mime = @mime_content_type($path) ?: 'image/png';
+
+            return 'data:' . $mime . ';base64,' . base64_encode($content);
+        };
+
         if (!empty($branding['maintenance_logo_path'])) {
             try {
-                $logoUrl = route('updater.branding.maintenance_logo');
+                $localPath = \Illuminate\Support\Facades\Storage::path((string) $branding['maintenance_logo_path']);
+                $logoUrl = $buildDataUri($localPath);
             } catch (\Throwable $e) {
                 $logoUrl = null;
             }
@@ -31,7 +50,8 @@
 
         if (empty($logoUrl) && !empty($branding['logo_path'])) {
             try {
-                $logoUrl = route('updater.branding.logo');
+                $localPath = \Illuminate\Support\Facades\Storage::path((string) $branding['logo_path']);
+                $logoUrl = $buildDataUri($localPath);
             } catch (\Throwable $e) {
                 $logoUrl = null;
             }
