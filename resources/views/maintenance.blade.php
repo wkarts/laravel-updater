@@ -79,7 +79,7 @@
         .wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding: 24px; }
         .card { width: 100%; max-width: 520px; background: var(--card); border: 1px solid rgba(255,255,255,.10); border-radius: 18px; padding: 22px; box-shadow: 0 20px 70px rgba(0,0,0,.35); }
         .top { display:flex; gap: 14px; align-items:center; }
-        .logo { width: 52px; height: 52px; border-radius: 14px; background: rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center; overflow:hidden; flex: 0 0 52px; }
+        .logo { width: 84px; height: 84px; border-radius: 18px; background: rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center; overflow:hidden; flex: 0 0 84px; }
         .logo img { width: 100%; height: 100%; object-fit: cover; }
         .name { font-weight: 700; font-size: 18px; line-height: 1.15; }
         .desc { color: var(--muted); font-size: 13px; margin-top: 2px; }
