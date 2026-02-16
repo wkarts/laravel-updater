@@ -240,6 +240,7 @@ class AuthController extends Controller
         return [
             'id' => (int) $session['user_id'],
             'email' => $session['email'],
+            'name' => $session['name'] ?? null,
             'is_admin' => (int) $session['is_admin'] === 1,
             'totp_enabled' => (int) $session['totp_enabled'] === 1,
             'totp_secret' => $session['totp_secret'],

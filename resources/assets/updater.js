@@ -41,6 +41,20 @@
         }
     });
 
+
+    const sidebarNow = document.getElementById('updater-sidebar-now');
+    function tickSidebarNow() {
+        if (!sidebarNow) {
+            return;
+        }
+        const now = new Date();
+        const d = now.toLocaleDateString('pt-BR');
+        const t = now.toLocaleTimeString('pt-BR');
+        sidebarNow.textContent = d + ' ' + t;
+    }
+    tickSidebarNow();
+    window.setInterval(tickSidebarNow, 1000);
+
     const progressFill = document.getElementById('update-progress-fill');
     const progressMessage = document.getElementById('update-progress-message');
     const progressLogs = document.getElementById('update-progress-logs');
@@ -107,6 +121,70 @@
     if (progressFill && progressMessage) {
         pollProgress();
         window.setInterval(pollProgress, 3000);
+    }
+
+
+    const maintenanceModal = document.getElementById('maintenance-modal');
+    const maintenanceConfirmBtn = document.getElementById('maintenance-confirm-btn');
+    const maintenanceConfirmationInput = document.getElementById('maintenance-confirmation-input');
+    const maintenance2faInput = document.getElementById('maintenance-2fa-input');
+    let activeMaintenanceForm = null;
+
+    function closeMaintenanceModal() {
+        if (!maintenanceModal) {
+            return;
+        }
+        maintenanceModal.hidden = true;
+        activeMaintenanceForm = null;
+    }
+
+    document.querySelectorAll('[data-maintenance-form]').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (!maintenanceModal) {
+                return;
+            }
+            event.preventDefault();
+            activeMaintenanceForm = form;
+            maintenanceModal.hidden = false;
+            if (maintenanceConfirmationInput) {
+                maintenanceConfirmationInput.value = '';
+                maintenanceConfirmationInput.focus();
+            }
+            if (maintenance2faInput) {
+                maintenance2faInput.value = '';
+            }
+        });
+    });
+
+    document.querySelectorAll('[data-maintenance-close]').forEach(function (node) {
+        node.addEventListener('click', closeMaintenanceModal);
+    });
+
+    if (maintenanceConfirmBtn) {
+        maintenanceConfirmBtn.addEventListener('click', function () {
+            if (!activeMaintenanceForm) {
+                return;
+            }
+
+            const confirmation = (maintenanceConfirmationInput && maintenanceConfirmationInput.value || '').trim();
+            if (confirmation.toUpperCase() !== 'MANTENCAO') {
+                window.alert('Digite MANTENCAO para confirmar.');
+                return;
+            }
+
+            const hiddenConfirmation = activeMaintenanceForm.querySelector('input[name="maintenance_confirmation"]');
+            if (hiddenConfirmation) {
+                hiddenConfirmation.value = confirmation;
+            }
+
+            const hidden2fa = activeMaintenanceForm.querySelector('input[name="maintenance_2fa_code"]');
+            if (hidden2fa && maintenance2faInput) {
+                hidden2fa.value = maintenance2faInput.value.trim();
+            }
+
+            closeMaintenanceModal();
+            activeMaintenanceForm.submit();
+        });
     }
 
     window.setTimeout(function () {

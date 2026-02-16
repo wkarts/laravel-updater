@@ -7,6 +7,8 @@ namespace Argws\LaravelUpdater\Http\Controllers;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ManagerStore;
+use Argws\LaravelUpdater\Support\AuthStore;
+use Argws\LaravelUpdater\Support\Totp;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Illuminate\Http\JsonResponse;
@@ -20,7 +22,9 @@ class UpdaterUiController extends Controller
 {
     public function __construct(
         private readonly ManagerStore $managerStore,
-        private readonly MaintenanceMode $maintenanceMode
+        private readonly MaintenanceMode $maintenanceMode,
+        private readonly Totp $totp,
+        private readonly AuthStore $authStore
     ) {
     }
 
@@ -112,7 +116,6 @@ class UpdaterUiController extends Controller
 
     public function maintenanceOn(Request $request, ShellRunner $shellRunner): RedirectResponse
     {
-        $this->requireTwoFactorEnabled($request);
         $this->validateMaintenanceConfirmation($request);
 
         $view = (string) config('updater.maintenance.render_view', 'laravel-updater::maintenance');
@@ -132,7 +135,6 @@ class UpdaterUiController extends Controller
 
     public function maintenanceOff(Request $request, ShellRunner $shellRunner): RedirectResponse
     {
-        $this->requireTwoFactorEnabled($request);
         $this->validateMaintenanceConfirmation($request);
         $shellRunner->runOrFail(['php', 'artisan', 'up']);
 
@@ -143,25 +145,56 @@ class UpdaterUiController extends Controller
     {
         $data = $request->validate([
             'maintenance_confirmation' => ['required', 'string'],
+            'maintenance_2fa_code' => ['nullable', 'string'],
         ], [
             'maintenance_confirmation.required' => 'Confirme a ação digitando MANUTENCAO.',
         ]);
 
-        if (mb_strtoupper(trim((string) $data['maintenance_confirmation'])) !== 'MANUTENCAO') {
-            throw \Illuminate\Validation\ValidationException::withMessages(['maintenance_confirmation' => 'Confirmação inválida. Digite MANUTENCAO para prosseguir.']);
+        if (mb_strtoupper(trim((string) $data['maintenance_confirmation'])) !== 'MANTENCAO') {
+            throw \Illuminate\Validation\ValidationException::withMessages(['maintenance_confirmation' => 'Confirmação inválida. Digite MANTENCAO para prosseguir.']);
         }
-    }
 
-    private function requireTwoFactorEnabled(Request $request): void
-    {
         if (!(bool) config('updater.ui.auth.enabled', false)) {
             return;
         }
 
         $user = (array) $request->attributes->get('updater_user', []);
-        if ((bool) ($user['totp_enabled'] ?? false) !== true) {
-            abort(403, 'Ação exige 2FA habilitado para o usuário autenticado.');
+        if (!((bool) ($user['totp_enabled'] ?? false))) {
+            return;
         }
+
+        $code = trim((string) ($data['maintenance_2fa_code'] ?? ''));
+        if ($code === '') {
+            throw \Illuminate\Validation\ValidationException::withMessages(['maintenance_2fa_code' => 'Informe o código 2FA para confirmar esta ação.']);
+        }
+
+        if (!$this->totp->verify((string) ($user['totp_secret'] ?? ''), $code) && !$this->authStore->consumeRecoveryCode((int) ($user['id'] ?? 0), $code)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['maintenance_2fa_code' => 'Código 2FA/recovery inválido.']);
+        }
+    }
+
+
+    /**
+     * Retrocompatibilidade com instalações antigas/publicadas que ainda chamam este método.
+     *
+     * @param array<string,mixed> $status
+     * @return array<string,mixed>
+     */
+    public function resolveVersionBarData(UpdaterKernel $kernel, array $status = []): array
+    {
+        return [
+            'enabled' => false,
+            'position' => 'top',
+            'updater' => [
+                'installed' => 'n/d',
+                'latest' => 'n/d',
+            ],
+            'application' => [
+                'framework_version' => app()->version(),
+                'git_revision' => (string) ($status['revision'] ?? 'n/d'),
+                'git_tag' => '',
+            ],
+        ];
     }
 
     public function apiTrigger(Request $request, TriggerDispatcher $dispatcher): JsonResponse
