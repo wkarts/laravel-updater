@@ -116,7 +116,7 @@ body {
 
 .breadcrumbs { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
 
-.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
 
 .card {
     background: var(--surface);
@@ -478,4 +478,206 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 
 .update-progress-logs li {
     margin-bottom: 4px;
+}
+
+
+.table-wrap table { min-width: 560px; }
+.form-inline.form-inline-check { align-items: center; justify-content: flex-start; gap: 10px; }
+.form-inline.form-inline-check > * { flex: initial; min-width: auto; }
+.form-inline.form-inline-check input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; }
+
+.permissions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+}
+
+.permission-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px;
+    background: var(--surface-soft);
+    margin-bottom: 0;
+}
+
+.permission-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+.code-block {
+    overflow-x: auto;
+    word-break: break-word;
+}
+
+@media (max-width: 1024px) {
+    .updater-topbar {
+        flex-wrap: wrap;
+        align-items: flex-start;
+    }
+
+    .topbar-actions {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 640px) {
+    .table-wrap table { min-width: 480px; }
+
+    .topbar-actions > * {
+        flex: 0 0 auto;
+    }
+    .sidebar-brand small { display: none; }
+    .card { padding: 12px; }
+    .permission-item { padding: 8px; }
+
+    .topbar-actions .badge {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    img { max-width: 100%; height: auto; }
+}
+
+
+.dashboard-actions > * {
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.dashboard-actions form {
+    margin: 0;
+}
+
+.dashboard-actions .btn {
+    white-space: nowrap;
+}
+
+.dashboard-status-card pre {
+    max-height: 280px;
+}
+
+@media (max-width: 768px) {
+    .dashboard-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .dashboard-actions > * {
+        width: 100%;
+    }
+
+    .dashboard-actions .btn {
+        width: 100%;
+        justify-content: center;
+        white-space: normal;
+    }
+}
+
+
+.topbar-actions > form {
+    margin: 0;
+}
+
+.topbar-actions .btn,
+.topbar-actions .badge {
+    white-space: nowrap;
+}
+
+.dashboard-summary-card {
+    min-height: auto;
+}
+
+.dashboard-summary-card .badge {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+.settings-stack {
+    display: grid;
+    gap: 14px;
+}
+
+.settings-block .card {
+    margin: 0;
+}
+
+.settings-top-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: minmax(0, .98fr) minmax(500px, 1.02fr);
+    align-items: start;
+}
+
+.settings-side-stack {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+}
+
+
+.settings-side-stack > .settings-block,
+.settings-side-stack > .card {
+    margin: 0;
+}
+
+.settings-subcard {
+    margin-top: 0;
+}
+
+.settings-branding .card {
+    min-height: auto;
+}
+
+.settings-runtime-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.settings-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--surface-soft);
+    color: var(--text);
+    margin-bottom: 0;
+}
+
+.settings-toggle input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+.settings-toggle span {
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.35;
+}
+
+.settings-compact-field {
+    max-width: 240px;
+}
+
+@media (max-width: 1180px) {
+    .settings-top-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .settings-compact-field {
+        max-width: 100%;
+    }
 }
