@@ -55,6 +55,7 @@ class UpdaterUiController extends Controller
             'branding' => $this->managerStore->resolvedBranding(),
             'activeProfile' => $this->managerStore->activeProfile(),
             'activeSource' => $this->managerStore->activeSource(),
+            'versionBar' => $this->resolveVersionBarData($kernel, $status),
         ]);
     }
 
