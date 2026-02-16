@@ -6,12 +6,44 @@
     <title>{{ $title ?? config('updater.maintenance.default_title') }}</title>
 
     @php
-        $branding = app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding();
-        $primary = $branding['primary_color'] ?? '#0d6efd';
-        $logoUrl = $branding['logo_url'] ?? null;
-        $faviconUrl = $branding['favicon_url'] ?? null;
+        $branding = [];
+        try {
+            $branding = app(\Argws\LaravelUpdater\Support\ManagerStore::class)->resolvedBranding();
+        } catch (\Throwable $e) {
+            $branding = [];
+        }
+
+        $primary = $branding['primary_color'] ?? (string) config('updater.app.primary_color', '#0d6efd');
+
+        // Mesma parametrização de branding do painel, com prioridade para logo dedicado da manutenção.
+        $logoUrl = null;
+        if (!empty($branding['maintenance_logo_path'])) {
+            try {
+                $logoUrl = route('updater.branding.maintenance_logo');
+            } catch (\Throwable $e) {
+                $logoUrl = null;
+            }
+        }
+
+        if (empty($logoUrl)) {
+            $logoUrl = $branding['maintenance_logo_url'] ?? ((string) config('updater.maintenance.logo_url', '') ?: null);
+        }
+
+        if (empty($logoUrl) && !empty($branding['logo_path'])) {
+            try {
+                $logoUrl = route('updater.branding.logo');
+            } catch (\Throwable $e) {
+                $logoUrl = null;
+            }
+        }
+
+        if (empty($logoUrl)) {
+            $logoUrl = $branding['logo_url'] ?? ((string) config('updater.app.logo_url', '') ?: null);
+        }
+
+        $faviconUrl = $branding['favicon_url'] ?? ((string) config('updater.app.favicon_url', '') ?: null);
         $appName = $branding['app_name_full'] ?? ($branding['app_name'] ?? config('app.name', 'Aplicação'));
-        $appDesc = $branding['app_desc'] ?? null;
+        $appDesc = $branding['app_desc'] ?? (string) config('updater.app.desc', '');
         $message = $branding['maintenance_message'] ?? config('updater.maintenance.default_message');
         $footer  = $branding['maintenance_footer']  ?? config('updater.maintenance.default_footer');
     @endphp
@@ -37,7 +69,6 @@
         .bar > i { display:block; height:100%; width: 35%; background: linear-gradient(90deg, var(--primary), rgba(255,255,255,.35)); border-radius: 999px; animation: ind 1.2s ease-in-out infinite; }
         @keyframes ind { 0% { transform: translateX(-30%); } 50% { transform: translateX(140%); } 100% { transform: translateX(-30%); } }
         .foot { margin-top: 14px; font-size: 12px; color: rgba(255,255,255,.55); }
-        .hint { margin-top: 10px; font-size: 12px; color: rgba(255,255,255,.55); }
         .pill { display:inline-flex; align-items:center; gap:8px; padding: 8px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.10); background: rgba(255,255,255,.06); margin-top: 12px; }
         .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--primary); box-shadow: 0 0 0 6px rgba(13,110,253,.15); }
     </style>
@@ -73,8 +104,44 @@
         <div class="bar" aria-hidden="true"><i></i></div>
 
         <div class="foot">{{ $footer }}</div>
-        <div class="hint">Se você for administrador, acesse <strong>/_updater</strong> para acompanhar a execução.</div>
+
+        <div id="updater-live" class="foot" style="margin-top:10px;">Verificando andamento da atualização…</div>
     </div>
 </div>
+<script>
+(function () {
+    const live = document.getElementById('updater-live');
+    const prefix = '{{ trim((string) config('updater.ui.prefix', '_updater'), '/') }}';
+    const statusUrl = '/' + prefix + '/status';
+    const started = Date.now();
+
+    function tick() {
+        const secs = Math.floor((Date.now() - started) / 1000);
+        if (live) {
+            live.textContent = 'Atualização em andamento… ' + secs + 's';
+        }
+
+        fetch(statusUrl, { credentials: 'same-origin' })
+            .then((r) => r.ok ? r.json() : null)
+            .then((data) => {
+                if (!data || !data.last_run) return;
+                const st = String(data.last_run.status || '').toLowerCase();
+                if (st === 'success' || st === 'dry_run') {
+                    window.location.reload();
+                }
+                if (st === 'failed' && live) {
+                    live.textContent = 'Falha na atualização detectada. Aguarde nova tentativa/rollback.';
+                }
+            })
+            .catch(() => {
+                // rota pode estar protegida; fallback: recarregar periodicamente
+            });
+    }
+
+    setInterval(tick, 5000);
+    setInterval(() => window.location.reload(), 30000);
+    tick();
+})();
+</script>
 </body>
 </html>

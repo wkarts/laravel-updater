@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Http\Middleware;
 
 use Argws\LaravelUpdater\Support\AuthStore;
+use Argws\LaravelUpdater\Support\UiPermission;
 use Closure;
 use Illuminate\Http\Request;
 
 class UpdaterAuthMiddleware
 {
-    public function __construct(private readonly AuthStore $authStore)
+    public function __construct(private readonly AuthStore $authStore, private readonly UiPermission $permission)
     {
     }
 
@@ -30,13 +31,25 @@ class UpdaterAuthMiddleware
             return redirect()->route('updater.login');
         }
 
-        $request->attributes->set('updater_user', [
+        $permissions = [];
+        if (!empty($session['permissions_json'])) {
+            $decoded = json_decode((string) $session['permissions_json'], true);
+            $permissions = is_array($decoded) ? $decoded : [];
+        }
+
+        $user = [
             'id' => (int) $session['user_id'],
             'email' => $session['email'],
             'is_admin' => (int) $session['is_admin'] === 1,
+            'permissions' => $permissions,
+            'permissions_json' => $session['permissions_json'] ?? null,
             'totp_enabled' => (int) $session['totp_enabled'] === 1,
             'totp_secret' => $session['totp_secret'],
-        ]);
+        ];
+
+        $user['is_master'] = $this->permission->isMaster($user);
+
+        $request->attributes->set('updater_user', $user);
 
         return $next($request);
     }
