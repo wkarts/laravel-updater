@@ -218,8 +218,9 @@ class OperationsController extends Controller
             return response()->download($path, basename($path));
         }
 
-        $disk = (string) config('updater.backup.upload_disk', '');
-        $prefix = trim((string) config('updater.backup.upload_prefix', 'updater/backups'), '/');
+        $upload = $this->managerStore->backupUploadSettings();
+        $disk = (string) ($upload['disk'] ?? config('updater.backup.upload_disk', ''));
+        $prefix = trim((string) ($upload['prefix'] ?? config('updater.backup.upload_prefix', 'updater/backups')), '/');
         $remote = $prefix . '/' . basename($path);
         if ($disk !== '' && Storage::disk($disk)->exists($remote)) {
             return response()->streamDownload(function () use ($disk, $remote): void {
@@ -487,15 +488,12 @@ class OperationsController extends Controller
             ':run_id' => $runId,
         ]);
 
-        $disk = (string) config('updater.backup.upload_disk', '');
-        $prefix = trim((string) config('updater.backup.upload_prefix', 'updater/backups'), '/');
-        if ($disk !== '' && is_file($path)) {
-            $remote = $prefix . '/' . basename($path);
-            $stream = fopen($path, 'rb');
-            if (is_resource($stream)) {
-                Storage::disk($disk)->put($remote, $stream);
-                fclose($stream);
-            }
+        $upload = $this->managerStore->backupUploadSettings();
+        $disk = (string) ($upload['disk'] ?? config('updater.backup.upload_disk', ''));
+        $prefix = trim((string) ($upload['prefix'] ?? config('updater.backup.upload_prefix', 'updater/backups')), '/');
+        $autoUpload = (bool) ($upload['auto_upload'] ?? false);
+        if ($autoUpload) {
+            $this->tryUploadBackupFile($path, $disk, $prefix);
         }
 
         return [
@@ -503,6 +501,64 @@ class OperationsController extends Controller
             'type' => $type,
             'path' => $path,
         ];
+    }
+
+    public function uploadBackup(int $id, Request $request): RedirectResponse
+    {
+        $backup = $this->findBackup($id);
+        abort_if($backup === null, 404);
+
+        $upload = $this->managerStore->backupUploadSettings();
+        $disk = (string) ($upload['disk'] ?? config('updater.backup.upload_disk', ''));
+        $prefix = trim((string) ($upload['prefix'] ?? config('updater.backup.upload_prefix', 'updater/backups')), '/');
+
+        if ($disk === '') {
+            return back()->withErrors(['backup' => 'Nenhum disk configurado para upload em nuvem.']);
+        }
+
+        $path = (string) ($backup['path'] ?? '');
+        if (!is_file($path)) {
+            return back()->withErrors(['backup' => 'Arquivo local não encontrado para upload manual.']);
+        }
+
+        try {
+            $this->tryUploadBackupFile($path, $disk, $prefix, true);
+            $this->managerStore->addAuditLog($this->actorId($request), 'backup_upload_manual', [
+                'backup_id' => $id,
+                'disk' => $disk,
+            ], $request->ip(), $request->userAgent());
+        } catch (\Throwable $e) {
+            return back()->withErrors(['backup' => 'Falha no upload manual: ' . $e->getMessage()]);
+        }
+
+        return back()->with('status', 'Upload do backup concluído com sucesso.');
+    }
+
+    private function tryUploadBackupFile(string $path, string $disk, string $prefix, bool $throwOnFailure = false): void
+    {
+        if ($disk === '' || !is_file($path)) {
+            return;
+        }
+
+        $remote = trim($prefix, '/') . '/' . basename($path);
+
+        try {
+            $stream = fopen($path, 'rb');
+            if (!is_resource($stream)) {
+                return;
+            }
+            Storage::disk($disk)->put($remote, $stream);
+            fclose($stream);
+        } catch (\Throwable $e) {
+            if ($throwOnFailure) {
+                throw $e;
+            }
+            $this->stateStore->addRunLog(null, 'warning', 'Upload em nuvem falhou, mas o backup foi concluído localmente.', [
+                'disk' => $disk,
+                'arquivo' => $path,
+                'erro' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function findBackup(int $id): ?array

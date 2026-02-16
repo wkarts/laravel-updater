@@ -114,6 +114,61 @@ class ManagerStore
         ];
     }
 
+
+    public function backupUploadSettings(): array
+    {
+        $stored = $this->getRuntimeOption('backup_upload', []);
+
+        return [
+            'provider' => (string) ($stored['provider'] ?? 'none'),
+            'disk' => (string) ($stored['disk'] ?? ''),
+            'prefix' => (string) ($stored['prefix'] ?? 'updater/backups'),
+            'auto_upload' => (bool) ($stored['auto_upload'] ?? false),
+        ];
+    }
+
+    public function saveBackupUploadSettings(array $data): void
+    {
+        $payload = [
+            'provider' => (string) ($data['provider'] ?? 'none'),
+            'disk' => trim((string) ($data['disk'] ?? '')),
+            'prefix' => trim((string) ($data['prefix'] ?? 'updater/backups'), '/'),
+            'auto_upload' => (bool) ($data['auto_upload'] ?? false),
+        ];
+
+        if ($payload['provider'] === 'none') {
+            $payload['disk'] = '';
+            $payload['auto_upload'] = false;
+        }
+
+        $this->setRuntimeOption('backup_upload', $payload);
+    }
+
+    public function getRuntimeOption(string $key, mixed $default = null): mixed
+    {
+        $stmt = $this->pdo()->prepare('SELECT value_json FROM updater_runtime_settings WHERE key = :key LIMIT 1');
+        $stmt->execute([':key' => $key]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || !array_key_exists('value_json', $row)) {
+            return $default;
+        }
+
+        $decoded = json_decode((string) $row['value_json'], true);
+
+        return $decoded ?? $default;
+    }
+
+    public function setRuntimeOption(string $key, mixed $value): void
+    {
+        $stmt = $this->pdo()->prepare('INSERT INTO updater_runtime_settings (key, value_json, updated_at) VALUES (:key, :value_json, :updated_at)
+            ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at');
+        $stmt->execute([
+            ':key' => $key,
+            ':value_json' => json_encode($value, JSON_UNESCAPED_UNICODE),
+            ':updated_at' => date(DATE_ATOM),
+        ]);
+    }
+
     /** @return array<int,array<string,mixed>> */
     public function users(): array
     {
