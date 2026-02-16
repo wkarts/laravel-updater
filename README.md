@@ -401,6 +401,8 @@ Além disso, o updater adiciona automaticamente exceção de manutenção para o
 
 Em versões de Laravel que não suportam `php artisan down --except`, o updater faz fallback automático sem `--except` para não quebrar o fluxo de update/manutenção.
 
+No modo de atualização por tag, se a aplicação já estiver exatamente na tag alvo, o updater trata como execução válida (sem falso erro por revisão inalterada).
+
 ## Atualização de arquivos publicados (config/views)
 
 O Laravel não sobrescreve automaticamente arquivos publicados em `config/` e `resources/views/`.

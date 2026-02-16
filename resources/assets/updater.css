@@ -523,11 +523,16 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     .topbar-actions {
         width: 100%;
         justify-content: flex-start;
+        flex-wrap: wrap;
     }
 }
 
 @media (max-width: 640px) {
     .table-wrap table { min-width: 480px; }
+
+    .topbar-actions > * {
+        flex: 0 0 auto;
+    }
     .sidebar-brand small { display: none; }
     .card { padding: 12px; }
     .permission-item { padding: 8px; }
@@ -575,4 +580,24 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
         justify-content: center;
         white-space: normal;
     }
+}
+
+
+.topbar-actions > form {
+    margin: 0;
+}
+
+.topbar-actions .btn,
+.topbar-actions .badge {
+    white-space: nowrap;
+}
+
+.dashboard-summary-card {
+    min-height: auto;
+}
+
+.dashboard-summary-card .badge {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
