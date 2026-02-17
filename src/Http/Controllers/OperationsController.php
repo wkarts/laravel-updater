@@ -93,7 +93,7 @@ class OperationsController extends Controller
                 ->with('status', 'Dry-run concluído. Revise e aprove para executar a atualização real.');
         }
 
-        if ((bool) config('updater.backup.full_before_update', false)) {
+        if ($this->requiresFullBackupBeforeUpdate()) {
             $this->performMandatoryFullBackup($request);
         }
 
@@ -139,7 +139,7 @@ class OperationsController extends Controller
             return back()->withErrors(['approval' => 'Não há execução pendente de aprovação para este dry-run.']);
         }
 
-        if ((bool) config('updater.backup.full_before_update', false)) {
+        if ($this->requiresFullBackupBeforeUpdate()) {
             $this->performMandatoryFullBackup($request);
         }
 
@@ -513,6 +513,23 @@ class OperationsController extends Controller
             $this->stateStore->updateRunStatus($runId, 'failed', ['message' => $e->getMessage()]);
             throw $e;
         }
+    }
+
+
+
+    private function requiresFullBackupBeforeUpdate(): bool
+    {
+        if ((bool) config('updater.backup.full_before_update', false)) {
+            return true;
+        }
+
+        if (!(bool) config('updater.backup.pre_update', true)) {
+            return false;
+        }
+
+        $type = strtolower(str_replace(' ', '', (string) config('updater.backup.pre_update_type', 'full')));
+
+        return in_array($type, ['full', 'full+snapshot', 'full+database'], true);
     }
 
     private function mapUpdateType(string $mode): string
