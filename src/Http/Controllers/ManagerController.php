@@ -204,6 +204,7 @@ class ManagerController extends Controller
                 'pre_update_commands' => $this->defaultPreUpdateCommands(),
                 'post_update_commands' => $this->defaultPostUpdateCommands(),
                 'snapshot_include_vendor' => 0,
+                'snapshot_compression' => 'auto',
             ],
         ]);
     }
@@ -524,6 +525,7 @@ class ManagerController extends Controller
             'seed' => ['nullable', 'boolean'],
             'rollback_on_fail' => ['nullable', 'boolean'],
             'snapshot_include_vendor' => ['nullable', 'boolean'],
+            'snapshot_compression' => ['nullable', 'in:auto,7z,tgz,zip'],
             'active' => ['nullable', 'boolean'],
             'pre_update_commands' => ['nullable', 'string', 'max:8000'],
             'post_update_commands' => ['nullable', 'string', 'max:8000'],
@@ -543,6 +545,9 @@ class ManagerController extends Controller
         }
 
         $data['post_update_commands'] = $this->mergePostUpdateSuggestions(trim((string) ($data['post_update_commands'] ?? '')));
+        $data['snapshot_compression'] = in_array((string) ($data['snapshot_compression'] ?? 'auto'), ['auto', '7z', 'tgz', 'zip'], true)
+            ? (string) ($data['snapshot_compression'] ?? 'auto')
+            : 'auto';
 
         return $data;
     }

@@ -7,6 +7,16 @@
         <label for="retention_backups">Retenção de backups</label>
         <input id="retention_backups" type="number" min="1" max="200" name="retention_backups" value="{{ old('retention_backups', $profile['retention_backups'] ?? 10) }}">
     </div>
+
+    <div>
+        <label for="snapshot_compression">Compressão do snapshot</label>
+        <select id="snapshot_compression" name="snapshot_compression">
+            <option value="auto" @selected(old('snapshot_compression', $profile['snapshot_compression'] ?? 'auto') === 'auto')>Auto (preferir 7z)</option>
+            <option value="7z" @selected(old('snapshot_compression', $profile['snapshot_compression'] ?? 'auto') === '7z')>7z</option>
+            <option value="tgz" @selected(old('snapshot_compression', $profile['snapshot_compression'] ?? 'auto') === 'tgz')>tgz (tar.gz)</option>
+            <option value="zip" @selected(old('snapshot_compression', $profile['snapshot_compression'] ?? 'auto') === 'zip')>zip</option>
+        </select>
+    </div>
     @php($fields = ['backup_enabled' => 'Backup ativado', 'dry_run' => 'Modo dry-run', 'force' => 'Forçar execução', 'composer_install' => 'Rodar composer', 'migrate' => 'Rodar migrations', 'seed' => 'Rodar seed', 'rollback_on_fail' => 'Rollback em falha', 'snapshot_include_vendor' => 'Incluir diretório vendor no snapshot', 'active' => 'Definir como perfil ativo'])
     @foreach($fields as $field => $label)
         <label class="form-inline"><input type="checkbox" name="{{ $field }}" value="1" style="max-width:20px;" {{ old($field, (int) ($profile[$field] ?? 0)) == 1 ? 'checked' : '' }}><span>{{ $label }}</span></label>

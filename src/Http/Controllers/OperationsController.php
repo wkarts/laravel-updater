@@ -357,6 +357,26 @@ class OperationsController extends Controller
         $message = 'Sem backup em execução no momento.';
         $activeJob = $this->managerStore->getRuntimeOption('backup_active_job', null);
 
+        if ($runningRun !== null && is_array($activeJob)) {
+            $jobStatus = (string) ($activeJob['status'] ?? '');
+            $jobRunId = (int) ($activeJob['run_id'] ?? 0);
+            if ($jobRunId === (int) ($runningRun['id'] ?? 0) && in_array($jobStatus, ['finished', 'failed', 'cancelled'], true)) {
+                if ($jobStatus === 'finished') {
+                    $this->stateStore->finishRun((int) $runningRun['id'], ['revision_before' => null, 'revision_after' => null]);
+                } elseif ($jobStatus === 'failed') {
+                    $this->stateStore->updateRunStatus((int) $runningRun['id'], 'failed', ['message' => (string) ($activeJob['error'] ?? 'Falha no processamento do backup.')]);
+                } else {
+                    $this->stateStore->updateRunStatus((int) $runningRun['id'], 'cancelled', ['message' => 'Cancelado manualmente.']);
+                }
+
+                $runningRun = null;
+                $active = false;
+                $lastStmt = $this->stateStore->pdo()->prepare("SELECT * FROM runs WHERE options_json LIKE :q ORDER BY id DESC LIMIT 1");
+                $lastStmt->execute([':q' => '%manual_backup%']);
+                $lastRun = $lastStmt->fetch(\PDO::FETCH_ASSOC) ?: $lastRun;
+            }
+        }
+
         if ($active) {
             $progress = 65;
             $message = 'Executando run #' . (int) $runningRun['id'] . '...';
@@ -440,17 +460,18 @@ class OperationsController extends Controller
         return $this->insertBackupRow('database', $filePath, $runId);
     }
 
-    private function createSnapshotBackup(int $runId): array
+    private function createSnapshotBackup(int $runId, ?string $compression = null): array
     {
         $snapshotPath = rtrim((string) config('updater.snapshot.path'), '/');
         $this->fileManager->ensureDirectory($snapshotPath);
 
-        $filePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His') . '.zip';
+        $basePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His');
         $excludes = config('updater.paths.exclude_snapshot', []);
         if (!(bool) config('updater.snapshot.include_vendor', false)) {
             $excludes[] = 'vendor';
         }
-        $this->archiveManager->createZipFromDirectory(base_path(), $filePath, array_values(array_unique($excludes)));
+        $resolvedCompression = $compression ?? (string) (config('updater.snapshot.compression', 'auto'));
+        $filePath = $this->archiveManager->createArchiveFromDirectory(base_path(), $basePath, $resolvedCompression, array_values(array_unique($excludes)));
 
         return $this->insertBackupRow('snapshot', $filePath, $runId);
     }
@@ -458,7 +479,8 @@ class OperationsController extends Controller
     private function createFullBackup(int $runId): array
     {
         $db = $this->createDatabaseBackup($runId);
-        $snapshot = $this->createSnapshotBackup($runId);
+        $compression = (string) (($this->managerStore->activeProfile()['snapshot_compression'] ?? config('updater.snapshot.compression', 'auto')));
+        $snapshot = $this->createSnapshotBackup($runId, $compression);
 
         $fullPath = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His') . '.zip';
         $this->archiveManager->createZipFromFiles([

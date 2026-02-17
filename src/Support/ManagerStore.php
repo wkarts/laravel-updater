@@ -389,10 +389,10 @@ class ManagerStore
         }
 
         if ($id === null) {
-            $stmt = $this->pdo()->prepare('INSERT INTO updater_profiles (name, backup_enabled, dry_run, force, composer_install, migrate, seed, build_assets, health_check, rollback_on_fail, snapshot_include_vendor, retention_backups, active, pre_update_commands, post_update_commands)
-            VALUES (:name,:backup_enabled,:dry_run,:force,:composer_install,:migrate,:seed,:build_assets,:health_check,:rollback_on_fail,:snapshot_include_vendor,:retention_backups,:active,:pre_update_commands,:post_update_commands)');
+            $stmt = $this->pdo()->prepare('INSERT INTO updater_profiles (name, backup_enabled, dry_run, force, composer_install, migrate, seed, build_assets, health_check, rollback_on_fail, snapshot_include_vendor, snapshot_compression, retention_backups, active, pre_update_commands, post_update_commands)
+            VALUES (:name,:backup_enabled,:dry_run,:force,:composer_install,:migrate,:seed,:build_assets,:health_check,:rollback_on_fail,:snapshot_include_vendor,:snapshot_compression,:retention_backups,:active,:pre_update_commands,:post_update_commands)');
         } else {
-            $stmt = $this->pdo()->prepare('UPDATE updater_profiles SET name=:name, backup_enabled=:backup_enabled, dry_run=:dry_run, force=:force, composer_install=:composer_install, migrate=:migrate, seed=:seed, build_assets=:build_assets, health_check=:health_check, rollback_on_fail=:rollback_on_fail, snapshot_include_vendor=:snapshot_include_vendor, retention_backups=:retention_backups, active=:active, pre_update_commands=:pre_update_commands, post_update_commands=:post_update_commands WHERE id=:id');
+            $stmt = $this->pdo()->prepare('UPDATE updater_profiles SET name=:name, backup_enabled=:backup_enabled, dry_run=:dry_run, force=:force, composer_install=:composer_install, migrate=:migrate, seed=:seed, build_assets=:build_assets, health_check=:health_check, rollback_on_fail=:rollback_on_fail, snapshot_include_vendor=:snapshot_include_vendor, snapshot_compression=:snapshot_compression, retention_backups=:retention_backups, active=:active, pre_update_commands=:pre_update_commands, post_update_commands=:post_update_commands WHERE id=:id');
         }
 
         $payload = [
@@ -407,6 +407,7 @@ class ManagerStore
             ':health_check' => $data['health_check'],
             ':rollback_on_fail' => $data['rollback_on_fail'],
             ':snapshot_include_vendor' => $data['snapshot_include_vendor'],
+            ':snapshot_compression' => in_array((string) ($data['snapshot_compression'] ?? 'auto'), ['auto', '7z', 'tgz', 'zip'], true) ? (string) $data['snapshot_compression'] : 'auto',
             ':retention_backups' => (int) ($data['retention_backups'] ?? 10),
             ':active' => $data['active'],
             ':pre_update_commands' => $data['pre_update_commands'] ?? null,

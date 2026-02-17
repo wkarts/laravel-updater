@@ -33,6 +33,7 @@ class StateStoreTest extends TestCase
         $names = array_map(static fn (array $column): string => (string) ($column['name'] ?? ''), $columns);
 
         $this->assertContains('snapshot_include_vendor', $names);
+        $this->assertContains('snapshot_compression', $names);
         @unlink($path);
     }
 

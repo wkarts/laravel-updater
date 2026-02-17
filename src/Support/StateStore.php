@@ -156,6 +156,7 @@ class StateStore
             health_check INTEGER NOT NULL DEFAULT 1,
             rollback_on_fail INTEGER NOT NULL DEFAULT 0,
             snapshot_include_vendor INTEGER NOT NULL DEFAULT 0,
+            snapshot_compression TEXT NOT NULL DEFAULT \'auto\',
             retention_backups INTEGER NOT NULL DEFAULT 10,
             active INTEGER NOT NULL DEFAULT 0,
             pre_update_commands TEXT NULL,
@@ -233,6 +234,7 @@ class StateStore
         $this->ensureColumn('updater_profiles', 'pre_update_commands', 'TEXT NULL');
         $this->ensureColumn('updater_profiles', 'post_update_commands', 'TEXT NULL');
         $this->ensureColumn('updater_profiles', 'snapshot_include_vendor', 'INTEGER NOT NULL DEFAULT 0');
+        $this->ensureColumn('updater_profiles', 'snapshot_compression', "TEXT NOT NULL DEFAULT 'auto'");
         $this->ensureColumn('updater_backups', 'cloud_uploaded', 'INTEGER NOT NULL DEFAULT 0');
         $this->ensureColumn('updater_backups', 'cloud_provider', 'TEXT NULL');
         $this->ensureColumn('updater_backups', 'cloud_uploaded_at', 'TEXT NULL');
