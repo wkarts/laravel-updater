@@ -24,6 +24,18 @@
     <ul id="backup-progress-logs" style="margin-top:10px;"></ul>
 </div>
 
+
+<div class="card">
+    <h3>Upload para nuvem em tempo real</h3>
+    <p id="backup-upload-progress-text" class="muted">Sem upload em andamento.</p>
+    <div style="height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden;">
+        <div id="backup-upload-progress-bar" style="height:10px; width:0%; background:#10b981; transition:width .3s;"></div>
+    </div>
+    <div style="margin-top:10px;" id="backup-upload-cancel-wrap" hidden>
+        <form method="POST" action="{{ route('updater.backups.upload.cancel') }}">@csrf <button class="btn btn-danger" type="submit">Cancelar upload em andamento</button></form>
+    </div>
+</div>
+
 <div class="card">
     <h3>Backups disponíveis</h3>
     <div class="table-wrap">
@@ -55,7 +67,7 @@
                     <td>{{ $backup['created_at'] }}</td>
                     <td>
                         <a class="btn" href="{{ route('updater.backups.download', ['id' => $backup['id']]) }}">Baixar backup</a>
-                        <form method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem {{ $cloudUploaded ? '(reenviar)' : '' }}</button></form>
+                        <form class="backup-upload-form" method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem {{ $cloudUploaded ? '(reenviar)' : '' }}</button></form>
                         <a class="btn btn-danger" href="{{ route('updater.backups.restore.form', ['id' => $backup['id']]) }}">Restaurar</a>
                         <form method="POST" action="{{ route('updater.backups.delete', ['id' => $backup['id']]) }}" style="display:inline-block;" onsubmit="return confirm('Remover backup local e registro?');">@csrf @method('DELETE') <button class="btn" type="submit">Excluir</button></form>
                     </td>
@@ -133,6 +145,7 @@ createForms.forEach((form) => {
             }
 
             updaterBackupPoll();
+updaterUploadPoll();
         } catch (e) {
             const txt = document.getElementById('backup-progress-text');
             if (txt) txt.innerText = 'Falha ao iniciar backup: ' + (e.message || 'erro desconhecido');
@@ -140,7 +153,54 @@ createForms.forEach((form) => {
     });
 });
 
+
+
+async function updaterUploadPoll() {
+    try {
+        const res = await fetch('{{ route('updater.backups.upload.progress.status') }}', {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+        const data = await res.json();
+
+        const txt = document.getElementById('backup-upload-progress-text');
+        const bar = document.getElementById('backup-upload-progress-bar');
+        const cancelWrap = document.getElementById('backup-upload-cancel-wrap');
+
+        if (txt) txt.innerText = data.message || 'Sem upload em andamento.';
+        if (bar) bar.style.width = Math.max(0, Math.min(100, Number(data.progress || 0))) + '%';
+        if (cancelWrap) cancelWrap.hidden = !Boolean(data.can_cancel);
+    } catch (e) {
+        // silencioso
+    }
+}
+
+const uploadForms = document.querySelectorAll('form.backup-upload-form');
+uploadForms.forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const fd = new FormData(form);
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': fd.get('_token') || '',
+                },
+                body: fd,
+                credentials: 'same-origin',
+            });
+            if (!response.ok) {
+                throw new Error('Falha ao iniciar upload.');
+            }
+            updaterUploadPoll();
+        } catch (e) {
+            const txt = document.getElementById('backup-upload-progress-text');
+            if (txt) txt.innerText = 'Falha ao iniciar upload: ' + (e.message || 'erro desconhecido');
+        }
+    });
+});
+
 setInterval(updaterBackupPoll, 4000);
+setInterval(updaterUploadPoll, 3000);
 updaterBackupPoll();
+updaterUploadPoll();
 </script>
 @endsection

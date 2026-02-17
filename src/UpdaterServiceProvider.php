@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater;
 
 use Argws\LaravelUpdater\Commands\UpdateBackupCommand;
+use Argws\LaravelUpdater\Commands\UpdateBackupUploadCommand;
 use Argws\LaravelUpdater\Commands\UpdateCheckCommand;
 use Argws\LaravelUpdater\Commands\UpdateEnvSyncCommand;
 use Argws\LaravelUpdater\Commands\UpdateNotifyCommand;
@@ -189,6 +190,7 @@ class UpdaterServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 UpdateBackupCommand::class,
+                UpdateBackupUploadCommand::class,
                 UpdateCheckCommand::class,
                 UpdateRunCommand::class,
                 UpdateRollbackCommand::class,

@@ -120,6 +120,46 @@ class TriggerDispatcher
         return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
     }
 
+
+    public function triggerBackupUpload(int $backupId): array
+    {
+        $args = ['php', 'artisan', 'system:update:backup-upload', '--backup-id=' . $backupId];
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'sync') {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->setTimeout(null);
+                $process->run();
+                if (!$process->isSuccessful()) {
+                    throw new \RuntimeException('Falha ao executar upload de backup: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                }
+
+                return ['started' => true, 'pid' => null];
+            }
+
+            exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+            if ((int) $exitCode !== 0) {
+                throw new \RuntimeException('Falha ao executar upload de backup em modo sync.');
+            }
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->disableOutput();
+            $process->start();
+
+            return ['started' => true, 'pid' => $process->getPid() ?: null];
+        }
+
+        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
+        $pid = trim((string) shell_exec($cmd));
+
+        return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
+    }
+
     public function triggerRollback(): void
     {
         $driver = $this->resolveDriver();
