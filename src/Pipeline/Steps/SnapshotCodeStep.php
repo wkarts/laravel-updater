@@ -27,7 +27,17 @@ class SnapshotCodeStep implements PipelineStepInterface
     {
         $enabled = (bool) ($this->config['enabled'] ?? false);
 
-        return $enabled && !(bool) ($context['options']['no_snapshot'] ?? false);
+        if (!$enabled || !$this->isPreUpdateBackupEnabled()) {
+            return false;
+        }
+
+        if ((bool) ($context['options']['no_snapshot'] ?? false)) {
+            return false;
+        }
+
+        $type = $this->resolveBackupType($context);
+
+        return in_array($type, ['full', 'full+snapshot', 'full+database', 'snapshot'], true);
     }
 
     public function handle(array &$context): void
@@ -65,6 +75,37 @@ class SnapshotCodeStep implements PipelineStepInterface
         ]);
 
         $this->fileManager->deleteOldFiles($path, (int) ($this->config['keep'] ?? 10));
+    }
+
+
+
+    private function isPreUpdateBackupEnabled(): bool
+    {
+        if (!function_exists('config')) {
+            return true;
+        }
+
+        return (bool) config('updater.backup.pre_update', true);
+    }
+
+    private function configuredPreUpdateBackupType(): string
+    {
+        if (!function_exists('config')) {
+            return 'full';
+        }
+
+        return (string) config('updater.backup.pre_update_type', 'full');
+    }
+
+    private function resolveBackupType(array $context): string
+    {
+        $raw = trim((string) ($context['options']['backup_type'] ?? $this->configuredPreUpdateBackupType()));
+        $raw = strtolower(str_replace(' ', '', $raw));
+
+        return match ($raw) {
+            'snapshot', 'database', 'full+snapshot', 'full+database', 'full' => $raw,
+            default => 'full',
+        };
     }
 
     public function rollback(array &$context): void

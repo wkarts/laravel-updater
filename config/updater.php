@@ -46,6 +46,10 @@ return [
 
     'backup' => [
         'enabled' => (bool) env('UPDATER_BACKUP_ENABLED', true),
+        // Backup obrigatório antes de atualizar (padrão seguro).
+        'pre_update' => (bool) env('UPDATER_BACKUP_PRE_UPDATE', true),
+        // Tipos aceitos: full, snapshot, database, full+snapshot, full+database.
+        'pre_update_type' => (string) env('UPDATER_BACKUP_TYPE', 'full'),
         'keep' => (int) env('UPDATER_BACKUP_KEEP', 10),
         'path' => env('UPDATER_BACKUP_PATH', storage_path('app/updater/backups')),
         'compress' => (bool) env('UPDATER_BACKUP_COMPRESS', true),
@@ -55,6 +59,7 @@ return [
         'mysql_binary' => env('UPDATER_MYSQL_BINARY', ''),
         'pg_dump_binary' => env('UPDATER_PG_DUMP_BINARY', ''),
         'pg_restore_binary' => env('UPDATER_PG_RESTORE_BINARY', ''),
+        // Compatibilidade retroativa: mantém a chave antiga para instalações legadas.
         'full_before_update' => (bool) env('UPDATER_BACKUP_FULL_BEFORE_UPDATE', false),
     ],
 
@@ -256,8 +261,8 @@ return [
         // Rotas que nunca devem ser bloqueadas pelo maintenance mode.
         // Por padrão protege o prefixo da UI do updater.
         'except_paths' => [
-            trim((string) config('updater.ui.prefix', '_updater'), '/'),
-            trim((string) config('updater.ui.prefix', '_updater'), '/') . '/*',
+            trim((string) env('UPDATER_UI_PREFIX', '_updater'), '/'),
+            trim((string) env('UPDATER_UI_PREFIX', '_updater'), '/') . '/*',
         ],
     ],
 
