@@ -249,6 +249,13 @@ class OperationsController extends Controller
 
             return back()->withErrors(['backup' => 'Falha no backup em modo de compatibilidade: ' . $e->getMessage()]);
         }
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'backup_start', [
+            'tipo' => $type,
+            'run_id' => $runId,
+        ], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Backup iniciado em segundo plano. Você pode continuar usando o painel.');
     }
 
     public function downloadBackup(int $id)
