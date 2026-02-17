@@ -46,24 +46,26 @@ class UpdateBackupUploadCommand extends Command
         }
 
         $pid = getmypid() ?: null;
-        $managerStore->setRuntimeOption('backup_upload_active_job', [
+        $initialJob = [
             'backup_id' => $backupId,
             'pid' => $pid,
             'status' => 'running',
             'progress' => 5,
             'message' => 'Preparando upload...',
             'started_at' => date(DATE_ATOM),
-        ]);
+        ];
+        $this->persistUploadJob($managerStore, $backupId, $initialJob);
 
         try {
-            $managerStore->setRuntimeOption('backup_upload_active_job', [
+            $runningJob = [
                 'backup_id' => $backupId,
                 'pid' => $pid,
                 'status' => 'running',
                 'progress' => 25,
                 'message' => 'Enviando arquivo para nuvem...',
                 'started_at' => date(DATE_ATOM),
-            ]);
+            ];
+            $this->persistUploadJob($managerStore, $backupId, $runningJob);
 
             $result = $cloudUploader->upload($path, $settings);
             $provider = (string) ($result['provider'] ?? ($settings['provider'] ?? 'n/a'));
@@ -77,7 +79,7 @@ class UpdateBackupUploadCommand extends Command
                 ':id' => $backupId,
             ]);
 
-            $managerStore->setRuntimeOption('backup_upload_active_job', [
+            $finishedJob = [
                 'backup_id' => $backupId,
                 'pid' => $pid,
                 'status' => 'finished',
@@ -85,21 +87,35 @@ class UpdateBackupUploadCommand extends Command
                 'message' => 'Upload concluído com sucesso.',
                 'provider' => $provider,
                 'finished_at' => date(DATE_ATOM),
-            ]);
+            ];
+            $this->persistUploadJob($managerStore, $backupId, $finishedJob);
             return self::SUCCESS;
         } catch (Throwable $e) {
             $err = $stateStore->pdo()->prepare('UPDATE updater_backups SET cloud_last_error = :error WHERE id = :id');
             $err->execute([':error' => $e->getMessage(), ':id' => $backupId]);
 
-            $managerStore->setRuntimeOption('backup_upload_active_job', [
+            $failedJob = [
                 'backup_id' => $backupId,
                 'pid' => $pid,
                 'status' => 'failed',
                 'progress' => 100,
                 'message' => 'Falha no upload: ' . $e->getMessage(),
                 'finished_at' => date(DATE_ATOM),
-            ]);
+            ];
+            $this->persistUploadJob($managerStore, $backupId, $failedJob);
             return self::FAILURE;
         }
+    }
+
+    private function persistUploadJob(ManagerStore $managerStore, int $backupId, array $job): void
+    {
+        $managerStore->setRuntimeOption('backup_upload_active_job', $job);
+        $jobs = $managerStore->getRuntimeOption('backup_upload_jobs', []);
+        if (!is_array($jobs)) {
+            $jobs = [];
+        }
+
+        $jobs[(string) $backupId] = $job;
+        $managerStore->setRuntimeOption('backup_upload_jobs', $jobs);
     }
 }

@@ -52,7 +52,18 @@ class SnapshotCodeStep implements PipelineStepInterface
         }
 
         $context['snapshot_file'] = $snapshot;
-        $this->store->registerArtifact('snapshot', $snapshot, ['run_id' => $context['run_id'] ?? null]);
+        $runId = (int) ($context['run_id'] ?? 0);
+        $this->store->registerArtifact('snapshot', $snapshot, ['run_id' => $runId > 0 ? $runId : null]);
+
+        $insert = $this->store->pdo()->prepare('INSERT INTO updater_backups (type, path, size, created_at, run_id, cloud_uploaded, cloud_upload_count) VALUES (:type,:path,:size,:created_at,:run_id,0,0)');
+        $insert->execute([
+            ':type' => 'snapshot',
+            ':path' => $snapshot,
+            ':size' => is_file($snapshot) ? (int) filesize($snapshot) : 0,
+            ':created_at' => date(DATE_ATOM),
+            ':run_id' => $runId > 0 ? $runId : null,
+        ]);
+
         $this->fileManager->deleteOldFiles($path, (int) ($this->config['keep'] ?? 10));
     }
 

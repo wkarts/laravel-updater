@@ -70,7 +70,11 @@ class OperationsController extends Controller
                     'sync' => false,
                     'allow_http' => true,
                 ]);
-            } catch (\Throwable $e) {
+                return [
+                'provider' => $provider,
+                'remote_path' => (string) ($result['remote_path'] ?? ''),
+            ];
+        } catch (\Throwable $e) {
                 return back()->withErrors(['update' => 'Falha ao executar dry-run: ' . $e->getMessage()])->withInput();
             }
 
@@ -622,7 +626,7 @@ class OperationsController extends Controller
         ];
     }
 
-    public function uploadBackup(int $id, Request $request, TriggerDispatcher $dispatcher): RedirectResponse
+    public function uploadBackup(int $id, Request $request, TriggerDispatcher $dispatcher): RedirectResponse|JsonResponse
     {
         $backup = $this->findBackup($id);
         abort_if($backup === null, 404);
@@ -637,22 +641,52 @@ class OperationsController extends Controller
             return back()->withErrors(['backup' => 'Arquivo local não encontrado para upload manual.']);
         }
 
+        $respondJson = $request->expectsJson() || $request->ajax();
+
         try {
             $result = $dispatcher->triggerBackupUpload($id);
-            $this->managerStore->setRuntimeOption('backup_upload_active_job', [
+            $job = [
                 'backup_id' => $id,
                 'pid' => $result['pid'] ?? null,
                 'status' => 'running',
                 'progress' => 10,
                 'message' => 'Upload iniciado em segundo plano.',
                 'started_at' => date(DATE_ATOM),
-            ]);
+            ];
+            $this->persistUploadJob($id, $job);
             $this->managerStore->addAuditLog($this->actorId($request), 'backup_upload_manual_start', [
                 'backup_id' => $id,
                 'provider' => $upload['provider'] ?? 'none',
             ], $request->ip(), $request->userAgent());
         } catch (\Throwable $e) {
-            return back()->withErrors(['backup' => 'Falha ao iniciar upload: ' . $e->getMessage()]);
+            try {
+                $result = $this->tryUploadBackupFile($path, trim((string) ($upload['prefix'] ?? 'updater/backups'), '/'), true, $id);
+                $syncJob = [
+                    'backup_id' => $id,
+                    'pid' => null,
+                    'status' => 'finished',
+                    'progress' => 100,
+                    'message' => 'Upload concluído em modo síncrono.',
+                    'finished_at' => date(DATE_ATOM),
+                ];
+                $this->persistUploadJob($id, $syncJob);
+
+                if ($respondJson) {
+                    return response()->json(['ok' => true, 'message' => 'Upload concluído em modo síncrono.']);
+                }
+
+                return back()->with('status', 'Upload concluído em modo síncrono.');
+            } catch (\Throwable $syncError) {
+                if ($respondJson) {
+                    return response()->json(['ok' => false, 'message' => 'Falha ao iniciar upload: ' . $syncError->getMessage()], 422);
+                }
+
+                return back()->withErrors(['backup' => 'Falha ao iniciar upload: ' . $syncError->getMessage()]);
+            }
+        }
+
+        if ($respondJson) {
+            return response()->json(['ok' => true, 'message' => 'Upload iniciado em segundo plano.']);
         }
 
         return back()->with('status', 'Upload iniciado em segundo plano.');
@@ -673,10 +707,43 @@ class OperationsController extends Controller
         }
 
         $job = $this->managerStore->getRuntimeOption('backup_upload_active_job', null);
+        $jobs = $this->managerStore->getRuntimeOption('backup_upload_jobs', []);
+        if (!is_array($jobs)) {
+            $jobs = [];
+        }
+
+        foreach ($jobs as $backupId => $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            if ((string) ($entry['status'] ?? '') !== 'running') {
+                continue;
+            }
+
+            $pid = (int) ($entry['pid'] ?? 0);
+            if ($pid > 0 && !$this->isProcessRunning($pid)) {
+                $entry['status'] = 'failed';
+                $entry['progress'] = 100;
+                $entry['message'] = 'Upload interrompido: processo não encontrado.';
+                $entry['finished_at'] = date(DATE_ATOM);
+                $jobs[(string) $backupId] = $entry;
+            }
+        }
+
+        $this->managerStore->setRuntimeOption('backup_upload_jobs', $jobs);
+        if (is_array($job) && isset($job['backup_id'])) {
+            $activeKey = (string) ((int) $job['backup_id']);
+            if (isset($jobs[$activeKey]) && is_array($jobs[$activeKey])) {
+                $job = $jobs[$activeKey];
+                $this->managerStore->setRuntimeOption('backup_upload_active_job', $job);
+            }
+        }
 
         return response()->json([
             'active' => is_array($job) && (string) ($job['status'] ?? '') === 'running',
             'job' => $job,
+            'jobs' => $jobs,
             'progress' => (int) ($job['progress'] ?? 0),
             'message' => (string) ($job['message'] ?? 'Sem upload em andamento.'),
             'can_cancel' => is_array($job) && (string) ($job['status'] ?? '') === 'running',
@@ -700,9 +767,10 @@ class OperationsController extends Controller
         $job['progress'] = 100;
         $job['message'] = 'Upload cancelado manualmente.';
         $job['cancelled_at'] = date(DATE_ATOM);
-        $this->managerStore->setRuntimeOption('backup_upload_active_job', $job);
 
         $backupId = (int) ($job['backup_id'] ?? 0);
+        $this->persistUploadJob($backupId, $job);
+
         if ($backupId > 0) {
             $stmt = $this->stateStore->pdo()->prepare('UPDATE updater_backups SET cloud_last_error = :error WHERE id = :id');
             $stmt->execute([':error' => 'Upload cancelado manualmente.', ':id' => $backupId]);
@@ -711,15 +779,15 @@ class OperationsController extends Controller
         return back()->with('status', 'Upload cancelado com sucesso.');
     }
 
-    private function tryUploadBackupFile(string $path, string $prefix, bool $throwOnFailure = false, ?int $backupId = null): void
+    private function tryUploadBackupFile(string $path, string $prefix, bool $throwOnFailure = false, ?int $backupId = null): array
     {
         if (!is_file($path)) {
-            return;
+            return [];
         }
 
         $settings = $this->managerStore->backupUploadSettings();
         if (trim((string) ($settings['provider'] ?? 'none')) === 'none') {
-            return;
+            return [];
         }
 
         $settings['prefix'] = $prefix;
@@ -748,6 +816,11 @@ class OperationsController extends Controller
                 'remoto' => $result['remote_path'] ?? null,
                 'backup_id' => $backupId,
             ]);
+
+            return [
+                'provider' => $provider,
+                'remote_path' => (string) ($result['remote_path'] ?? ''),
+            ];
         } catch (\Throwable $e) {
             if ($backupId !== null) {
                 $stmt = $this->stateStore->pdo()->prepare('UPDATE updater_backups SET cloud_last_error = :error WHERE id = :id');
@@ -761,7 +834,158 @@ class OperationsController extends Controller
                 'arquivo' => $path,
                 'erro' => $e->getMessage(),
             ]);
+
+            return [];
         }
+    }
+
+
+    private function persistUploadJob(int $backupId, array $job): void
+    {
+        if ($backupId <= 0) {
+            return;
+        }
+
+        $this->managerStore->setRuntimeOption('backup_upload_active_job', $job);
+        $jobs = $this->managerStore->getRuntimeOption('backup_upload_jobs', []);
+        if (!is_array($jobs)) {
+            $jobs = [];
+        }
+
+        $jobs[(string) $backupId] = $job;
+        $this->managerStore->setRuntimeOption('backup_upload_jobs', $jobs);
+    }
+
+    public function deleteBackup(int $id, Request $request): RedirectResponse
+    {
+        $backup = $this->findBackup($id);
+        abort_if($backup === null, 404);
+
+        $path = (string) ($backup['path'] ?? '');
+        if ($path !== '' && is_file($path) && is_writable($path)) {
+            @unlink($path);
+        }
+
+        $stmt = $this->stateStore->pdo()->prepare('DELETE FROM updater_backups WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'backup_delete', [
+            'backup_id' => $id,
+            'tipo' => $backup['type'] ?? null,
+            'path' => $path,
+        ], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Backup removido com sucesso.');
+    }
+
+    public function cancelBackup(Request $request): RedirectResponse
+    {
+        $this->reconcileGhostBackupRuns();
+        $activeJob = $this->managerStore->getRuntimeOption('backup_active_job', null);
+        if (!is_array($activeJob) || (string) ($activeJob['status'] ?? '') !== 'running') {
+            return back()->withErrors(['backup' => 'Não existe backup em execução para cancelar.']);
+        }
+
+        $runId = (int) ($activeJob['run_id'] ?? 0);
+        $pid = (int) ($activeJob['pid'] ?? 0);
+        if ($pid > 0) {
+            $this->terminatePid($pid);
+        }
+
+        if ($runId > 0) {
+            $this->stateStore->updateRunStatus($runId, 'cancelled', ['message' => 'Cancelado manualmente via UI.']);
+            $this->stateStore->addRunLog($runId, 'warning', 'Backup cancelado manualmente pelo usuário.', [
+                'pid' => $pid > 0 ? $pid : null,
+            ]);
+        }
+
+        $this->managerStore->setRuntimeOption('backup_active_job', [
+            'run_id' => $runId,
+            'type' => (string) ($activeJob['type'] ?? 'manual'),
+            'pid' => $pid > 0 ? $pid : null,
+            'status' => 'cancelled',
+            'cancelled_at' => date(DATE_ATOM),
+        ]);
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'backup_cancel', [
+            'run_id' => $runId,
+            'pid' => $pid > 0 ? $pid : null,
+        ], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Solicitação de cancelamento enviada para o backup em andamento.');
+    }
+
+
+    private function reconcileGhostBackupRuns(): void
+    {
+        $runningStmt = $this->stateStore->pdo()->prepare("SELECT * FROM runs WHERE options_json LIKE :q AND status = 'running' ORDER BY id ASC");
+        $runningStmt->execute([':q' => '%manual_backup%']);
+        $rows = $runningStmt->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+
+        $activeJob = $this->managerStore->getRuntimeOption('backup_active_job', null);
+        $activeRunId = is_array($activeJob) ? (int) ($activeJob['run_id'] ?? 0) : 0;
+        $activePid = is_array($activeJob) ? (int) ($activeJob['pid'] ?? 0) : 0;
+
+        foreach ($rows as $run) {
+            $runId = (int) ($run['id'] ?? 0);
+            if ($runId <= 0) {
+                continue;
+            }
+
+            if ($runId === $activeRunId && $activePid > 0 && $this->isProcessRunning($activePid)) {
+                continue;
+            }
+
+            $startedAt = strtotime((string) ($run['started_at'] ?? '')) ?: 0;
+            if ($startedAt > 0 && (time() - $startedAt) < 120) {
+                continue;
+            }
+
+            $this->stateStore->updateRunStatus($runId, 'failed', ['message' => 'Run fantasma reconciliada automaticamente.']);
+            $this->stateStore->addRunLog($runId, 'warning', 'Run de backup marcada como falha por não existir processo ativo.', []);
+        }
+    }
+
+
+    private function isProcessRunning(int $pid): bool
+    {
+        if ($pid <= 0) {
+            return false;
+        }
+
+        if (function_exists('posix_kill')) {
+            return @posix_kill($pid, 0);
+        }
+
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $output = [];
+            @exec('tasklist /FI "PID eq ' . (int) $pid . '"', $output);
+            return str_contains(strtolower(implode('\n', $output)), (string) $pid);
+        }
+
+        $output = [];
+        @exec('ps -p ' . (int) $pid . ' -o pid=', $output);
+
+        return trim(implode('', $output)) !== '';
+    }
+
+    private function terminatePid(int $pid): void
+    {
+        if (function_exists('posix_kill')) {
+            @posix_kill($pid, 15);
+            usleep(200000);
+            @posix_kill($pid, 9);
+            return;
+        }
+
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            @exec('taskkill /F /PID ' . (int) $pid);
+            return;
+        }
+
+        @exec('kill -TERM ' . (int) $pid . ' >/dev/null 2>&1');
+        usleep(200000);
+        @exec('kill -KILL ' . (int) $pid . ' >/dev/null 2>&1');
     }
 
 

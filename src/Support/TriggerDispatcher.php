@@ -124,6 +124,7 @@ class TriggerDispatcher
     public function triggerBackupUpload(int $backupId): array
     {
         $args = ['php', 'artisan', 'system:update:backup-upload', '--backup-id=' . $backupId];
+        $this->assertBackupUploadCommandAvailable();
         $driver = $this->resolveDriver();
 
         if ($driver === 'sync') {
@@ -152,6 +153,12 @@ class TriggerDispatcher
             $process->start();
 
             return ['started' => true, 'pid' => $process->getPid() ?: null];
+        }
+
+        if ($this->isWindows()) {
+            exec(implode(' ', array_map('escapeshellarg', $args)));
+
+            return ['started' => true, 'pid' => null];
         }
 
         $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
@@ -214,6 +221,29 @@ class TriggerDispatcher
     private function assertManualBackupCommandAvailable(): void
     {
         $args = ['php', 'artisan', 'system:update:backup', '--help'];
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->setTimeout(20);
+            $process->run();
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException(trim($process->getErrorOutput() . "
+" . $process->getOutput()));
+            }
+
+            return;
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+        if ((int) $exitCode !== 0) {
+            throw new \RuntimeException(trim(implode("
+", $output)));
+        }
+    }
+
+
+    private function assertBackupUploadCommandAvailable(): void
+    {
+        $args = ['php', 'artisan', 'system:update:backup-upload', '--help'];
         if (class_exists(Process::class)) {
             $process = new Process($args, base_path());
             $process->setTimeout(20);

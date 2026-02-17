@@ -67,7 +67,7 @@
                     <td>{{ $backup['created_at'] }}</td>
                     <td>
                         <a class="btn" href="{{ route('updater.backups.download', ['id' => $backup['id']]) }}">Baixar backup</a>
-                        <form class="backup-upload-form" method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem {{ $cloudUploaded ? '(reenviar)' : '' }}</button></form>
+                        <form class="backup-upload-form" data-backup-id="{{ $backup['id'] }}" method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem {{ $cloudUploaded ? '(reenviar)' : '' }}</button></form><div class="muted backup-upload-item-status" data-backup-upload-status="{{ $backup['id'] }}" style="margin-top:4px;font-size:12px;"></div>
                         <a class="btn btn-danger" href="{{ route('updater.backups.restore.form', ['id' => $backup['id']]) }}">Restaurar</a>
                         <form method="POST" action="{{ route('updater.backups.delete', ['id' => $backup['id']]) }}" style="display:inline-block;" onsubmit="return confirm('Remover backup local e registro?');">@csrf @method('DELETE') <button class="btn" type="submit">Excluir</button></form>
                     </td>
@@ -167,6 +167,21 @@ async function updaterUploadPoll() {
         if (txt) txt.innerText = data.message || 'Sem upload em andamento.';
         if (bar) bar.style.width = Math.max(0, Math.min(100, Number(data.progress || 0))) + '%';
         if (cancelWrap) cancelWrap.hidden = !Boolean(data.can_cancel);
+
+        const jobs = data.jobs || {};
+        document.querySelectorAll('[data-backup-upload-status]').forEach((el) => {
+            const backupId = String(el.getAttribute('data-backup-upload-status') || '');
+            const job = jobs[backupId];
+            if (!job) {
+                el.textContent = '';
+                return;
+            }
+
+            const status = String(job.status || 'desconhecido');
+            const progress = Math.max(0, Math.min(100, Number(job.progress || 0)));
+            const message = String(job.message || '');
+            el.textContent = 'Upload [' + status + '] ' + progress + '% - ' + message;
+        });
     } catch (e) {
         // silencioso
     }
@@ -187,9 +202,11 @@ uploadForms.forEach((form) => {
                 body: fd,
                 credentials: 'same-origin',
             });
-            if (!response.ok) {
-                throw new Error('Falha ao iniciar upload.');
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || (payload && payload.ok === false)) {
+                throw new Error((payload && payload.message) ? payload.message : 'Falha ao iniciar upload.');
             }
+
             updaterUploadPoll();
         } catch (e) {
             const txt = document.getElementById('backup-upload-progress-text');
