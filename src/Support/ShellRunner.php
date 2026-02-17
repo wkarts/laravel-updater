@@ -79,7 +79,15 @@ class ShellRunner
             return $cwd;
         }
 
-        $configured = (string) config('updater.git.path', '');
+        $configured = '';
+        try {
+            if (function_exists('config')) {
+                $configured = (string) config('updater.git.path', '');
+            }
+        } catch (\Throwable $e) {
+            $configured = '';
+        }
+
         if ($configured !== '' && is_dir($configured)) {
             if (is_file(rtrim($configured, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'artisan')) {
                 return $configured;
