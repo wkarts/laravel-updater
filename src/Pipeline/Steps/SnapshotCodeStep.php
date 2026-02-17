@@ -37,8 +37,13 @@ class SnapshotCodeStep implements PipelineStepInterface
         $snapshot = $path . '/snapshot_' . date('Ymd_His') . '.zip';
 
         $excludes = config('updater.paths.exclude_snapshot', []);
+        $includeVendor = (bool) ($context['options']['snapshot_include_vendor'] ?? ($this->config['include_vendor'] ?? false));
+        if (!$includeVendor) {
+            $excludes[] = 'vendor';
+        }
+
         if ($this->archiveManager !== null) {
-            $this->archiveManager->createZipFromDirectory(base_path(), $snapshot, $excludes);
+            $this->archiveManager->createZipFromDirectory(base_path(), $snapshot, array_values(array_unique($excludes)));
         } else {
             $context['snapshot_warning'] = 'ArchiveManager não disponível para snapshot.';
             return;
