@@ -242,22 +242,12 @@ class ArchiveManager
     private function resolveFormat(string $format): string
     {
         $format = strtolower(trim($format));
-        if ($format === '' || $format === 'auto') {
-            if ($this->has7zBinary()) {
-                return '7z';
-            }
 
+        if ($format === 'zip') {
             return 'zip';
         }
 
-        if (in_array($format, ['zip', 'tgz', '7z'], true)) {
-            if ($format === '7z' && !$this->has7zBinary()) {
-                return 'zip';
-            }
-
-            return $format;
-        }
-
+        // Força ZIP por padrão para compatibilidade entre ambientes Linux/Windows.
         return 'zip';
     }
 

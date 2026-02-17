@@ -42,7 +42,7 @@ class SnapshotCodeStep implements PipelineStepInterface
             $excludes[] = 'vendor';
         }
 
-        $compression = (string) ($context['options']['snapshot_compression'] ?? ($this->config['compression'] ?? 'auto'));
+        $compression = (string) ($context['options']['snapshot_compression'] ?? ($this->config['compression'] ?? 'zip'));
 
         if ($this->archiveManager !== null) {
             $snapshot = $this->archiveManager->createArchiveFromDirectory(base_path(), $snapshotBase, $compression, array_values(array_unique($excludes)));

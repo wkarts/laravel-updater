@@ -93,7 +93,7 @@ class UpdateRunCommand extends Command
             'profile_id' => $profileId > 0 ? $profileId : null,
             'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
             'snapshot_include_vendor' => (bool) ($profile['snapshot_include_vendor'] ?? config('updater.snapshot.include_vendor', false)),
-            'snapshot_compression' => (string) ($profile['snapshot_compression'] ?? config('updater.snapshot.compression', 'auto')),
+            'snapshot_compression' => (string) ($profile['snapshot_compression'] ?? config('updater.snapshot.compression', 'zip')),
             'pre_update_commands' => $this->resolvePreUpdateCommands($profile, (array) $this->option('pre-command')),
             'post_update_commands' => $this->resolvePostUpdateCommands($profile, (array) $this->option('post-command')),
         ];

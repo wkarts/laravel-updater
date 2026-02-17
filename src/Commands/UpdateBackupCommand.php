@@ -38,7 +38,7 @@ class UpdateBackupCommand extends Command
 
         $runId = (int) ($this->option('run-id') ?: 0);
         $activeProfile = $managerStore->activeProfile();
-        $snapshotCompression = (string) ($activeProfile['snapshot_compression'] ?? config('updater.snapshot.compression', 'auto'));
+        $snapshotCompression = (string) ($activeProfile['snapshot_compression'] ?? config('updater.snapshot.compression', 'zip'));
         $snapshotIncludeVendor = (bool) ($activeProfile['snapshot_include_vendor'] ?? config('updater.snapshot.include_vendor', false));
         if ($runId <= 0) {
             $runId = $stateStore->createRun(['manual_backup' => $type]);

@@ -228,7 +228,7 @@ class OperationsController extends Controller
         try {
             $created = match ($type) {
                 'database' => $this->createDatabaseBackup($runId, $options),
-                'snapshot' => $this->createSnapshotBackup($runId, (string) ($options['compression'] ?? 'auto'), (bool) ($options['include_vendor'] ?? false)),
+                'snapshot' => $this->createSnapshotBackup($runId, (string) ($options['compression'] ?? 'zip'), (bool) ($options['include_vendor'] ?? false)),
                 'full' => $this->createFullBackup($runId, $options),
                 default => throw new RuntimeException('Tipo de backup inválido.'),
             };
@@ -530,7 +530,7 @@ class OperationsController extends Controller
     {
         $name = 'manual-db-' . date('Ymd-His');
         $filePath = $this->backupDriver->backup($name);
-        $filePath = $this->compressSingleFileIfNeeded($filePath, (string) ($options['compression'] ?? 'auto'), 'database');
+        $filePath = $this->compressSingleFileIfNeeded($filePath, (string) ($options['compression'] ?? 'zip'), 'database');
 
         return $this->insertBackupRow('database', $filePath, $runId);
     }
@@ -546,7 +546,7 @@ class OperationsController extends Controller
         if (!$resolvedIncludeVendor) {
             $excludes[] = 'vendor';
         }
-        $resolvedCompression = $compression ?? (string) (config('updater.snapshot.compression', 'auto'));
+        $resolvedCompression = $compression ?? (string) (config('updater.snapshot.compression', 'zip'));
         $filePath = $this->archiveManager->createArchiveFromDirectory(base_path(), $basePath, $resolvedCompression, array_values(array_unique($excludes)));
 
         return $this->insertBackupRow('snapshot', $filePath, $runId);
@@ -554,7 +554,7 @@ class OperationsController extends Controller
 
     private function createFullBackup(int $runId, array $options = []): array
     {
-        $compression = (string) ($options['compression'] ?? config('updater.snapshot.compression', 'auto'));
+        $compression = (string) ($options['compression'] ?? config('updater.snapshot.compression', 'zip'));
         $includeVendor = (bool) ($options['include_vendor'] ?? config('updater.snapshot.include_vendor', false));
 
         $db = $this->createDatabaseBackup($runId, $options);
@@ -579,7 +579,7 @@ class OperationsController extends Controller
         $profile = $this->managerStore->activeProfile();
 
         return [
-            'compression' => (string) ($profile['snapshot_compression'] ?? config('updater.snapshot.compression', 'auto')),
+            'compression' => (string) ($profile['snapshot_compression'] ?? config('updater.snapshot.compression', 'zip')),
             'include_vendor' => (bool) ($profile['snapshot_include_vendor'] ?? config('updater.snapshot.include_vendor', false)),
         ];
     }

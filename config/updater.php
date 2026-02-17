@@ -63,7 +63,7 @@ return [
         'path' => env('UPDATER_SNAPSHOT_PATH', storage_path('app/updater/snapshots')),
         'keep' => (int) env('UPDATER_SNAPSHOT_KEEP', 10),
         'include_vendor' => (bool) env('UPDATER_SNAPSHOT_INCLUDE_VENDOR', false),
-        'compression' => env('UPDATER_SNAPSHOT_COMPRESSION', 'auto'), // auto|7z|tgz|zip
+        'compression' => env('UPDATER_SNAPSHOT_COMPRESSION', 'zip'), // zip
     ],
 
     'paths' => [

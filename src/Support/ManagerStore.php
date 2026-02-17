@@ -407,7 +407,7 @@ class ManagerStore
             ':health_check' => $data['health_check'],
             ':rollback_on_fail' => $data['rollback_on_fail'],
             ':snapshot_include_vendor' => $data['snapshot_include_vendor'],
-            ':snapshot_compression' => in_array((string) ($data['snapshot_compression'] ?? 'auto'), ['auto', '7z', 'tgz', 'zip'], true) ? (string) $data['snapshot_compression'] : 'auto',
+            ':snapshot_compression' => 'zip',
             ':retention_backups' => (int) ($data['retention_backups'] ?? 10),
             ':active' => $data['active'],
             ':pre_update_commands' => $data['pre_update_commands'] ?? null,

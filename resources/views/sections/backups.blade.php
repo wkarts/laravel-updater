@@ -181,6 +181,17 @@ uploadForms.forEach((form) => {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const fd = new FormData(form);
+        const backupId = String(form.getAttribute('data-backup-id') || '');
+        const statusEl = document.querySelector('[data-backup-upload-status="' + backupId + '"]');
+        const progressWrap = document.querySelector('[data-backup-upload-progress="' + backupId + '"]');
+        const progressBar = document.querySelector('[data-backup-upload-progress-bar="' + backupId + '"]');
+        if (statusEl) {
+            statusEl.textContent = 'Iniciando upload...';
+            statusEl.style.display = 'block';
+        }
+        if (progressWrap) progressWrap.style.display = 'block';
+        if (progressBar) progressBar.style.width = '8%';
+
         try {
             const response = await fetch(form.action, {
                 method: 'POST',
@@ -198,12 +209,12 @@ uploadForms.forEach((form) => {
 
             updaterUploadPoll();
         } catch (e) {
-            const backupId = String(form.getAttribute('data-backup-id') || '');
-            const statusEl = document.querySelector('[data-backup-upload-status="' + backupId + '"]');
             if (statusEl) {
                 statusEl.textContent = 'Falha ao iniciar upload: ' + (e.message || 'erro desconhecido');
                 statusEl.style.display = 'block';
             }
+            if (progressWrap) progressWrap.style.display = 'none';
+            if (progressBar) progressBar.style.width = '0%';
         }
     });
 });
