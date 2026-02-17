@@ -22,4 +22,17 @@ class StateStoreTest extends TestCase
         $this->assertSame('running', $last['status']);
         @unlink($path);
     }
+
+    public function testEnsureSchemaCriaColunaSnapshotIncludeVendorNoPerfil(): void
+    {
+        $path = sys_get_temp_dir() . '/updater_test_' . uniqid() . '.sqlite';
+        $store = new StateStore($path);
+        $store->ensureSchema();
+
+        $columns = $store->pdo()->query("PRAGMA table_info('updater_profiles')")->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        $names = array_map(static fn (array $column): string => (string) ($column['name'] ?? ''), $columns);
+
+        $this->assertContains('snapshot_include_vendor', $names);
+        @unlink($path);
+    }
 }
