@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use RuntimeException;
 
 class OperationsController extends Controller
 {
@@ -66,7 +67,7 @@ class OperationsController extends Controller
                     'target_tag' => $targetTag,
                     'profile_id' => (int) $data['profile_id'],
                     'source_id' => (int) $data['source_id'],
-                    'sync' => (bool) config('updater.ui.force_sync', false),
+                    'sync' => false,
                     'allow_http' => true,
                 ]);
             } catch (\Throwable $e) {
@@ -88,7 +89,9 @@ class OperationsController extends Controller
                 ->with('status', 'Dry-run concluído. Revise e aprove para executar a atualização real.');
         }
 
-        $this->performMandatoryFullBackup($request);
+        if ((bool) config('updater.backup.full_before_update', false)) {
+            $this->performMandatoryFullBackup($request);
+        }
 
         try {
             $runId = $dispatcher->triggerUpdate([
@@ -98,7 +101,7 @@ class OperationsController extends Controller
                 'target_tag' => $targetTag,
                 'profile_id' => (int) $data['profile_id'],
                 'source_id' => (int) $data['source_id'],
-                'sync' => (bool) config('updater.ui.force_sync', false),
+                'sync' => false,
                     'allow_http' => true,
                 ]);
         } catch (\Throwable $e) {
@@ -132,7 +135,9 @@ class OperationsController extends Controller
             return back()->withErrors(['approval' => 'Não há execução pendente de aprovação para este dry-run.']);
         }
 
-        $this->performMandatoryFullBackup($request);
+        if ((bool) config('updater.backup.full_before_update', false)) {
+            $this->performMandatoryFullBackup($request);
+        }
 
         try {
             $runId = $dispatcher->triggerUpdate([
@@ -142,7 +147,7 @@ class OperationsController extends Controller
                 'target_tag' => (string) ($pending['target_tag'] ?? ''),
                 'profile_id' => (int) ($pending['profile_id'] ?? 0),
                 'source_id' => (int) ($pending['source_id'] ?? 0),
-                'sync' => (bool) config('updater.ui.force_sync', false),
+                'sync' => false,
                     'allow_http' => true,
                 ]);
         } catch (\Throwable $e) {
@@ -172,40 +177,78 @@ class OperationsController extends Controller
         ]);
     }
 
-    public function backupNow(string $type, Request $request): RedirectResponse
+    public function backupNow(string $type, Request $request, TriggerDispatcher $dispatcher): RedirectResponse
     {
-        $runId = $this->stateStore->createRun(['manual_backup' => $type]);
-        $this->stateStore->addRunLog($runId, 'info', 'Iniciando backup manual.', ['tipo' => $type]);
+        if (!in_array($type, ['database', 'snapshot', 'full'], true)) {
+            return back()->withErrors(['backup' => 'Tipo de backup inválido.']);
+        }
+
+        $runId = $this->stateStore->createRun(['manual_backup' => $type, 'triggered_via' => 'ui']);
+        $this->stateStore->addRunLog($runId, 'info', 'Backup manual enfileirado.', ['tipo' => $type]);
+        $backupOptions = $this->resolveActiveBackupOptions();
+
+        try {
+            $result = $dispatcher->triggerManualBackup($type, $runId);
+            $this->managerStore->setRuntimeOption('backup_active_job', [
+                'run_id' => $runId,
+                'type' => $type,
+                'pid' => $result['pid'] ?? null,
+                'status' => 'running',
+                'started_at' => date(DATE_ATOM),
+            ]);
+        } catch (\Throwable $e) {
+            if (str_contains(strtolower($e->getMessage()), 'system:update:backup') || str_contains(strtolower($e->getMessage()), 'namespace')) {
+                return $this->runManualBackupInline($type, $runId, $request, $e->getMessage(), $backupOptions);
+            }
+
+            $this->stateStore->updateRunStatus($runId, 'failed', ['message' => $e->getMessage()]);
+            return back()->withErrors(['backup' => 'Falha ao iniciar backup: ' . $e->getMessage()]);
+        }
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'backup_start', [
+            'tipo' => $type,
+            'run_id' => $runId,
+        ], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Backup iniciado em segundo plano. Você pode continuar usando o painel.');
+    }
+
+
+    private function runManualBackupInline(string $type, int $runId, Request $request, string $reason, array $options): RedirectResponse
+    {
+        $this->stateStore->addRunLog($runId, 'warning', 'Fallback para backup síncrono ativado.', [
+            'motivo' => $reason,
+            'tipo' => $type,
+        ]);
 
         try {
             $created = match ($type) {
-                'database' => $this->createDatabaseBackup($runId),
-                'snapshot' => $this->createSnapshotBackup($runId),
-                'full' => $this->createFullBackup($runId),
-                default => throw new \RuntimeException('Tipo de backup inválido.'),
+                'database' => $this->createDatabaseBackup($runId, $options),
+                'snapshot' => $this->createSnapshotBackup($runId, (string) ($options['compression'] ?? 'auto'), (bool) ($options['include_vendor'] ?? false)),
+                'full' => $this->createFullBackup($runId, $options),
+                default => throw new RuntimeException('Tipo de backup inválido.'),
             };
 
             $this->stateStore->finishRun($runId, ['revision_before' => null, 'revision_after' => null]);
-            $this->stateStore->addRunLog($runId, 'info', 'Backup manual finalizado com sucesso.', [
-                'tipo' => $type,
-                'backup_id' => $created['id'],
-                'arquivo' => $created['path'],
+            $this->managerStore->setRuntimeOption('backup_active_job', [
+                'run_id' => $runId,
+                'type' => $type,
+                'pid' => null,
+                'status' => 'finished',
+                'finished_at' => date(DATE_ATOM),
             ]);
-            $this->managerStore->addAuditLog($this->actorId($request), 'backup', [
+            $this->managerStore->addAuditLog($this->actorId($request), 'backup_sync_fallback', [
                 'tipo' => $type,
                 'run_id' => $runId,
                 'backup_id' => $created['id'],
+                'reason' => $reason,
             ], $request->ip(), $request->userAgent());
 
-            return back()->with('status', 'Backup manual gerado com sucesso.');
+            return back()->with('status', 'Backup concluído em modo de compatibilidade (síncrono).');
         } catch (\Throwable $e) {
             $this->stateStore->updateRunStatus($runId, 'failed', ['message' => $e->getMessage()]);
-            $this->stateStore->addRunLog($runId, 'error', 'Falha ao gerar backup manual.', [
-                'tipo' => $type,
-                'erro' => $e->getMessage(),
-            ]);
 
-            return back()->withErrors(['backup' => 'Falha ao gerar backup: ' . $e->getMessage()]);
+            return back()->withErrors(['backup' => 'Falha no backup em modo de compatibilidade: ' . $e->getMessage()]);
         }
     }
 
@@ -356,6 +399,45 @@ class OperationsController extends Controller
         $active = $runningRun !== null;
         $progress = 0;
         $message = 'Sem backup em execução no momento.';
+        $activeJob = $this->managerStore->getRuntimeOption('backup_active_job', null);
+
+        if ($runningRun !== null && is_array($activeJob) && (string) ($activeJob['status'] ?? '') === 'running') {
+            $pid = (int) ($activeJob['pid'] ?? 0);
+            if ($pid > 0 && !$this->isProcessRunning($pid)) {
+                $this->stateStore->updateRunStatus((int) $runningRun['id'], 'failed', ['message' => 'Processo de backup finalizado inesperadamente.']);
+                $this->stateStore->addRunLog((int) $runningRun['id'], 'error', 'Backup interrompido: processo não está mais ativo.', ['pid' => $pid]);
+                $this->managerStore->setRuntimeOption('backup_active_job', [
+                    'run_id' => (int) $runningRun['id'],
+                    'type' => (string) ($activeJob['type'] ?? 'manual'),
+                    'pid' => $pid,
+                    'status' => 'failed',
+                    'finished_at' => date(DATE_ATOM),
+                    'error' => 'Processo não encontrado durante monitoramento.',
+                ]);
+                $runningRun = null;
+                $active = false;
+            }
+        }
+
+        if ($runningRun !== null && is_array($activeJob)) {
+            $jobStatus = (string) ($activeJob['status'] ?? '');
+            $jobRunId = (int) ($activeJob['run_id'] ?? 0);
+            if ($jobRunId === (int) ($runningRun['id'] ?? 0) && in_array($jobStatus, ['finished', 'failed', 'cancelled'], true)) {
+                if ($jobStatus === 'finished') {
+                    $this->stateStore->finishRun((int) $runningRun['id'], ['revision_before' => null, 'revision_after' => null]);
+                } elseif ($jobStatus === 'failed') {
+                    $this->stateStore->updateRunStatus((int) $runningRun['id'], 'failed', ['message' => (string) ($activeJob['error'] ?? 'Falha no processamento do backup.')]);
+                } else {
+                    $this->stateStore->updateRunStatus((int) $runningRun['id'], 'cancelled', ['message' => 'Cancelado manualmente.']);
+                }
+
+                $runningRun = null;
+                $active = false;
+                $lastStmt = $this->stateStore->pdo()->prepare("SELECT * FROM runs WHERE options_json LIKE :q ORDER BY id DESC LIMIT 1");
+                $lastStmt->execute([':q' => '%manual_backup%']);
+                $lastRun = $lastStmt->fetch(\PDO::FETCH_ASSOC) ?: $lastRun;
+            }
+        }
 
         if ($active) {
             $progress = 65;
@@ -378,6 +460,8 @@ class OperationsController extends Controller
             'run' => $runningRun ?? $lastRun,
             'logs' => $logs,
             'updated_at' => date(DATE_ATOM),
+            'active_job' => $activeJob,
+            'can_cancel' => $active && is_array($activeJob),
         ]);
     }
 
@@ -430,43 +514,83 @@ class OperationsController extends Controller
         };
     }
 
-    private function createDatabaseBackup(int $runId): array
+    private function createDatabaseBackup(int $runId, array $options = []): array
     {
         $name = 'manual-db-' . date('Ymd-His');
         $filePath = $this->backupDriver->backup($name);
+        $filePath = $this->compressSingleFileIfNeeded($filePath, (string) ($options['compression'] ?? 'auto'), 'database');
 
         return $this->insertBackupRow('database', $filePath, $runId);
     }
 
-    private function createSnapshotBackup(int $runId): array
+    private function createSnapshotBackup(int $runId, ?string $compression = null, ?bool $includeVendor = null): array
     {
         $snapshotPath = rtrim((string) config('updater.snapshot.path'), '/');
         $this->fileManager->ensureDirectory($snapshotPath);
 
-        $filePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His') . '.zip';
+        $basePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His');
         $excludes = config('updater.paths.exclude_snapshot', []);
-        $this->archiveManager->createZipFromDirectory(base_path(), $filePath, $excludes);
+        $resolvedIncludeVendor = $includeVendor ?? (bool) config('updater.snapshot.include_vendor', false);
+        if (!$resolvedIncludeVendor) {
+            $excludes[] = 'vendor';
+        }
+        $resolvedCompression = $compression ?? (string) (config('updater.snapshot.compression', 'auto'));
+        $filePath = $this->archiveManager->createArchiveFromDirectory(base_path(), $basePath, $resolvedCompression, array_values(array_unique($excludes)));
 
         return $this->insertBackupRow('snapshot', $filePath, $runId);
     }
 
-    private function createFullBackup(int $runId): array
+    private function createFullBackup(int $runId, array $options = []): array
     {
-        $db = $this->createDatabaseBackup($runId);
-        $snapshot = $this->createSnapshotBackup($runId);
+        $compression = (string) ($options['compression'] ?? config('updater.snapshot.compression', 'auto'));
+        $includeVendor = (bool) ($options['include_vendor'] ?? config('updater.snapshot.include_vendor', false));
 
-        $fullPath = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His') . '.zip';
-        $this->archiveManager->createZipFromFiles([
-            (string) $db['path'] => 'database/' . basename((string) $db['path']),
-            (string) $snapshot['path'] => 'snapshot/' . basename((string) $snapshot['path']),
-        ], $fullPath);
+        $db = $this->createDatabaseBackup($runId, $options);
+        $snapshot = $this->createSnapshotBackup($runId, $compression, $includeVendor);
+
+        $fullBase = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His');
+        $tmpDir = sys_get_temp_dir() . '/updater-full-' . uniqid();
+        @mkdir($tmpDir, 0777, true);
+        @mkdir($tmpDir . '/database', 0777, true);
+        @mkdir($tmpDir . '/snapshot', 0777, true);
+        @copy((string) $db['path'], $tmpDir . '/database/' . basename((string) $db['path']));
+        @copy((string) $snapshot['path'], $tmpDir . '/snapshot/' . basename((string) $snapshot['path']));
+
+        $fullPath = $this->archiveManager->createArchiveFromDirectory($tmpDir, $fullBase, $compression, []);
 
         return $this->insertBackupRow('full', $fullPath, $runId);
     }
 
+
+    private function resolveActiveBackupOptions(): array
+    {
+        $profile = $this->managerStore->activeProfile();
+
+        return [
+            'compression' => (string) ($profile['snapshot_compression'] ?? config('updater.snapshot.compression', 'auto')),
+            'include_vendor' => (bool) ($profile['snapshot_include_vendor'] ?? config('updater.snapshot.include_vendor', false)),
+        ];
+    }
+
+    private function compressSingleFileIfNeeded(string $path, string $compression, string $prefix): string
+    {
+        $compression = strtolower(trim($compression));
+        if (!is_file($path) || in_array($compression, ['', 'none'], true)) {
+            return $path;
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/updater-single-' . uniqid();
+        @mkdir($tmpDir, 0777, true);
+        @copy($path, $tmpDir . '/' . basename($path));
+
+        $baseName = dirname($path) . '/' . $prefix . '-compressed-' . date('Ymd-His');
+
+        return $this->archiveManager->createArchiveFromDirectory($tmpDir, $baseName, $compression, []);
+    }
+
     private function insertBackupRow(string $type, string $path, int $runId): array
     {
-        $stmt = $this->stateStore->pdo()->prepare('INSERT INTO updater_backups (type, path, size, created_at, run_id) VALUES (:type,:path,:size,:created_at,:run_id)');
+        $stmt = $this->stateStore->pdo()->prepare('INSERT INTO updater_backups (type, path, size, created_at, run_id, cloud_uploaded, cloud_upload_count) VALUES (:type,:path,:size,:created_at,:run_id,0,0)');
         $stmt->execute([
             ':type' => $type,
             ':path' => $path,
@@ -478,12 +602,13 @@ class OperationsController extends Controller
         $upload = $this->managerStore->backupUploadSettings();
         $prefix = trim((string) ($upload['prefix'] ?? config('updater.backup.upload_prefix', 'updater/backups')), '/');
         $autoUpload = (bool) ($upload['auto_upload'] ?? false);
+        $backupId = (int) $this->stateStore->pdo()->lastInsertId();
         if ($autoUpload) {
-            $this->tryUploadBackupFile($path, $prefix);
+            $this->tryUploadBackupFile($path, $prefix, false, $backupId);
         }
 
         return [
-            'id' => (int) $this->stateStore->pdo()->lastInsertId(),
+            'id' => $backupId,
             'type' => $type,
             'path' => $path,
         ];
@@ -507,7 +632,7 @@ class OperationsController extends Controller
         }
 
         try {
-            $this->tryUploadBackupFile($path, $prefix, true);
+            $this->tryUploadBackupFile($path, $prefix, true, $id);
             $this->managerStore->addAuditLog($this->actorId($request), 'backup_upload_manual', [
                 'backup_id' => $id,
                 'provider' => $upload['provider'] ?? 'none',
@@ -519,7 +644,7 @@ class OperationsController extends Controller
         return back()->with('status', 'Upload do backup concluído com sucesso.');
     }
 
-    private function tryUploadBackupFile(string $path, string $prefix, bool $throwOnFailure = false): void
+    private function tryUploadBackupFile(string $path, string $prefix, bool $throwOnFailure = false, ?int $backupId = null): void
     {
         if (!is_file($path)) {
             return;
@@ -534,12 +659,33 @@ class OperationsController extends Controller
 
         try {
             $result = $this->cloudUploader->upload($path, $settings);
+            $provider = (string) ($result['provider'] ?? ($settings['provider'] ?? 'n/a'));
+            $expectedProvider = (string) ($settings['provider'] ?? 'none');
+            if ($expectedProvider !== 'none' && !str_starts_with($provider, $expectedProvider === 'minio' ? 's3' : $expectedProvider)) {
+                throw new RuntimeException('Upload retornou provedor inesperado: ' . $provider);
+            }
+
+            if ($backupId !== null) {
+                $stmt = $this->stateStore->pdo()->prepare('UPDATE updater_backups SET cloud_uploaded = 1, cloud_provider = :provider, cloud_uploaded_at = :uploaded_at, cloud_remote_path = :remote_path, cloud_upload_count = COALESCE(cloud_upload_count, 0) + 1, cloud_last_error = NULL WHERE id = :id');
+                $stmt->execute([
+                    ':provider' => $provider,
+                    ':uploaded_at' => date(DATE_ATOM),
+                    ':remote_path' => (string) ($result['remote_path'] ?? ''),
+                    ':id' => $backupId,
+                ]);
+            }
+
             $this->stateStore->addRunLog(null, 'info', 'Backup enviado para nuvem com sucesso.', [
-                'provider' => $result['provider'] ?? ($settings['provider'] ?? 'n/a'),
+                'provider' => $provider,
                 'arquivo' => $path,
                 'remoto' => $result['remote_path'] ?? null,
+                'backup_id' => $backupId,
             ]);
         } catch (\Throwable $e) {
+            if ($backupId !== null) {
+                $stmt = $this->stateStore->pdo()->prepare('UPDATE updater_backups SET cloud_last_error = :error WHERE id = :id');
+                $stmt->execute([':error' => $e->getMessage(), ':id' => $backupId]);
+            }
             if ($throwOnFailure) {
                 throw $e;
             }
@@ -549,6 +695,108 @@ class OperationsController extends Controller
                 'erro' => $e->getMessage(),
             ]);
         }
+    }
+
+
+    public function deleteBackup(int $id, Request $request): RedirectResponse
+    {
+        $backup = $this->findBackup($id);
+        abort_if($backup === null, 404);
+
+        $path = (string) ($backup['path'] ?? '');
+        if ($path !== '' && is_file($path) && is_writable($path)) {
+            @unlink($path);
+        }
+
+        $stmt = $this->stateStore->pdo()->prepare('DELETE FROM updater_backups WHERE id = :id');
+        $stmt->execute([':id' => $id]);
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'backup_delete', [
+            'backup_id' => $id,
+            'tipo' => $backup['type'] ?? null,
+            'path' => $path,
+        ], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Backup removido com sucesso.');
+    }
+
+    public function cancelBackup(Request $request): RedirectResponse
+    {
+        $activeJob = $this->managerStore->getRuntimeOption('backup_active_job', null);
+        if (!is_array($activeJob) || (string) ($activeJob['status'] ?? '') !== 'running') {
+            return back()->withErrors(['backup' => 'Não há backup em execução para cancelar.']);
+        }
+
+        $runId = (int) ($activeJob['run_id'] ?? 0);
+        $pid = (int) ($activeJob['pid'] ?? 0);
+        if ($pid > 0) {
+            $this->terminatePid($pid);
+        }
+
+        if ($runId > 0) {
+            $this->stateStore->updateRunStatus($runId, 'cancelled', ['message' => 'Cancelado manualmente via UI.']);
+            $this->stateStore->addRunLog($runId, 'warning', 'Backup cancelado manualmente pelo usuário.', [
+                'pid' => $pid > 0 ? $pid : null,
+            ]);
+        }
+
+        $this->managerStore->setRuntimeOption('backup_active_job', [
+            'run_id' => $runId,
+            'type' => (string) ($activeJob['type'] ?? 'manual'),
+            'pid' => $pid > 0 ? $pid : null,
+            'status' => 'cancelled',
+            'cancelled_at' => date(DATE_ATOM),
+        ]);
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'backup_cancel', [
+            'run_id' => $runId,
+            'pid' => $pid > 0 ? $pid : null,
+        ], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Solicitação de cancelamento enviada para o backup em andamento.');
+    }
+
+
+    private function isProcessRunning(int $pid): bool
+    {
+        if ($pid <= 0) {
+            return false;
+        }
+
+        if (function_exists('posix_kill')) {
+            return @posix_kill($pid, 0);
+        }
+
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $output = [];
+            @exec('tasklist /FI "PID eq ' . (int) $pid . '"', $output);
+            return str_contains(strtolower(implode("
+", $output)), (string) $pid);
+        }
+
+        $output = [];
+        @exec('ps -p ' . (int) $pid . ' -o pid=', $output);
+
+        return trim(implode('', $output)) !== '';
+    }
+
+    private function terminatePid(int $pid): void
+    {
+        if (function_exists('posix_kill')) {
+            @posix_kill($pid, 15);
+            usleep(200000);
+            @posix_kill($pid, 9);
+            return;
+        }
+
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            @exec('taskkill /F /PID ' . (int) $pid);
+            return;
+        }
+
+        @exec('kill -TERM ' . (int) $pid . ' >/dev/null 2>&1');
+        usleep(200000);
+        @exec('kill -KILL ' . (int) $pid . ' >/dev/null 2>&1');
     }
 
     private function findBackup(int $id): ?array
