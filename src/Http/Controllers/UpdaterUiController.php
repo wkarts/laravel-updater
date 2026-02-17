@@ -69,11 +69,20 @@ class UpdaterUiController extends Controller
         return response()->json($kernel->status());
     }
 
-    public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher): RedirectResponse
+    public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher, ShellRunner $shellRunner): RedirectResponse
     {
         $activeProfile = $this->managerStore->activeProfile();
         $preUpdateCommands = $this->parseCommands((string) ($activeProfile['pre_update_commands'] ?? ''));
         $postUpdateCommands = $this->parseCommands((string) ($activeProfile['post_update_commands'] ?? ''));
+
+
+        if ((bool) config('updater.backup.full_before_update', false)) {
+            try {
+                $shellRunner->runOrFail(['php', 'artisan', 'system:update:backup', '--type=full']);
+            } catch (\Throwable $e) {
+                return back()->withErrors(['backup' => 'Falha ao executar backup FULL obrigatório: ' . $e->getMessage()]);
+            }
+        }
 
         $dispatcher->triggerUpdate([
             'seed' => (bool) ($activeProfile['seed'] ?? false),
