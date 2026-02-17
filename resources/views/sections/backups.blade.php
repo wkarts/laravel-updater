@@ -25,16 +25,6 @@
 </div>
 
 
-<div class="card">
-    <h3>Upload para nuvem em tempo real</h3>
-    <p id="backup-upload-progress-text" class="muted">Sem upload em andamento.</p>
-    <div style="height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden;">
-        <div id="backup-upload-progress-bar" style="height:10px; width:0%; background:#10b981; transition:width .3s;"></div>
-    </div>
-    <div style="margin-top:10px;" id="backup-upload-cancel-wrap" hidden>
-        <form method="POST" action="{{ route('updater.backups.upload.cancel') }}">@csrf <button class="btn btn-danger" type="submit">Cancelar upload em andamento</button></form>
-    </div>
-</div>
 
 <div class="card">
     <h3>Backups disponíveis</h3>
@@ -67,7 +57,7 @@
                     <td>{{ $backup['created_at'] }}</td>
                     <td>
                         <a class="btn" href="{{ route('updater.backups.download', ['id' => $backup['id']]) }}">Baixar backup</a>
-                        <form class="backup-upload-form" data-backup-id="{{ $backup['id'] }}" method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem {{ $cloudUploaded ? '(reenviar)' : '' }}</button></form><div class="muted backup-upload-item-status" data-backup-upload-status="{{ $backup['id'] }}" style="margin-top:4px;font-size:12px;"></div>
+                        <form class="backup-upload-form" data-backup-id="{{ $backup['id'] }}" method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem {{ $cloudUploaded ? '(reenviar)' : '' }}</button></form><div class="muted backup-upload-item-status" data-backup-upload-status="{{ $backup['id'] }}" style="margin-top:4px;font-size:12px; display:none;"></div><div class="backup-upload-item-progress" data-backup-upload-progress="{{ $backup['id'] }}" style="margin-top:4px;display:none;"><div style="height:6px;background:#e5e7eb;border-radius:999px;overflow:hidden;"><div data-backup-upload-progress-bar="{{ $backup['id'] }}" style="height:6px;width:0%;background:#10b981;transition:width .3s;"></div></div></div>
                         <a class="btn btn-danger" href="{{ route('updater.backups.restore.form', ['id' => $backup['id']]) }}">Restaurar</a>
                         <form method="POST" action="{{ route('updater.backups.delete', ['id' => $backup['id']]) }}" style="display:inline-block;" onsubmit="return confirm('Remover backup local e registro?');">@csrf @method('DELETE') <button class="btn" type="submit">Excluir</button></form>
                     </td>
@@ -145,7 +135,6 @@ createForms.forEach((form) => {
             }
 
             updaterBackupPoll();
-updaterUploadPoll();
         } catch (e) {
             const txt = document.getElementById('backup-progress-text');
             if (txt) txt.innerText = 'Falha ao iniciar backup: ' + (e.message || 'erro desconhecido');
@@ -159,28 +148,28 @@ async function updaterUploadPoll() {
     try {
         const res = await fetch('{{ route('updater.backups.upload.progress.status') }}', {headers: {'X-Requested-With': 'XMLHttpRequest'}});
         const data = await res.json();
-
-        const txt = document.getElementById('backup-upload-progress-text');
-        const bar = document.getElementById('backup-upload-progress-bar');
-        const cancelWrap = document.getElementById('backup-upload-cancel-wrap');
-
-        if (txt) txt.innerText = data.message || 'Sem upload em andamento.';
-        if (bar) bar.style.width = Math.max(0, Math.min(100, Number(data.progress || 0))) + '%';
-        if (cancelWrap) cancelWrap.hidden = !Boolean(data.can_cancel);
-
         const jobs = data.jobs || {};
+
         document.querySelectorAll('[data-backup-upload-status]').forEach((el) => {
             const backupId = String(el.getAttribute('data-backup-upload-status') || '');
             const job = jobs[backupId];
-            if (!job) {
+            const progressWrap = document.querySelector('[data-backup-upload-progress="' + backupId + '"]');
+            const progressBar = document.querySelector('[data-backup-upload-progress-bar="' + backupId + '"]');
+
+            if (!job || String(job.status || '') !== 'running') {
                 el.textContent = '';
+                el.style.display = 'none';
+                if (progressWrap) progressWrap.style.display = 'none';
+                if (progressBar) progressBar.style.width = '0%';
                 return;
             }
 
-            const status = String(job.status || 'desconhecido');
             const progress = Math.max(0, Math.min(100, Number(job.progress || 0)));
-            const message = String(job.message || '');
-            el.textContent = 'Upload [' + status + '] ' + progress + '% - ' + message;
+            const message = String(job.message || 'Upload em andamento...');
+            el.textContent = message;
+            el.style.display = 'block';
+            if (progressWrap) progressWrap.style.display = 'block';
+            if (progressBar) progressBar.style.width = progress + '%';
         });
     } catch (e) {
         // silencioso
@@ -209,8 +198,12 @@ uploadForms.forEach((form) => {
 
             updaterUploadPoll();
         } catch (e) {
-            const txt = document.getElementById('backup-upload-progress-text');
-            if (txt) txt.innerText = 'Falha ao iniciar upload: ' + (e.message || 'erro desconhecido');
+            const backupId = String(form.getAttribute('data-backup-id') || '');
+            const statusEl = document.querySelector('[data-backup-upload-status="' + backupId + '"]');
+            if (statusEl) {
+                statusEl.textContent = 'Falha ao iniciar upload: ' + (e.message || 'erro desconhecido');
+                statusEl.style.display = 'block';
+            }
         }
     });
 });

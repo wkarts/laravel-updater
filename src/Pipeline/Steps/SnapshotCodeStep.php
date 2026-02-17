@@ -55,7 +55,7 @@ class SnapshotCodeStep implements PipelineStepInterface
         $runId = (int) ($context['run_id'] ?? 0);
         $this->store->registerArtifact('snapshot', $snapshot, ['run_id' => $runId > 0 ? $runId : null]);
 
-        $insert = $this->store->pdo()->prepare('INSERT INTO updater_backups (type, path, size, created_at, run_id, cloud_uploaded, cloud_upload_count) VALUES (:type,:path,:size,:created_at,:run_id,0,0)');
+        $insert = $this->store->pdo()->prepare('INSERT INTO updater_backups (type, path, size, created_at, run_id) VALUES (:type,:path,:size,:created_at,:run_id)');
         $insert->execute([
             ':type' => 'snapshot',
             ':path' => $snapshot,
