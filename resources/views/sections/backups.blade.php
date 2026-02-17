@@ -5,9 +5,9 @@
 <div class="card">
     <h3>Ações de backup manual</h3>
     <div class="form-inline" style="gap:8px; flex-wrap:wrap;">
-        <form method="POST" action="{{ route('updater.backups.create', ['type' => 'database']) }}" onsubmit="window.updaterBackupLoading()">@csrf <button class="btn btn-primary" type="submit">Gerar backup do Banco agora</button></form>
-        <form method="POST" action="{{ route('updater.backups.create', ['type' => 'snapshot']) }}" onsubmit="window.updaterBackupLoading()">@csrf <button class="btn" type="submit">Gerar snapshot da aplicação completa</button></form>
-        <form method="POST" action="{{ route('updater.backups.create', ['type' => 'full']) }}" onsubmit="window.updaterBackupLoading()">@csrf <button class="btn" type="submit">Gerar backup completo agora</button></form>
+        <form class="backup-create-form" method="POST" action="{{ route('updater.backups.create', ['type' => 'database']) }}" onsubmit="window.updaterBackupLoading()">@csrf <button class="btn btn-primary" type="submit">Gerar backup do Banco agora</button></form>
+        <form class="backup-create-form" method="POST" action="{{ route('updater.backups.create', ['type' => 'snapshot']) }}" onsubmit="window.updaterBackupLoading()">@csrf <button class="btn" type="submit">Gerar snapshot da aplicação completa</button></form>
+        <form class="backup-create-form" method="POST" action="{{ route('updater.backups.create', ['type' => 'full']) }}" onsubmit="window.updaterBackupLoading()">@csrf <button class="btn" type="submit">Gerar backup completo agora</button></form>
         <a class="btn" href="{{ route('updater.backups.log.download') }}">Baixar log do updater</a>
     </div>
 </div>
@@ -108,6 +108,37 @@ async function updaterBackupPoll() {
         // silencioso
     }
 }
+
+
+const createForms = document.querySelectorAll('form.backup-create-form');
+createForms.forEach((form) => {
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        window.updaterBackupLoading();
+
+        try {
+            const formData = new FormData(form);
+            const response = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': formData.get('_token') || '',
+                },
+                body: formData,
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok) {
+                throw new Error('Falha ao iniciar backup.');
+            }
+
+            updaterBackupPoll();
+        } catch (e) {
+            const txt = document.getElementById('backup-progress-text');
+            if (txt) txt.innerText = 'Falha ao iniciar backup: ' + (e.message || 'erro desconhecido');
+        }
+    });
+});
 
 setInterval(updaterBackupPoll, 4000);
 updaterBackupPoll();

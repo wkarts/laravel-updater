@@ -185,6 +185,7 @@ class OperationsController extends Controller
 
         $runId = $this->stateStore->createRun(['manual_backup' => $type, 'triggered_via' => 'ui']);
         $this->stateStore->addRunLog($runId, 'info', 'Backup manual enfileirado.', ['tipo' => $type]);
+        $backupOptions = $this->resolveActiveBackupOptions();
 
         try {
             $result = $dispatcher->triggerManualBackup($type, $runId);
@@ -197,7 +198,7 @@ class OperationsController extends Controller
             ]);
         } catch (\Throwable $e) {
             if (str_contains(strtolower($e->getMessage()), 'system:update:backup') || str_contains(strtolower($e->getMessage()), 'namespace')) {
-                return $this->runManualBackupInline($type, $runId, $request, $e->getMessage());
+                return $this->runManualBackupInline($type, $runId, $request, $e->getMessage(), $backupOptions);
             }
 
             $this->stateStore->updateRunStatus($runId, 'failed', ['message' => $e->getMessage()]);
@@ -213,7 +214,7 @@ class OperationsController extends Controller
     }
 
 
-    private function runManualBackupInline(string $type, int $runId, Request $request, string $reason): RedirectResponse
+    private function runManualBackupInline(string $type, int $runId, Request $request, string $reason, array $options): RedirectResponse
     {
         $this->stateStore->addRunLog($runId, 'warning', 'Fallback para backup síncrono ativado.', [
             'motivo' => $reason,
@@ -222,9 +223,9 @@ class OperationsController extends Controller
 
         try {
             $created = match ($type) {
-                'database' => $this->createDatabaseBackup($runId),
-                'snapshot' => $this->createSnapshotBackup($runId),
-                'full' => $this->createFullBackup($runId),
+                'database' => $this->createDatabaseBackup($runId, $options),
+                'snapshot' => $this->createSnapshotBackup($runId, (string) ($options['compression'] ?? 'auto'), (bool) ($options['include_vendor'] ?? false)),
+                'full' => $this->createFullBackup($runId, $options),
                 default => throw new RuntimeException('Tipo de backup inválido.'),
             };
 
@@ -520,22 +521,24 @@ class OperationsController extends Controller
         };
     }
 
-    private function createDatabaseBackup(int $runId): array
+    private function createDatabaseBackup(int $runId, array $options = []): array
     {
         $name = 'manual-db-' . date('Ymd-His');
         $filePath = $this->backupDriver->backup($name);
+        $filePath = $this->compressSingleFileIfNeeded($filePath, (string) ($options['compression'] ?? 'auto'), 'database');
 
         return $this->insertBackupRow('database', $filePath, $runId);
     }
 
-    private function createSnapshotBackup(int $runId, ?string $compression = null): array
+    private function createSnapshotBackup(int $runId, ?string $compression = null, ?bool $includeVendor = null): array
     {
         $snapshotPath = rtrim((string) config('updater.snapshot.path'), '/');
         $this->fileManager->ensureDirectory($snapshotPath);
 
         $basePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His');
         $excludes = config('updater.paths.exclude_snapshot', []);
-        if (!(bool) config('updater.snapshot.include_vendor', false)) {
+        $resolvedIncludeVendor = $includeVendor ?? (bool) config('updater.snapshot.include_vendor', false);
+        if (!$resolvedIncludeVendor) {
             $excludes[] = 'vendor';
         }
         $resolvedCompression = $compression ?? (string) (config('updater.snapshot.compression', 'auto'));
@@ -544,19 +547,52 @@ class OperationsController extends Controller
         return $this->insertBackupRow('snapshot', $filePath, $runId);
     }
 
-    private function createFullBackup(int $runId): array
+    private function createFullBackup(int $runId, array $options = []): array
     {
-        $db = $this->createDatabaseBackup($runId);
-        $compression = (string) (($this->managerStore->activeProfile()['snapshot_compression'] ?? config('updater.snapshot.compression', 'auto')));
-        $snapshot = $this->createSnapshotBackup($runId, $compression);
+        $compression = (string) ($options['compression'] ?? config('updater.snapshot.compression', 'auto'));
+        $includeVendor = (bool) ($options['include_vendor'] ?? config('updater.snapshot.include_vendor', false));
 
-        $fullPath = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His') . '.zip';
-        $this->archiveManager->createZipFromFiles([
-            (string) $db['path'] => 'database/' . basename((string) $db['path']),
-            (string) $snapshot['path'] => 'snapshot/' . basename((string) $snapshot['path']),
-        ], $fullPath);
+        $db = $this->createDatabaseBackup($runId, $options);
+        $snapshot = $this->createSnapshotBackup($runId, $compression, $includeVendor);
+
+        $fullBase = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His');
+        $tmpDir = sys_get_temp_dir() . '/updater-full-' . uniqid();
+        @mkdir($tmpDir, 0777, true);
+        @mkdir($tmpDir . '/database', 0777, true);
+        @mkdir($tmpDir . '/snapshot', 0777, true);
+        @copy((string) $db['path'], $tmpDir . '/database/' . basename((string) $db['path']));
+        @copy((string) $snapshot['path'], $tmpDir . '/snapshot/' . basename((string) $snapshot['path']));
+
+        $fullPath = $this->archiveManager->createArchiveFromDirectory($tmpDir, $fullBase, $compression, []);
 
         return $this->insertBackupRow('full', $fullPath, $runId);
+    }
+
+
+    private function resolveActiveBackupOptions(): array
+    {
+        $profile = $this->managerStore->activeProfile();
+
+        return [
+            'compression' => (string) ($profile['snapshot_compression'] ?? config('updater.snapshot.compression', 'auto')),
+            'include_vendor' => (bool) ($profile['snapshot_include_vendor'] ?? config('updater.snapshot.include_vendor', false)),
+        ];
+    }
+
+    private function compressSingleFileIfNeeded(string $path, string $compression, string $prefix): string
+    {
+        $compression = strtolower(trim($compression));
+        if (!is_file($path) || in_array($compression, ['', 'none'], true)) {
+            return $path;
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/updater-single-' . uniqid();
+        @mkdir($tmpDir, 0777, true);
+        @copy($path, $tmpDir . '/' . basename($path));
+
+        $baseName = dirname($path) . '/' . $prefix . '-compressed-' . date('Ymd-His');
+
+        return $this->archiveManager->createArchiveFromDirectory($tmpDir, $baseName, $compression, []);
     }
 
     private function insertBackupRow(string $type, string $path, int $runId): array

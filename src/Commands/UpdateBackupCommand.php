@@ -39,6 +39,7 @@ class UpdateBackupCommand extends Command
         $runId = (int) ($this->option('run-id') ?: 0);
         $activeProfile = $managerStore->activeProfile();
         $snapshotCompression = (string) ($activeProfile['snapshot_compression'] ?? config('updater.snapshot.compression', 'auto'));
+        $snapshotIncludeVendor = (bool) ($activeProfile['snapshot_include_vendor'] ?? config('updater.snapshot.include_vendor', false));
         if ($runId <= 0) {
             $runId = $stateStore->createRun(['manual_backup' => $type]);
         }
@@ -56,9 +57,9 @@ class UpdateBackupCommand extends Command
             $stateStore->addRunLog($runId, 'info', 'Iniciando backup manual.', ['tipo' => $type]);
 
             $created = match ($type) {
-                'database' => $this->createDatabaseBackup($backupDriver, $stateStore, $managerStore, $cloudUploader, $runId),
-                'snapshot' => $this->createSnapshotBackup($fileManager, $archiveManager, $stateStore, $managerStore, $cloudUploader, $runId, $snapshotCompression),
-                'full' => $this->createFullBackup($backupDriver, $fileManager, $archiveManager, $stateStore, $managerStore, $cloudUploader, $runId, $snapshotCompression),
+                'database' => $this->createDatabaseBackup($backupDriver, $fileManager, $archiveManager, $stateStore, $managerStore, $cloudUploader, $runId, $snapshotCompression),
+                'snapshot' => $this->createSnapshotBackup($fileManager, $archiveManager, $stateStore, $managerStore, $cloudUploader, $runId, $snapshotCompression, $snapshotIncludeVendor),
+                'full' => $this->createFullBackup($backupDriver, $fileManager, $archiveManager, $stateStore, $managerStore, $cloudUploader, $runId, $snapshotCompression, $snapshotIncludeVendor),
             };
 
             $stateStore->finishRun($runId, ['revision_before' => null, 'revision_after' => null]);
@@ -96,22 +97,23 @@ class UpdateBackupCommand extends Command
         }
     }
 
-    private function createDatabaseBackup(BackupDriverInterface $backupDriver, StateStore $stateStore, ManagerStore $managerStore, BackupCloudUploader $cloudUploader, int $runId): array
+    private function createDatabaseBackup(BackupDriverInterface $backupDriver, FileManager $fileManager, ArchiveManager $archiveManager, StateStore $stateStore, ManagerStore $managerStore, BackupCloudUploader $cloudUploader, int $runId, string $compression): array
     {
         $name = 'manual-db-' . date('Ymd-His');
         $filePath = $backupDriver->backup($name);
+        $filePath = $this->compressSingleFileIfNeeded($filePath, $compression, 'database', $fileManager, $archiveManager);
 
         return $this->insertBackupRow('database', $filePath, $runId, $stateStore, $managerStore, $cloudUploader);
     }
 
-    private function createSnapshotBackup(FileManager $fileManager, ArchiveManager $archiveManager, StateStore $stateStore, ManagerStore $managerStore, BackupCloudUploader $cloudUploader, int $runId, string $compression): array
+    private function createSnapshotBackup(FileManager $fileManager, ArchiveManager $archiveManager, StateStore $stateStore, ManagerStore $managerStore, BackupCloudUploader $cloudUploader, int $runId, string $compression, bool $includeVendor): array
     {
         $snapshotPath = rtrim((string) config('updater.snapshot.path'), '/');
         $fileManager->ensureDirectory($snapshotPath);
 
         $basePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His');
         $excludes = config('updater.paths.exclude_snapshot', []);
-        if (!(bool) config('updater.snapshot.include_vendor', false)) {
+        if (!$includeVendor) {
             $excludes[] = 'vendor';
         }
         $filePath = $archiveManager->createArchiveFromDirectory(base_path(), $basePath, $compression, array_values(array_unique($excludes)));
@@ -119,18 +121,41 @@ class UpdateBackupCommand extends Command
         return $this->insertBackupRow('snapshot', $filePath, $runId, $stateStore, $managerStore, $cloudUploader);
     }
 
-    private function createFullBackup(BackupDriverInterface $backupDriver, FileManager $fileManager, ArchiveManager $archiveManager, StateStore $stateStore, ManagerStore $managerStore, BackupCloudUploader $cloudUploader, int $runId, string $compression): array
+    private function createFullBackup(BackupDriverInterface $backupDriver, FileManager $fileManager, ArchiveManager $archiveManager, StateStore $stateStore, ManagerStore $managerStore, BackupCloudUploader $cloudUploader, int $runId, string $compression, bool $includeVendor): array
     {
-        $db = $this->createDatabaseBackup($backupDriver, $stateStore, $managerStore, $cloudUploader, $runId);
-        $snapshot = $this->createSnapshotBackup($fileManager, $archiveManager, $stateStore, $managerStore, $cloudUploader, $runId, $compression);
+        $db = $this->createDatabaseBackup($backupDriver, $fileManager, $archiveManager, $stateStore, $managerStore, $cloudUploader, $runId, $compression);
+        $snapshot = $this->createSnapshotBackup($fileManager, $archiveManager, $stateStore, $managerStore, $cloudUploader, $runId, $compression, $includeVendor);
 
-        $fullPath = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His') . '.zip';
-        $archiveManager->createZipFromFiles([
-            (string) $db['path'] => 'database/' . basename((string) $db['path']),
-            (string) $snapshot['path'] => 'snapshot/' . basename((string) $snapshot['path']),
-        ], $fullPath);
+        $fullBase = rtrim((string) config('updater.backup.path'), '/') . '/manual-full-' . date('Ymd-His');
+        $tmpDir = sys_get_temp_dir() . '/updater-full-' . uniqid();
+        @mkdir($tmpDir, 0777, true);
+        @mkdir($tmpDir . '/database', 0777, true);
+        @mkdir($tmpDir . '/snapshot', 0777, true);
+        @copy((string) $db['path'], $tmpDir . '/database/' . basename((string) $db['path']));
+        @copy((string) $snapshot['path'], $tmpDir . '/snapshot/' . basename((string) $snapshot['path']));
+        $fullPath = $archiveManager->createArchiveFromDirectory($tmpDir, $fullBase, $compression, []);
 
         return $this->insertBackupRow('full', $fullPath, $runId, $stateStore, $managerStore, $cloudUploader);
+    }
+
+
+    private function compressSingleFileIfNeeded(string $path, string $compression, string $prefix, FileManager $fileManager, ArchiveManager $archiveManager): string
+    {
+        $compression = strtolower(trim($compression));
+        if (!is_file($path) || in_array($compression, ['', 'none'], true)) {
+            return $path;
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/updater-single-' . uniqid();
+        @mkdir($tmpDir, 0777, true);
+        $fileManager->ensureDirectory($tmpDir);
+
+        $copyPath = $tmpDir . '/' . basename($path);
+        @copy($path, $copyPath);
+
+        $baseName = dirname($path) . '/' . $prefix . '-compressed-' . date('Ymd-His');
+
+        return $archiveManager->createArchiveFromDirectory($tmpDir, $baseName, $compression, []);
     }
 
     private function insertBackupRow(string $type, string $path, int $runId, StateStore $stateStore, ManagerStore $managerStore, BackupCloudUploader $cloudUploader): array
