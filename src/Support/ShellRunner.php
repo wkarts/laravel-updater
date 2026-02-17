@@ -96,7 +96,14 @@ class ShellRunner
             return $configured;
         }
 
-        $base = function_exists('base_path') ? (string) base_path() : '';
+        $base = '';
+        try {
+            if (function_exists('base_path')) {
+                $base = (string) base_path();
+            }
+        } catch (\Throwable $e) {
+            $base = '';
+        }
         if ($base !== '' && is_dir($base)) {
             if (is_file(rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'artisan')) {
                 return $base;
