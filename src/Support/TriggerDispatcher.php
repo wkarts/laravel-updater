@@ -73,6 +73,100 @@ class TriggerDispatcher
         return null;
     }
 
+
+    public function triggerManualBackup(string $type, int $runId): array
+    {
+        $args = ['php', 'artisan', 'system:update:backup', '--type=' . $type, '--run-id=' . $runId];
+        $this->assertManualBackupCommandAvailable();
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'sync') {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->setTimeout(null);
+                $process->run();
+                if (!$process->isSuccessful()) {
+                    throw new \RuntimeException('Falha ao executar backup manual: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                }
+
+                return ['started' => true, 'pid' => null];
+            }
+
+            exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+            if ((int) $exitCode !== 0) {
+                throw new \RuntimeException('Falha ao executar backup manual em modo sync.');
+            }
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->disableOutput();
+            $process->start();
+
+            return ['started' => true, 'pid' => $process->getPid() ?: null];
+        }
+
+        if ($this->isWindows()) {
+            exec(implode(' ', array_map('escapeshellarg', $args)));
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
+        $pid = trim((string) shell_exec($cmd));
+
+        return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
+    }
+
+
+    public function triggerBackupUpload(int $backupId): array
+    {
+        $args = ['php', 'artisan', 'system:update:backup-upload', '--backup-id=' . $backupId];
+        $this->assertBackupUploadCommandAvailable();
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'sync') {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->setTimeout(null);
+                $process->run();
+                if (!$process->isSuccessful()) {
+                    throw new \RuntimeException('Falha ao executar upload de backup: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                }
+
+                return ['started' => true, 'pid' => null];
+            }
+
+            exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+            if ((int) $exitCode !== 0) {
+                throw new \RuntimeException('Falha ao executar upload de backup em modo sync.');
+            }
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->disableOutput();
+            $process->start();
+
+            return ['started' => true, 'pid' => $process->getPid() ?: null];
+        }
+
+        if ($this->isWindows()) {
+            exec(implode(' ', array_map('escapeshellarg', $args)));
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
+        $pid = trim((string) shell_exec($cmd));
+
+        return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
+    }
+
     public function triggerRollback(): void
     {
         $driver = $this->resolveDriver();
@@ -120,6 +214,53 @@ class TriggerDispatcher
         }
 
         exec('php artisan system:update:rollback --force > /dev/null 2>&1 &');
+    }
+
+
+
+    private function assertManualBackupCommandAvailable(): void
+    {
+        $args = ['php', 'artisan', 'system:update:backup', '--help'];
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->setTimeout(20);
+            $process->run();
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException(trim($process->getErrorOutput() . "
+" . $process->getOutput()));
+            }
+
+            return;
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+        if ((int) $exitCode !== 0) {
+            throw new \RuntimeException(trim(implode("
+", $output)));
+        }
+    }
+
+
+    private function assertBackupUploadCommandAvailable(): void
+    {
+        $args = ['php', 'artisan', 'system:update:backup-upload', '--help'];
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->setTimeout(20);
+            $process->run();
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException(trim($process->getErrorOutput() . "
+" . $process->getOutput()));
+            }
+
+            return;
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+        if ((int) $exitCode !== 0) {
+            throw new \RuntimeException(trim(implode("
+", $output)));
+        }
     }
 
     private function resolveDriver(): string
