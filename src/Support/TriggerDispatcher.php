@@ -6,6 +6,7 @@ namespace Argws\LaravelUpdater\Support;
 
 use Argws\LaravelUpdater\Jobs\RunRollbackJob;
 use Argws\LaravelUpdater\Jobs\RunUpdateJob;
+use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Symfony\Component\Process\Process;
 
 class TriggerDispatcher
@@ -28,6 +29,10 @@ class TriggerDispatcher
         $args = $this->buildUpdateCommandArgs($options);
 
         if ($driver === 'sync') {
+            if (!$this->isUpdateCommandAvailable()) {
+                return $this->runUpdateInline($options);
+            }
+
             $before = (int) (($this->store->lastRun()['id'] ?? 0));
             if (class_exists(Process::class)) {
                 $process = new Process($args, base_path());
@@ -35,12 +40,20 @@ class TriggerDispatcher
                 $process->run();
 
                 if (!$process->isSuccessful()) {
-                    throw new \RuntimeException('Falha ao executar atualização: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                    $output = trim(($process->getErrorOutput() ?: '') . "\n" . ($process->getOutput() ?: ''));
+                    if (str_contains(strtolower($output), 'there are no commands defined in the "system:update" namespace')) {
+                        return $this->runUpdateInline($options);
+                    }
+                    throw new \RuntimeException('Falha ao executar atualização: ' . $output);
                 }
             } else {
                 exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
                 if ((int) $exitCode !== 0) {
-                    throw new \RuntimeException('Falha ao executar atualização em modo sync.');
+                    $joined = trim(implode("\n", $output));
+                    if (str_contains(strtolower($joined), 'there are no commands defined in the "system:update" namespace')) {
+                        return $this->runUpdateInline($options);
+                    }
+                    throw new \RuntimeException('Falha ao executar atualização em modo sync. ' . $joined);
                 }
             }
 
@@ -71,6 +84,100 @@ class TriggerDispatcher
         exec($cmd);
 
         return null;
+    }
+
+
+    public function triggerManualBackup(string $type, int $runId): array
+    {
+        $args = ['php', 'artisan', 'system:update:backup', '--type=' . $type, '--run-id=' . $runId];
+        $this->assertManualBackupCommandAvailable();
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'sync') {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->setTimeout(null);
+                $process->run();
+                if (!$process->isSuccessful()) {
+                    throw new \RuntimeException('Falha ao executar backup manual: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                }
+
+                return ['started' => true, 'pid' => null];
+            }
+
+            exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+            if ((int) $exitCode !== 0) {
+                throw new \RuntimeException('Falha ao executar backup manual em modo sync.');
+            }
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->disableOutput();
+            $process->start();
+
+            return ['started' => true, 'pid' => $process->getPid() ?: null];
+        }
+
+        if ($this->isWindows()) {
+            exec(implode(' ', array_map('escapeshellarg', $args)));
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
+        $pid = trim((string) shell_exec($cmd));
+
+        return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
+    }
+
+
+    public function triggerBackupUpload(int $backupId): array
+    {
+        $args = ['php', 'artisan', 'system:update:backup-upload', '--backup-id=' . $backupId];
+        $this->assertBackupUploadCommandAvailable();
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'sync') {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->setTimeout(null);
+                $process->run();
+                if (!$process->isSuccessful()) {
+                    throw new \RuntimeException('Falha ao executar upload de backup: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                }
+
+                return ['started' => true, 'pid' => null];
+            }
+
+            exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+            if ((int) $exitCode !== 0) {
+                throw new \RuntimeException('Falha ao executar upload de backup em modo sync.');
+            }
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->disableOutput();
+            $process->start();
+
+            return ['started' => true, 'pid' => $process->getPid() ?: null];
+        }
+
+        if ($this->isWindows()) {
+            exec(implode(' ', array_map('escapeshellarg', $args)));
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
+        $pid = trim((string) shell_exec($cmd));
+
+        return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
     }
 
     public function triggerRollback(): void
@@ -120,6 +227,82 @@ class TriggerDispatcher
         }
 
         exec('php artisan system:update:rollback --force > /dev/null 2>&1 &');
+    }
+
+
+
+    private function assertManualBackupCommandAvailable(): void
+    {
+        $args = ['php', 'artisan', 'system:update:backup', '--help'];
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->setTimeout(20);
+            $process->run();
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException(trim($process->getErrorOutput() . "\n" . $process->getOutput()));
+            }
+
+            return;
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+        if ((int) $exitCode !== 0) {
+            throw new \RuntimeException(trim(implode("\n", $output)));
+        }
+    }
+
+
+    private function assertBackupUploadCommandAvailable(): void
+    {
+        $args = ['php', 'artisan', 'system:update:backup-upload', '--help'];
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->setTimeout(20);
+            $process->run();
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException(trim($process->getErrorOutput() . "\n" . $process->getOutput()));
+            }
+
+            return;
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+        if ((int) $exitCode !== 0) {
+            throw new \RuntimeException(trim(implode("\n", $output)));
+        }
+    }
+
+
+    private function runUpdateInline(array $options): ?int
+    {
+        if (!function_exists('app') || !class_exists(UpdaterKernel::class)) {
+            throw new \RuntimeException('Comando system:update:run indisponível e fallback inline não pôde ser executado.');
+        }
+
+        $before = (int) (($this->store->lastRun()['id'] ?? 0));
+        /** @var UpdaterKernel $kernel */
+        $kernel = app(UpdaterKernel::class);
+        $kernel->run($options);
+        $after = (int) (($this->store->lastRun()['id'] ?? 0));
+
+        return $after > $before ? $after : null;
+    }
+
+    private function isUpdateCommandAvailable(): bool
+    {
+        $args = ['php', 'artisan', 'system:update:run', '--help'];
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->setTimeout(20);
+            $process->run();
+
+            return $process->isSuccessful();
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+
+        return (int) $exitCode === 0;
     }
 
     private function resolveDriver(): string
