@@ -988,48 +988,6 @@ class OperationsController extends Controller
         @exec('kill -KILL ' . (int) $pid . ' >/dev/null 2>&1');
     }
 
-
-    private function isProcessRunning(int $pid): bool
-    {
-        if ($pid <= 0) {
-            return false;
-        }
-
-        if (function_exists('posix_kill')) {
-            return @posix_kill($pid, 0);
-        }
-
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            $output = [];
-            @exec('tasklist /FI "PID eq ' . (int) $pid . '"', $output);
-            return str_contains(strtolower(implode('\n', $output)), (string) $pid);
-        }
-
-        $output = [];
-        @exec('ps -p ' . (int) $pid . ' -o pid=', $output);
-
-        return trim(implode('', $output)) !== '';
-    }
-
-    private function terminatePid(int $pid): void
-    {
-        if (function_exists('posix_kill')) {
-            @posix_kill($pid, 15);
-            usleep(200000);
-            @posix_kill($pid, 9);
-            return;
-        }
-
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            @exec('taskkill /F /PID ' . (int) $pid);
-            return;
-        }
-
-        @exec('kill -TERM ' . (int) $pid . ' >/dev/null 2>&1');
-        usleep(200000);
-        @exec('kill -KILL ' . (int) $pid . ' >/dev/null 2>&1');
-    }
-
     private function findBackup(int $id): ?array
     {
         $stmt = $this->stateStore->pdo()->prepare('SELECT * FROM updater_backups WHERE id=:id LIMIT 1');
