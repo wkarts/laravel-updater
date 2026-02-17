@@ -254,6 +254,13 @@ class OperationsController extends Controller
 
             return back()->withErrors(['backup' => 'Falha no backup em modo de compatibilidade: ' . $e->getMessage()]);
         }
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'backup_start', [
+            'tipo' => $type,
+            'run_id' => $runId,
+        ], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Backup iniciado em segundo plano. Você pode continuar usando o painel.');
     }
 
     public function downloadBackup(int $id)
@@ -937,6 +944,48 @@ class OperationsController extends Controller
             $this->stateStore->updateRunStatus($runId, 'failed', ['message' => 'Run fantasma reconciliada automaticamente.']);
             $this->stateStore->addRunLog($runId, 'warning', 'Run de backup marcada como falha por não existir processo ativo.', []);
         }
+    }
+
+
+    private function isProcessRunning(int $pid): bool
+    {
+        if ($pid <= 0) {
+            return false;
+        }
+
+        if (function_exists('posix_kill')) {
+            return @posix_kill($pid, 0);
+        }
+
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $output = [];
+            @exec('tasklist /FI "PID eq ' . (int) $pid . '"', $output);
+            return str_contains(strtolower(implode('\n', $output)), (string) $pid);
+        }
+
+        $output = [];
+        @exec('ps -p ' . (int) $pid . ' -o pid=', $output);
+
+        return trim(implode('', $output)) !== '';
+    }
+
+    private function terminatePid(int $pid): void
+    {
+        if (function_exists('posix_kill')) {
+            @posix_kill($pid, 15);
+            usleep(200000);
+            @posix_kill($pid, 9);
+            return;
+        }
+
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            @exec('taskkill /F /PID ' . (int) $pid);
+            return;
+        }
+
+        @exec('kill -TERM ' . (int) $pid . ' >/dev/null 2>&1');
+        usleep(200000);
+        @exec('kill -KILL ' . (int) $pid . ' >/dev/null 2>&1');
     }
 
 
