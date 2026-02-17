@@ -226,8 +226,7 @@ class TriggerDispatcher
             $process->setTimeout(20);
             $process->run();
             if (!$process->isSuccessful()) {
-                throw new \RuntimeException(trim($process->getErrorOutput() . "
-" . $process->getOutput()));
+                throw new \RuntimeException(trim($process->getErrorOutput() . "\n" . $process->getOutput()));
             }
 
             return;
@@ -235,8 +234,7 @@ class TriggerDispatcher
 
         exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
         if ((int) $exitCode !== 0) {
-            throw new \RuntimeException(trim(implode("
-", $output)));
+            throw new \RuntimeException(trim(implode("\n", $output)));
         }
     }
 
@@ -249,8 +247,7 @@ class TriggerDispatcher
             $process->setTimeout(20);
             $process->run();
             if (!$process->isSuccessful()) {
-                throw new \RuntimeException(trim($process->getErrorOutput() . "
-" . $process->getOutput()));
+                throw new \RuntimeException(trim($process->getErrorOutput() . "\n" . $process->getOutput()));
             }
 
             return;
@@ -258,8 +255,7 @@ class TriggerDispatcher
 
         exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
         if ((int) $exitCode !== 0) {
-            throw new \RuntimeException(trim(implode("
-", $output)));
+            throw new \RuntimeException(trim(implode("\n", $output)));
         }
     }
 
