@@ -247,7 +247,7 @@ class ArchiveManager
                 return '7z';
             }
 
-            return class_exists(PharData::class) ? 'tgz' : 'zip';
+            return 'zip';
         }
 
         if (in_array($format, ['zip', 'tgz', '7z'], true)) {
@@ -315,7 +315,7 @@ class ArchiveManager
     private function touchTimeLimit(): void
     {
         if (function_exists('set_time_limit')) {
-            @set_time_limit(30);
+            @set_time_limit(0);
         }
     }
 

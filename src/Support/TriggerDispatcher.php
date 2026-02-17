@@ -77,6 +77,7 @@ class TriggerDispatcher
     public function triggerManualBackup(string $type, int $runId): array
     {
         $args = ['php', 'artisan', 'system:update:backup', '--type=' . $type, '--run-id=' . $runId];
+        $this->assertManualBackupCommandAvailable();
         $driver = $this->resolveDriver();
 
         if ($driver === 'sync') {
@@ -168,6 +169,29 @@ class TriggerDispatcher
         exec('php artisan system:update:rollback --force > /dev/null 2>&1 &');
     }
 
+
+
+    private function assertManualBackupCommandAvailable(): void
+    {
+        $args = ['php', 'artisan', 'system:update:backup', '--help'];
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->setTimeout(20);
+            $process->run();
+            if (!$process->isSuccessful()) {
+                throw new \RuntimeException(trim($process->getErrorOutput() . "
+" . $process->getOutput()));
+            }
+
+            return;
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+        if ((int) $exitCode !== 0) {
+            throw new \RuntimeException(trim(implode("
+", $output)));
+        }
+    }
 
     private function resolveDriver(): string
     {
