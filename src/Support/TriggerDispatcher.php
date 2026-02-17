@@ -73,6 +73,57 @@ class TriggerDispatcher
         return null;
     }
 
+
+    public function triggerManualBackup(string $type, int $runId): array
+    {
+        $commandName = 'system:update:backup';
+        if (!$this->artisanCommandExists($commandName)) {
+            throw new \RuntimeException('Comando ' . $commandName . ' não está registrado no artisan atual. Execute composer dump-autoload e limpe caches do framework.');
+        }
+
+        $args = ['php', 'artisan', $commandName, '--type=' . $type, '--run-id=' . $runId];
+        $driver = $this->resolveDriver();
+
+        if ($driver === 'sync') {
+            if (class_exists(Process::class)) {
+                $process = new Process($args, base_path());
+                $process->setTimeout(null);
+                $process->run();
+                if (!$process->isSuccessful()) {
+                    throw new \RuntimeException('Falha ao executar backup manual: ' . ($process->getErrorOutput() ?: $process->getOutput()));
+                }
+
+                return ['started' => true, 'pid' => null];
+            }
+
+            exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+            if ((int) $exitCode !== 0) {
+                throw new \RuntimeException('Falha ao executar backup manual em modo sync.');
+            }
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->disableOutput();
+            $process->start();
+
+            return ['started' => true, 'pid' => $process->getPid() ?: null];
+        }
+
+        if ($this->isWindows()) {
+            exec(implode(' ', array_map('escapeshellarg', $args)));
+
+            return ['started' => true, 'pid' => null];
+        }
+
+        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
+        $pid = trim((string) shell_exec($cmd));
+
+        return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
+    }
+
     public function triggerRollback(): void
     {
         $driver = $this->resolveDriver();
@@ -120,6 +171,30 @@ class TriggerDispatcher
         }
 
         exec('php artisan system:update:rollback --force > /dev/null 2>&1 &');
+    }
+
+
+    private function artisanCommandExists(string $name): bool
+    {
+        $cmd = ['php', 'artisan', 'list', '--raw'];
+        if (class_exists(Process::class)) {
+            $process = new Process($cmd, base_path());
+            $process->setTimeout(20);
+            $process->run();
+            if (!$process->isSuccessful()) {
+                return false;
+            }
+
+            return str_contains($process->getOutput(), $name);
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $cmd)), $output, $exitCode);
+        if ((int) $exitCode !== 0) {
+            return false;
+        }
+
+        return str_contains(implode("
+", $output), $name);
     }
 
     private function resolveDriver(): string

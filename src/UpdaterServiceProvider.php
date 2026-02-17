@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater;
 
+use Argws\LaravelUpdater\Commands\UpdateBackupCommand;
 use Argws\LaravelUpdater\Commands\UpdateCheckCommand;
 use Argws\LaravelUpdater\Commands\UpdateEnvSyncCommand;
 use Argws\LaravelUpdater\Commands\UpdateNotifyCommand;
@@ -43,6 +44,7 @@ use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Argws\LaravelUpdater\Support\UiPermission;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
 use Psr\Log\LoggerInterface;
 
@@ -175,6 +177,7 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->syncAssetsIfNeeded();
         $this->syncPublishedResourcesIfNeeded();
+        $this->runVendorPublishIfConfigured();
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-updater');
         $this->loadRoutesFrom(__DIR__ . '/../routes/updater.php');
@@ -185,6 +188,7 @@ class UpdaterServiceProvider extends ServiceProvider
 
         if ($this->app->runningInConsole()) {
             $this->commands([
+                UpdateBackupCommand::class,
                 UpdateCheckCommand::class,
                 UpdateRunCommand::class,
                 UpdateRollbackCommand::class,
@@ -228,6 +232,31 @@ class UpdaterServiceProvider extends ServiceProvider
 
         if ((bool) config('updater.auto_publish.views', true)) {
             $this->copyDirectoryIfStale(__DIR__ . '/../resources/views', resource_path('views/vendor/laravel-updater'));
+        }
+    }
+
+
+    private function runVendorPublishIfConfigured(): void
+    {
+        if (!$this->app->runningInConsole()) {
+            return;
+        }
+
+        if (!(bool) config('updater.auto_publish.run_vendor_publish', true)) {
+            return;
+        }
+
+        if ((bool) $this->app->bound('updater.vendor_publish_ran')) {
+            return;
+        }
+
+        $this->app->instance('updater.vendor_publish_ran', true);
+
+        try {
+            Artisan::call('vendor:publish', ['--tag' => 'updater-views', '--force' => true]);
+            Artisan::call('vendor:publish', ['--tag' => 'updater-config', '--force' => true]);
+        } catch (\Throwable $e) {
+            // Não bloquear boot em caso de falha no publish automático.
         }
     }
 
