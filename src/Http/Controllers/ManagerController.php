@@ -203,6 +203,8 @@ class ManagerController extends Controller
             'profile' => [
                 'pre_update_commands' => $this->defaultPreUpdateCommands(),
                 'post_update_commands' => $this->defaultPostUpdateCommands(),
+                'snapshot_include_vendor' => 0,
+                'snapshot_compression' => 'zip',
             ],
         ]);
     }
@@ -522,6 +524,8 @@ class ManagerController extends Controller
             'migrate' => ['nullable', 'boolean'],
             'seed' => ['nullable', 'boolean'],
             'rollback_on_fail' => ['nullable', 'boolean'],
+            'snapshot_include_vendor' => ['nullable', 'boolean'],
+            'snapshot_compression' => ['nullable', 'in:zip,auto,7z,tgz'],
             'active' => ['nullable', 'boolean'],
             'pre_update_commands' => ['nullable', 'string', 'max:8000'],
             'post_update_commands' => ['nullable', 'string', 'max:8000'],
@@ -530,7 +534,7 @@ class ManagerController extends Controller
             'retention_backups.integer' => 'A retenção deve ser numérica.',
         ]);
 
-        $toggles = ['backup_enabled', 'dry_run', 'force', 'composer_install', 'migrate', 'seed', 'rollback_on_fail', 'active'];
+        $toggles = ['backup_enabled', 'dry_run', 'force', 'composer_install', 'migrate', 'seed', 'rollback_on_fail', 'snapshot_include_vendor', 'active'];
         foreach ($toggles as $toggle) {
             $data[$toggle] = (int) $request->boolean($toggle);
         }
@@ -541,6 +545,7 @@ class ManagerController extends Controller
         }
 
         $data['post_update_commands'] = $this->mergePostUpdateSuggestions(trim((string) ($data['post_update_commands'] ?? '')));
+        $data['snapshot_compression'] = 'zip';
 
         return $data;
     }

@@ -55,12 +55,15 @@ return [
         'mysql_binary' => env('UPDATER_MYSQL_BINARY', ''),
         'pg_dump_binary' => env('UPDATER_PG_DUMP_BINARY', ''),
         'pg_restore_binary' => env('UPDATER_PG_RESTORE_BINARY', ''),
+        'full_before_update' => (bool) env('UPDATER_BACKUP_FULL_BEFORE_UPDATE', false),
     ],
 
     'snapshot' => [
         'enabled' => (bool) env('UPDATER_SNAPSHOT_ENABLED', true),
         'path' => env('UPDATER_SNAPSHOT_PATH', storage_path('app/updater/snapshots')),
         'keep' => (int) env('UPDATER_SNAPSHOT_KEEP', 10),
+        'include_vendor' => (bool) env('UPDATER_SNAPSHOT_INCLUDE_VENDOR', false),
+        'compression' => env('UPDATER_SNAPSHOT_COMPRESSION', 'zip'), // zip
     ],
 
     'paths' => [
@@ -180,6 +183,7 @@ return [
         'enabled' => (bool) env('UPDATER_AUTO_PUBLISH_ENABLED', true),
         'config' => (bool) env('UPDATER_AUTO_PUBLISH_CONFIG', true),
         'views' => (bool) env('UPDATER_AUTO_PUBLISH_VIEWS', true),
+        'run_vendor_publish' => (bool) env('UPDATER_AUTO_PUBLISH_RUN_VENDOR_PUBLISH', true),
     ],
 
     'ui' => [

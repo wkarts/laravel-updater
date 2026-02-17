@@ -41,7 +41,7 @@ class ShellRunner
             throw new UpdaterException('Comando inválido: vazio.');
         }
 
-        $workingDirectory = $cwd ?? getcwd();
+        $workingDirectory = $this->resolveWorkingDirectory($cwd, $command);
 
         // Em ambientes não-interativos (Supervisor, cron, PHP-FPM), o PATH pode vir reduzido.
         // Isso causa exit code 127 (command not found) mesmo com o binário instalado.
@@ -69,6 +69,63 @@ class ShellRunner
             'stderr' => trim($stderr),
             'exit_code' => $exitCode,
         ];
+    }
+
+
+    /** @param array<int,string> $command */
+    private function resolveWorkingDirectory(?string $cwd, array $command): string
+    {
+        if (is_string($cwd) && trim($cwd) !== '') {
+            return $cwd;
+        }
+
+        $configured = '';
+        try {
+            if (function_exists('config')) {
+                $configured = (string) config('updater.git.path', '');
+            }
+        } catch (\Throwable $e) {
+            $configured = '';
+        }
+
+        if ($configured !== '' && is_dir($configured)) {
+            if (is_file(rtrim($configured, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'artisan')) {
+                return $configured;
+            }
+
+            return $configured;
+        }
+
+        $base = '';
+        try {
+            if (function_exists('base_path')) {
+                $base = (string) base_path();
+            }
+        } catch (\Throwable $e) {
+            $base = '';
+        }
+        if ($base !== '' && is_dir($base)) {
+            if (is_file(rtrim($base, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'artisan')) {
+                return $base;
+            }
+
+            return $base;
+        }
+
+        // Fallback robusto para processos FPM/CLI com cwd inconsistente.
+        $argv0 = strtolower(trim((string) ($command[0] ?? '')));
+        $argv1 = strtolower(trim((string) ($command[1] ?? '')));
+        if (in_array($argv0, ['php', 'php.exe'], true) && $argv1 === 'artisan') {
+            $script = (string) ($_SERVER['SCRIPT_FILENAME'] ?? '');
+            if ($script !== '') {
+                $dir = dirname($script);
+                if (is_file(rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'artisan')) {
+                    return $dir;
+                }
+            }
+        }
+
+        return (string) (getcwd() ?: '.');
     }
 
     /** @param array<string, string> $env */

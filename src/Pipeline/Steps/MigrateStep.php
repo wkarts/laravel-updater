@@ -36,7 +36,21 @@ class MigrateStep implements PipelineStepInterface
         $command[] = '--retry-locks=' . (int) config('updater.migrate.retry_locks', 2);
         $command[] = '--retry-sleep-base=' . (int) config('updater.migrate.retry_sleep_base', 3);
 
-        $this->shellRunner->runOrFail($command);
+        try {
+            $this->shellRunner->runOrFail($command);
+        } catch (\Throwable $e) {
+            $message = mb_strtolower($e->getMessage());
+            if (!str_contains($message, 'there are no commands defined in the "updater" namespace')) {
+                throw $e;
+            }
+
+            $fallback = ['php', 'artisan', 'migrate', '--force'];
+            if ((bool) ($options['dry_run'] ?? false)) {
+                $fallback[] = '--pretend';
+            }
+            $this->shellRunner->runOrFail($fallback);
+            $context['migrate_fallback'] = 'artisan migrate --force';
+        }
     }
 
     public function rollback(array &$context): void

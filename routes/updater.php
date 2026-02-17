@@ -56,6 +56,10 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::get('/backups/progress/status', [OperationsController::class, 'progressStatus'])->name('updater.backups.progress.status');
                 Route::get('/backups/{id}/download', [OperationsController::class, 'downloadBackup'])->whereNumber('id')->name('updater.backups.download');
                 Route::post('/backups/{id}/upload', [OperationsController::class, 'uploadBackup'])->whereNumber('id')->name('updater.backups.upload');
+                Route::get('/backups/upload/progress/status', [OperationsController::class, 'uploadProgressStatus'])->name('updater.backups.upload.progress.status');
+                Route::post('/backups/upload/cancel', [OperationsController::class, 'cancelUpload'])->name('updater.backups.upload.cancel');
+                Route::delete('/backups/{id}', [OperationsController::class, 'deleteBackup'])->whereNumber('id')->name('updater.backups.delete');
+                Route::post('/backups/cancel', [OperationsController::class, 'cancelBackup'])->name('updater.backups.cancel');
                 Route::get('/backups/{id}/restore', [OperationsController::class, 'showRestoreForm'])->whereNumber('id')->name('updater.backups.restore.form');
                 Route::post('/backups/{id}/restore', [OperationsController::class, 'restoreBackup'])->whereNumber('id')->name('updater.backups.restore');
 
