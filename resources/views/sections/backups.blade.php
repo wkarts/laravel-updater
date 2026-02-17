@@ -18,6 +18,9 @@
     <div style="height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden;">
         <div id="backup-progress-bar" style="height:10px; width:0%; background:#3b82f6; transition:width .3s;"></div>
     </div>
+    <div style="margin-top:10px;" id="backup-cancel-wrap" hidden>
+        <form method="POST" action="{{ route('updater.backups.cancel') }}">@csrf <button class="btn btn-danger" type="submit">Cancelar backup em andamento</button></form>
+    </div>
     <ul id="backup-progress-logs" style="margin-top:10px;"></ul>
 </div>
 
@@ -25,24 +28,40 @@
     <h3>Backups disponíveis</h3>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>ID</th><th>Tipo</th><th>Arquivo</th><th>Run</th><th>Tamanho</th><th>Data</th><th>Ações</th></tr></thead>
+            <thead><tr><th>ID</th><th>Tipo</th><th>Arquivo</th><th>Run</th><th>Status nuvem</th><th>Tamanho</th><th>Data</th><th>Ações</th></tr></thead>
             <tbody>
             @forelse($backups as $backup)
-                <tr>
+                @php($cloudUploaded = (int) ($backup['cloud_uploaded'] ?? 0) === 1)
+                <tr style="{{ $cloudUploaded ? 'background:#ecfdf3;' : '' }}">
                     <td>#{{ $backup['id'] }}</td>
                     <td>{{ strtoupper($backup['type']) }}</td>
                     <td>{{ $backup['path'] }}</td>
                     <td>{{ $backup['run_id'] ?? '-' }}</td>
+                    <td>
+                        @if($cloudUploaded)
+                            <span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#16a34a;color:#fff;font-size:12px;">Enviado para nuvem</span>
+                            <div class="muted" style="margin-top:4px;font-size:12px;">{{ $backup['cloud_provider'] ?? 'nuvem' }} • {{ $backup['cloud_uploaded_at'] ?? '' }}</div>
+                        @else
+                            <span style="display:inline-block;padding:2px 8px;border-radius:999px;background:#94a3b8;color:#fff;font-size:12px;">Não enviado</span>
+                        @endif
+                        @if(!empty($backup['cloud_last_error']))
+                            <div style="margin-top:4px;color:#b91c1c;font-size:12px;">Último erro: {{ $backup['cloud_last_error'] }}</div>
+                        @endif
+                        @if((int) ($backup['cloud_upload_count'] ?? 0) > 0)
+                            <div class="muted" style="margin-top:4px;font-size:12px;">Envios realizados: {{ (int) $backup['cloud_upload_count'] }}</div>
+                        @endif
+                    </td>
                     <td>{{ number_format((int) ($backup['size'] ?? 0), 0, ',', '.') }} bytes</td>
                     <td>{{ $backup['created_at'] }}</td>
                     <td>
                         <a class="btn" href="{{ route('updater.backups.download', ['id' => $backup['id']]) }}">Baixar backup</a>
-                        <form method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem</button></form>
+                        <form method="POST" action="{{ route('updater.backups.upload', ['id' => $backup['id']]) }}" style="display:inline-block;">@csrf <button class="btn btn-secondary" type="submit">Enviar para nuvem {{ $cloudUploaded ? '(reenviar)' : '' }}</button></form>
                         <a class="btn btn-danger" href="{{ route('updater.backups.restore.form', ['id' => $backup['id']]) }}">Restaurar</a>
+                        <form method="POST" action="{{ route('updater.backups.delete', ['id' => $backup['id']]) }}" style="display:inline-block;" onsubmit="return confirm('Remover backup local e registro?');">@csrf @method('DELETE') <button class="btn" type="submit">Excluir</button></form>
                     </td>
                 </tr>
             @empty
-                <tr><td colspan="7" class="muted">Nenhum backup registrado.</td></tr>
+                <tr><td colspan="8" class="muted">Nenhum backup registrado.</td></tr>
             @endforelse
             </tbody>
         </table>
@@ -69,6 +88,11 @@ async function updaterBackupPoll() {
         if (bar) {
             const progress = Number(data.progress || 0);
             bar.style.width = Math.max(0, Math.min(100, progress)) + '%';
+        }
+
+        const cancelWrap = document.getElementById('backup-cancel-wrap');
+        if (cancelWrap) {
+            cancelWrap.hidden = !Boolean(data.can_cancel);
         }
 
         const ul = document.getElementById('backup-progress-logs');
