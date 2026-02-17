@@ -15,6 +15,7 @@ class ArchiveManager
     /** @param array<int,string> $excludePaths */
     public function createArchiveFromDirectory(string $sourceDir, string $targetBasePath, string $format = 'auto', array $excludePaths = []): string
     {
+        $this->disableTimeLimit();
         $resolved = $this->resolveFormat($format);
 
         return match ($resolved) {
@@ -27,6 +28,7 @@ class ArchiveManager
     /** @param array<int,string> $excludePaths */
     public function createZipFromDirectory(string $sourceDir, string $targetZip, array $excludePaths = []): string
     {
+        $this->disableTimeLimit();
         $exclude = array_map([$this, 'normalizePath'], $excludePaths);
         $sourceDir = rtrim($this->normalizePath($sourceDir), '/');
 
@@ -40,8 +42,12 @@ class ArchiveManager
             throw new RuntimeException('Não foi possível criar arquivo de backup compactado.');
         }
 
+        $i = 0;
         foreach ($this->collectFiles($sourceDir, $exclude) as [$fullPath, $relativePath]) {
             $zip->addFile($fullPath, $relativePath);
+            if ((++$i % 400) === 0) {
+                $this->touchTimeLimit();
+            }
         }
 
         $zip->close();
@@ -119,6 +125,7 @@ class ArchiveManager
     /** @param array<int,string> $excludePaths */
     private function createTgzFromDirectory(string $sourceDir, string $targetTgz, array $excludePaths = []): string
     {
+        $this->disableTimeLimit();
         $sourceDir = rtrim($this->normalizePath($sourceDir), '/');
         $exclude = array_map([$this, 'normalizePath'], $excludePaths);
 
@@ -132,8 +139,12 @@ class ArchiveManager
         @unlink($targetTgz);
 
         $phar = new PharData($tarPath);
+        $i = 0;
         foreach ($this->collectFiles($sourceDir, $exclude) as [$fullPath, $relativePath]) {
             $phar->addFile($fullPath, $relativePath);
+            if ((++$i % 250) === 0) {
+                $this->touchTimeLimit();
+            }
         }
 
         $phar->compress(\Phar::GZ);
@@ -291,6 +302,21 @@ class ArchiveManager
         }
 
         return $items;
+    }
+
+
+    private function disableTimeLimit(): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
+    }
+
+    private function touchTimeLimit(): void
+    {
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(30);
+        }
     }
 
     private function shouldSkip(string $relativePath, array $exclude): bool

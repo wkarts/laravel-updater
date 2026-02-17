@@ -357,6 +357,24 @@ class OperationsController extends Controller
         $message = 'Sem backup em execução no momento.';
         $activeJob = $this->managerStore->getRuntimeOption('backup_active_job', null);
 
+        if ($runningRun !== null && is_array($activeJob) && (string) ($activeJob['status'] ?? '') === 'running') {
+            $pid = (int) ($activeJob['pid'] ?? 0);
+            if ($pid > 0 && !$this->isProcessRunning($pid)) {
+                $this->stateStore->updateRunStatus((int) $runningRun['id'], 'failed', ['message' => 'Processo de backup finalizado inesperadamente.']);
+                $this->stateStore->addRunLog((int) $runningRun['id'], 'error', 'Backup interrompido: processo não está mais ativo.', ['pid' => $pid]);
+                $this->managerStore->setRuntimeOption('backup_active_job', [
+                    'run_id' => (int) $runningRun['id'],
+                    'type' => (string) ($activeJob['type'] ?? 'manual'),
+                    'pid' => $pid,
+                    'status' => 'failed',
+                    'finished_at' => date(DATE_ATOM),
+                    'error' => 'Processo não encontrado durante monitoramento.',
+                ]);
+                $runningRun = null;
+                $active = false;
+            }
+        }
+
         if ($runningRun !== null && is_array($activeJob)) {
             $jobStatus = (string) ($activeJob['status'] ?? '');
             $jobRunId = (int) ($activeJob['run_id'] ?? 0);
@@ -657,6 +675,30 @@ class OperationsController extends Controller
         ], $request->ip(), $request->userAgent());
 
         return back()->with('status', 'Solicitação de cancelamento enviada para o backup em andamento.');
+    }
+
+
+    private function isProcessRunning(int $pid): bool
+    {
+        if ($pid <= 0) {
+            return false;
+        }
+
+        if (function_exists('posix_kill')) {
+            return @posix_kill($pid, 0);
+        }
+
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $output = [];
+            @exec('tasklist /FI "PID eq ' . (int) $pid . '"', $output);
+            return str_contains(strtolower(implode("
+", $output)), (string) $pid);
+        }
+
+        $output = [];
+        @exec('ps -p ' . (int) $pid . ' -o pid=', $output);
+
+        return trim(implode('', $output)) !== '';
     }
 
     private function terminatePid(int $pid): void

@@ -76,7 +76,12 @@ class TriggerDispatcher
 
     public function triggerManualBackup(string $type, int $runId): array
     {
-        $args = ['php', 'artisan', 'system:update:backup', '--type=' . $type, '--run-id=' . $runId];
+        $commandName = 'system:update:backup';
+        if (!$this->artisanCommandExists($commandName)) {
+            throw new \RuntimeException('Comando ' . $commandName . ' não está registrado no artisan atual. Execute composer dump-autoload e limpe caches do framework.');
+        }
+
+        $args = ['php', 'artisan', $commandName, '--type=' . $type, '--run-id=' . $runId];
         $driver = $this->resolveDriver();
 
         if ($driver === 'sync') {
@@ -166,6 +171,30 @@ class TriggerDispatcher
         }
 
         exec('php artisan system:update:rollback --force > /dev/null 2>&1 &');
+    }
+
+
+    private function artisanCommandExists(string $name): bool
+    {
+        $cmd = ['php', 'artisan', 'list', '--raw'];
+        if (class_exists(Process::class)) {
+            $process = new Process($cmd, base_path());
+            $process->setTimeout(20);
+            $process->run();
+            if (!$process->isSuccessful()) {
+                return false;
+            }
+
+            return str_contains($process->getOutput(), $name);
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $cmd)), $output, $exitCode);
+        if ((int) $exitCode !== 0) {
+            return false;
+        }
+
+        return str_contains(implode("
+", $output), $name);
     }
 
     private function resolveDriver(): string
