@@ -34,7 +34,11 @@ class ArchiveManager
 
         foreach ($iterator as $file) {
             $fullPath = $this->normalizePath((string) $file->getPathname());
-            $relativePath = ltrim(str_replace($sourceDir, '', $fullPath), '/');
+            if (!str_starts_with($fullPath, $sourceDir . '/')) {
+                continue;
+            }
+
+            $relativePath = ltrim(substr($fullPath, strlen($sourceDir)), '/');
 
             if ($relativePath === '' || $this->shouldSkip($relativePath, $exclude)) {
                 continue;
