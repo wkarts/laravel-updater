@@ -196,8 +196,58 @@ class OperationsController extends Controller
                 'started_at' => date(DATE_ATOM),
             ]);
         } catch (\Throwable $e) {
+            if (str_contains(strtolower($e->getMessage()), 'system:update:backup') || str_contains(strtolower($e->getMessage()), 'namespace')) {
+                return $this->runManualBackupInline($type, $runId, $request, $e->getMessage());
+            }
+
             $this->stateStore->updateRunStatus($runId, 'failed', ['message' => $e->getMessage()]);
             return back()->withErrors(['backup' => 'Falha ao iniciar backup: ' . $e->getMessage()]);
+        }
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'backup_start', [
+            'tipo' => $type,
+            'run_id' => $runId,
+        ], $request->ip(), $request->userAgent());
+
+        return back()->with('status', 'Backup iniciado em segundo plano. Você pode continuar usando o painel.');
+    }
+
+
+    private function runManualBackupInline(string $type, int $runId, Request $request, string $reason): RedirectResponse
+    {
+        $this->stateStore->addRunLog($runId, 'warning', 'Fallback para backup síncrono ativado.', [
+            'motivo' => $reason,
+            'tipo' => $type,
+        ]);
+
+        try {
+            $created = match ($type) {
+                'database' => $this->createDatabaseBackup($runId),
+                'snapshot' => $this->createSnapshotBackup($runId),
+                'full' => $this->createFullBackup($runId),
+                default => throw new RuntimeException('Tipo de backup inválido.'),
+            };
+
+            $this->stateStore->finishRun($runId, ['revision_before' => null, 'revision_after' => null]);
+            $this->managerStore->setRuntimeOption('backup_active_job', [
+                'run_id' => $runId,
+                'type' => $type,
+                'pid' => null,
+                'status' => 'finished',
+                'finished_at' => date(DATE_ATOM),
+            ]);
+            $this->managerStore->addAuditLog($this->actorId($request), 'backup_sync_fallback', [
+                'tipo' => $type,
+                'run_id' => $runId,
+                'backup_id' => $created['id'],
+                'reason' => $reason,
+            ], $request->ip(), $request->userAgent());
+
+            return back()->with('status', 'Backup concluído em modo de compatibilidade (síncrono).');
+        } catch (\Throwable $e) {
+            $this->stateStore->updateRunStatus($runId, 'failed', ['message' => $e->getMessage()]);
+
+            return back()->withErrors(['backup' => 'Falha no backup em modo de compatibilidade: ' . $e->getMessage()]);
         }
 
         $this->managerStore->addAuditLog($this->actorId($request), 'backup_start', [
