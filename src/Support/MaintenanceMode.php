@@ -35,26 +35,37 @@ class MaintenanceMode
     }
 
     /** @return array<int,string> */
-    public function exceptPaths(): array
-    {
-        $raw = config('updater.maintenance.except_paths', []);
-        $items = is_array($raw) ? $raw : [];
+public function exceptPaths(): array
+{
+    $raw = config('updater.maintenance.except_paths', []);
+    $items = is_array($raw) ? $raw : [];
 
-        $prefix = trim((string) config('updater.ui.prefix', '_updater'), '/');
-        if ($prefix !== '') {
-            $items[] = $prefix;
-            $items[] = $prefix . '/*';
+    $prefix = trim((string) config('updater.ui.prefix', '_updater'), '/');
+    if ($prefix !== '') {
+        foreach ([$prefix, $prefix.'/*', '/'.$prefix, '/'.$prefix.'/*'] as $p) {
+            $items[] = $p;
         }
-
-        $clean = [];
-        foreach ($items as $item) {
-            $path = trim((string) $item, " \t\n\r\0\x0B/");
-            if ($path === '') {
-                continue;
-            }
-            $clean[] = $path;
-        }
-
-        return array_values(array_unique($clean));
     }
+
+    // Assets publicados (podem ficar fora do prefixo e precisam continuar acessíveis)
+    foreach ([
+        'vendor/laravel-updater',
+        'vendor/laravel-updater/*',
+        '/vendor/laravel-updater',
+        '/vendor/laravel-updater/*',
+    ] as $p) {
+        $items[] = $p;
+    }
+
+    $clean = [];
+    foreach ($items as $item) {
+        $path = trim((string) $item);
+        if ($path === '') {
+            continue;
+        }
+        $clean[] = $path;
+    }
+
+    return array_values(array_unique($clean));
+}
 }

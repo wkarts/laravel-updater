@@ -25,6 +25,7 @@ return [
         'ff_only' => (bool) env('UPDATER_GIT_FF_ONLY', true),
         'update_type' => env('UPDATER_GIT_UPDATE_TYPE', 'git_ff_only'),
         'tag' => env('UPDATER_GIT_TAG', ''),
+        'auto_stash' => env('UPDATER_GIT_AUTO_STASH', true),
         'auto_init' => (bool) env('UPDATER_GIT_AUTO_INIT', false),
         'default_update_mode' => env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge'),
         'first_run_assume_behind' => (bool) env('UPDATER_GIT_FIRST_RUN_ASSUME_BEHIND', true),
