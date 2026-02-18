@@ -159,7 +159,15 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
     $status = $this->shellRunner?->run(['git', 'status', '--porcelain'], $cwd, $env);
     $porcelain = trim((string) ($status['stdout'] ?? ''));
 
-    if ($porcelain === '') {
+    // Também considera arquivos ignorados/untracked que podem bloquear merge/checkout
+    // (ex.: assets publicados em public/vendor/*).
+    $untracked = $this->shellRunner?->run(['git', 'ls-files', '--others', '--exclude-standard'], $cwd, $env);
+    $ignored   = $this->shellRunner?->run(['git', 'ls-files', '--others', '-i', '--exclude-standard'], $cwd, $env);
+
+    $hasUntracked = trim((string) ($untracked['stdout'] ?? '')) !== '';
+    $hasIgnored   = trim((string) ($ignored['stdout'] ?? '')) !== '';
+
+    if ($porcelain === '' && !$hasUntracked && !$hasIgnored) {
         return;
     }
 
@@ -170,7 +178,7 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
     $runId = (string) ($context['run_id'] ?? 'manual');
     $msg = 'laravel-updater run ' . $runId . ' ' . date('Y-m-d H:i:s');
 
-    $res = $this->shellRunner->run(['git', 'stash', 'push', '-u', '-m', $msg], $cwd, $env);
+    $res = $this->shellRunner->run(['git', 'stash', 'push', '-a', '-m', $msg], $cwd, $env);
     if (($res['exit_code'] ?? 1) !== 0) {
         throw new \RuntimeException('Falha ao criar stash automático antes do update: ' . (($res['stderr'] ?? '') ?: 'erro desconhecido'));
     }
