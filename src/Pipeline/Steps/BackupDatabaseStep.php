@@ -35,6 +35,29 @@ class BackupDatabaseStep implements PipelineStepInterface
     {
         $context['backup_file'] = $this->backupDriver->backup('db_' . date('Ymd_His'));
         $this->store->registerArtifact('backup', $context['backup_file'], ['run_id' => $context['run_id'] ?? null]);
+
+        // Also register in updater_backups table (UI grid reads from this table).
+        // This restores the behavior present in older stable versions where pre-update backups
+        // are visible and manageable from the UI.
+        $runId = isset($context['run_id']) ? (int) $context['run_id'] : null;
+        $profileId = isset($context['options']['profile_id']) ? (int) $context['options']['profile_id'] : null;
+        $path = (string) ($context['backup_file'] ?? '');
+        if ($path !== '' && is_file($path)) {
+            try {
+                $stmt = $this->store->pdo()->prepare('INSERT INTO updater_backups (type, path, size, created_at, profile_id, run_id, cloud_uploaded, cloud_upload_count) VALUES (:type,:path,:size,:created_at,:profile_id,:run_id,0,0)');
+                $stmt->execute([
+                    ':type' => 'database',
+                    ':path' => $path,
+                    ':size' => (int) filesize($path),
+                    ':created_at' => date(DATE_ATOM),
+                    ':profile_id' => $profileId ?: null,
+                    ':run_id' => $runId ?: null,
+                ]);
+            } catch (\Throwable $e) {
+                // do not break the pipeline because of an UI-only registration error
+                $context['backup_register_warning'] = $e->getMessage();
+            }
+        }
     }
 
 
