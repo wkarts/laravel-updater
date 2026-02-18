@@ -59,7 +59,6 @@ class MaintenanceOnStep implements PipelineStepInterface
                     $context['maintenance'] = false;
                     return;
                 }
-}
 
                 // Try next candidate (common failure: host view expects REQUEST_URI in CLI).
                 $context['maintenance_on_error'][] = [
