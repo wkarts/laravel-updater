@@ -55,7 +55,7 @@ class SnapshotCodeStep implements PipelineStepInterface
 
         // Snapshot deve ser leve e previsível: por padrão exclui storage inteiro.
         // (Uploads relevantes ficam normalmente em public/uploads, já tratado em exclude_snapshot.)
-        $excludeStorage = (bool) (function_exists('config') ? config('updater.snapshot.exclude_storage', false) : true);
+        $excludeStorage = (bool) (function_exists('config') ? config('updater.snapshot.exclude_storage', true) : true);
         if ($excludeStorage) {
             $excludes[] = 'storage';
         }
