@@ -18,6 +18,25 @@ class ArchiveManager
         $this->disableTimeLimit();
         $resolved = $this->resolveFormat($format);
 
+        // Blindagem anti-recursão:
+        // Se o arquivo de saída estiver dentro do diretório de origem (ex.: snapshots em storage/app/updater),
+        // a compactação pode incluir o próprio arquivo em crescimento e explodir de tamanho.
+        // Portanto, sempre excluímos o diretório de saída relativo ao sourceDir.
+        $source = rtrim($this->normalizePath($sourceDir), '/');
+        $targetBase = $this->normalizePath($targetBasePath);
+        $targetDir = rtrim($this->normalizePath(dirname($targetBase)), '/');
+        if ($targetDir !== '' && str_starts_with($targetDir, $source . '/')) {
+            $relativeTargetDir = ltrim(substr($targetDir, strlen($source)), '/');
+            if ($relativeTargetDir !== '') {
+                $excludePaths[] = $relativeTargetDir;
+            }
+        }
+
+        // Nunca permitir que o diretório operacional do updater entre em snapshot/full.
+        // Isso evita loops (snapshots dentro de snapshots), além de reduzir peso e exposição.
+        $excludePaths[] = 'storage/app/updater';
+        $excludePaths[] = 'storage/framework/down';
+
         return match ($resolved) {
             '7z' => $this->create7zFromDirectory($sourceDir, $targetBasePath . '.7z', $excludePaths),
             'tgz' => $this->createTgzFromDirectory($sourceDir, $targetBasePath . '.tar.gz', $excludePaths),
