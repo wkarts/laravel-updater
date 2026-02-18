@@ -59,6 +59,9 @@ class OperationsController extends Controller
         $shouldDryRunFirst = $action === 'simulate' || ($action === '' && (bool) $request->boolean('dry_run_before', true));
 
         if ($shouldDryRunFirst) {
+            $profile = $this->managerStore->activeProfile();
+            $profileOptions = $this->resolveActiveBackupOptions();
+
             try {
                 $runId = $dispatcher->triggerUpdate([
                     'dry_run' => true,
@@ -69,6 +72,9 @@ class OperationsController extends Controller
                     'source_id' => (int) $data['source_id'],
                     'sync' => false,
                     'allow_http' => true,
+                    'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
+                    'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
+                    'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
                 ]);
                 return [
                 'provider' => $provider,
@@ -107,6 +113,9 @@ class OperationsController extends Controller
                 'source_id' => (int) $data['source_id'],
                 'sync' => false,
                     'allow_http' => true,
+                    'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
+                    'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
+                    'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
                 ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao aplicar atualização: ' . $e->getMessage()])->withInput();
@@ -153,6 +162,9 @@ class OperationsController extends Controller
                 'source_id' => (int) ($pending['source_id'] ?? 0),
                 'sync' => false,
                     'allow_http' => true,
+                    'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
+                    'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
+                    'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
                 ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao executar atualização aprovada: ' . $e->getMessage()]);
@@ -503,7 +515,7 @@ class OperationsController extends Controller
         $this->stateStore->addRunLog($runId, 'info', 'Backup FULL obrigatório antes da atualização.');
 
         try {
-            $full = $this->createFullBackup($runId);
+            $full = $this->createFullBackup($runId, $this->resolveActiveBackupOptions());
             $this->stateStore->finishRun($runId, ['revision_before' => null, 'revision_after' => null, 'backup_file' => $full['path']]);
             $this->managerStore->addAuditLog($this->actorId($request), 'backup_full_before_update', [
                 'run_id' => $runId,

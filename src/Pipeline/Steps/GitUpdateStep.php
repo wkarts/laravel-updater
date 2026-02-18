@@ -81,6 +81,16 @@ class GitUpdateStep implements PipelineStepInterface
             $context['source_type'] = $sourceType;
         }
 
+
+// Preparação do working tree: evita falha de merge por arquivos locais (modificados ou untracked).
+// É comum existirem artefatos gerados (vendor:publish, assets, views) e ajustes locais de config.
+// Para garantir update estável, cria stash automático (incluindo untracked) antes do pull/checkout.
+if (!$isDryRun && $this->shellRunner !== null) {
+    $cwd = $cwd ?? (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+    $env = $env ?? ['GIT_TERMINAL_PROMPT' => '0'];
+    $this->autoStashWorkingTree($context, $cwd, $env);
+}
+
         $context['revision_before'] = $this->codeDriver->currentRevision();
         $context['git_tag_before'] = $this->resolveCurrentTag();
 
@@ -140,6 +150,35 @@ class GitUpdateStep implements PipelineStepInterface
         $this->restoreDotEnv($context);
     }
 
+
+private function autoStashWorkingTree(array &$context, string $cwd, array $env = []): void
+{
+    $allowDirty = (bool) ($context['options']['allow_dirty'] ?? false);
+    $autoStash = (bool) ($context['options']['auto_stash'] ?? config('updater.git.auto_stash', true));
+
+    $status = $this->shellRunner?->run(['git', 'status', '--porcelain'], $cwd, $env);
+    $porcelain = trim((string) ($status['stdout'] ?? ''));
+
+    if ($porcelain === '') {
+        return;
+    }
+
+    if (!$allowDirty && !$autoStash) {
+        throw new \RuntimeException("Working tree sujo. Ajuste/commite ou habilite --allow-dirty / UPDATER_GIT_AUTO_STASH=true.\n" . $porcelain);
+    }
+
+    $runId = (string) ($context['run_id'] ?? 'manual');
+    $msg = 'laravel-updater run ' . $runId . ' ' . date('Y-m-d H:i:s');
+
+    $res = $this->shellRunner->run(['git', 'stash', 'push', '-u', '-m', $msg], $cwd, $env);
+    if (($res['exit_code'] ?? 1) !== 0) {
+        throw new \RuntimeException('Falha ao criar stash automático antes do update: ' . (($res['stderr'] ?? '') ?: 'erro desconhecido'));
+    }
+
+    $context['git_auto_stash'] = true;
+    $context['git_auto_stash_message'] = $msg;
+    $context['git_update_log'][] = 'stash automático criado para permitir merge/checkout em working tree sujo.';
+}
 
     private function backupDotEnv(array &$context): void
     {
