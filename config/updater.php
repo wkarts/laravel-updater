@@ -68,6 +68,9 @@ return [
         'path' => env('UPDATER_SNAPSHOT_PATH', storage_path('app/updater/snapshots')),
         'keep' => (int) env('UPDATER_SNAPSHOT_KEEP', 10),
         'include_vendor' => (bool) env('UPDATER_SNAPSHOT_INCLUDE_VENDOR', false),
+        // Por padrão, snapshot é de "código" (evita travamentos e arquivos gigantes).
+        // Se você realmente precisa incluir storage, defina UPDATER_SNAPSHOT_EXCLUDE_STORAGE=false
+        'exclude_storage' => (bool) env('UPDATER_SNAPSHOT_EXCLUDE_STORAGE', true),
         'compression' => env('UPDATER_SNAPSHOT_COMPRESSION', 'zip'), // zip
     ],
 
