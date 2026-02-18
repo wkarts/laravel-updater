@@ -108,7 +108,22 @@ if (!$isDryRun && $this->shellRunner !== null) {
             return;
         }
 
-        $context['revision_after'] = $this->codeDriver->update();
+        try {
+            $context['revision_after'] = $this->codeDriver->update();
+        } catch (\Throwable $e) {
+            // Caso clássico: arquivos untracked/ignored (ex.: vendor:publish) bloqueiam merge/checkout.
+            // Mesmo com stash -a, alguns ambientes podem recriar assets imediatamente ou manter arquivos fora do controle do git.
+            // Estratégia: detectar a assinatura do erro, mover os arquivos conflitantes para uma pasta de quarentena e tentar 1 vez.
+            if ($this->shellRunner !== null && $this->shouldRetryAfterUntrackedOverwrite($e)) {
+                $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+                $env = ['GIT_TERMINAL_PROMPT' => '0'];
+                $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd);
+                $context['git_update_log'][] = 'Arquivos untracked conflitantes foram movidos para quarentena e o update será tentado novamente.';
+                $context['revision_after'] = $this->codeDriver->update();
+            } else {
+                throw $e;
+            }
+        }
         $context['git_tag_after'] = $this->resolveCurrentTag();
 
         if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
@@ -273,4 +288,128 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
         $this->shellRunner?->runOrFail(['git', 'reset', '--hard', 'FETCH_HEAD'], $cwd, $env);
         $this->shellRunner?->run(['git', 'branch', '--set-upstream-to=origin/' . $branch, $branch], $cwd, $env);
     }
+
+    private function shouldRetryAfterUntrackedOverwrite(\Throwable $e): bool
+    {
+        $msg = mb_strtolower($e->getMessage());
+        return str_contains($msg, 'untracked working tree files would be overwritten')
+            || str_contains($msg, 'would be overwritten by merge')
+            || str_contains($msg, 'please move or remove them before you merge');
+    }
+
+    private function quarantineUntrackedOverwriteFiles(array &$context, string $message, string $cwd): void
+    {
+        // Extrai lista de arquivos do erro do git (linhas com tab prefix).
+        $files = [];
+        foreach (preg_split('/\r?\n/', $message) as $line) {
+            $line = trim($line);
+            if ($line === '' || $line[0] !== '\t') {
+                continue;
+            }
+            $p = trim(ltrim($line, "\t"));
+            if ($p !== '') {
+                $files[] = $p;
+            }
+        }
+
+        // Fallback: quando o git não inclui tab, tenta pegar caminhos comuns do updater.
+        if (empty($files)) {
+            $candidates = [
+                'public/vendor/laravel-updater',
+                'resources/views/vendor/laravel-updater',
+            ];
+            foreach ($candidates as $c) {
+                if (is_dir($cwd . DIRECTORY_SEPARATOR . $c) || is_file($cwd . DIRECTORY_SEPARATOR . $c)) {
+                    $files[] = $c;
+                }
+            }
+        }
+
+        if (empty($files)) {
+            return;
+        }
+
+        $runId = (string) ($context['run_id'] ?? 'manual');
+        $stamp = date('Ymd_His');
+        $quarantineBase = (function_exists('storage_path') ? storage_path('app/updater/quarantine') : ($cwd . DIRECTORY_SEPARATOR . 'storage/app/updater/quarantine'));
+        if (!is_dir($quarantineBase)) {
+            @mkdir($quarantineBase, 0775, true);
+        }
+        $destDir = rtrim($quarantineBase, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'run_' . $runId . '_' . $stamp;
+        @mkdir($destDir, 0775, true);
+
+        foreach (array_unique($files) as $rel) {
+            $src = $cwd . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $rel);
+            if (!file_exists($src)) {
+                continue;
+            }
+
+            $dst = $destDir . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $rel);
+            $dstParent = dirname($dst);
+            if (!is_dir($dstParent)) {
+                @mkdir($dstParent, 0775, true);
+            }
+
+            // Move (rename) quando possível; caso contrário copia e remove.
+            if (!@rename($src, $dst)) {
+                if (is_file($src)) {
+                    @copy($src, $dst);
+                    @unlink($src);
+                } elseif (is_dir($src)) {
+                    // Remoção recursiva simples
+                    $this->copyDir($src, $dst);
+                    $this->deleteDir($src);
+                }
+            }
+
+            $context['git_quarantined_files'][] = $rel;
+        }
+
+        // Garante que o working tree está realmente limpo para a segunda tentativa.
+        if ($this->shellRunner !== null) {
+            $this->shellRunner->run(['git', 'clean', '-fd'], $cwd, ['GIT_TERMINAL_PROMPT' => '0']);
+        }
+    }
+
+    private function copyDir(string $src, string $dst): void
+    {
+        @mkdir($dst, 0775, true);
+        $items = @scandir($src);
+        if (!is_array($items)) {
+            return;
+        }
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $from = $src . DIRECTORY_SEPARATOR . $item;
+            $to = $dst . DIRECTORY_SEPARATOR . $item;
+            if (is_dir($from)) {
+                $this->copyDir($from, $to);
+            } else {
+                @copy($from, $to);
+            }
+        }
+    }
+
+    private function deleteDir(string $dir): void
+    {
+        $items = @scandir($dir);
+        if (!is_array($items)) {
+            return;
+        }
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+            $path = $dir . DIRECTORY_SEPARATOR . $item;
+            if (is_dir($path)) {
+                $this->deleteDir($path);
+            } else {
+                @unlink($path);
+            }
+        }
+        @rmdir($dir);
+    }
+
 }
