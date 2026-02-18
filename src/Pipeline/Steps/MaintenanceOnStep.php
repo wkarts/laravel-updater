@@ -79,7 +79,90 @@ class MaintenanceOnStep implements PipelineStepInterface
             $this->shellRunner->runOrFail($this->downCommand(null, $includeExcept), env: $downEnv);
         }
 
+        // Hard guarantee: keep updater routes accessible while in maintenance.
+        // Laravel 11/12 may fail to persist --except into storage/framework/down in some environments.
+        // We patch the down file defensively to ensure the updater prefix is always excluded.
+        $this->ensureUpdaterExceptInDownFile($context);
+
         $context['maintenance'] = true;
+    }
+
+    private function ensureUpdaterExceptInDownFile(array &$context): void
+    {
+        if (!function_exists('base_path')) {
+            return;
+        }
+
+        $downFile = rtrim((string) base_path('storage/framework/down'));
+        if ($downFile === '' || !is_file($downFile)) {
+            return;
+        }
+
+        $raw = (string) @file_get_contents($downFile);
+        if (trim($raw) === '') {
+            return;
+        }
+
+        $data = json_decode($raw, true);
+        if (!is_array($data)) {
+            return;
+        }
+
+        $except = $data['except'] ?? [];
+        if (!is_array($except)) {
+            $except = [];
+        }
+
+        // Get updater prefix from config, with safe fallbacks.
+        $prefix = trim((string) (function_exists('config') ? config('updater.ui.prefix', env('UPDATER_UI_PREFIX', '_updater')) : (string) env('UPDATER_UI_PREFIX', '_updater')), '/');
+        if ($prefix === '') {
+            return;
+        }
+
+        $required = [
+            '/' . $prefix,
+            '/' . $prefix . '/*',
+            $prefix,
+            $prefix . '/*',
+        ];
+
+        $set = [];
+        foreach ($except as $item) {
+            if (!is_string($item)) {
+                continue;
+            }
+            $val = trim($item);
+            if ($val === '') {
+                continue;
+            }
+            $set[$val] = true;
+        }
+
+        $changed = false;
+        foreach ($required as $path) {
+            if (!isset($set[$path])) {
+                $set[$path] = true;
+                $changed = true;
+            }
+        }
+
+        if (!$changed) {
+            return;
+        }
+
+        $data['except'] = array_values(array_keys($set));
+
+        $encoded = json_encode($data, JSON_UNESCAPED_SLASHES);
+        if ($encoded === false) {
+            return;
+        }
+
+        $ok = @file_put_contents($downFile, $encoded);
+        if ($ok === false) {
+            $context['maintenance_on_warning'][] = 'Falha ao persistir except no arquivo storage/framework/down.';
+        } else {
+            $context['maintenance_on_warning'][] = 'Arquivo storage/framework/down ajustado para garantir except do updater.';
+        }
     }
 
 

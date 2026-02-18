@@ -62,26 +62,10 @@ class TriggerDispatcher
             return $after > $before ? $after : null;
         }
 
-        if ($driver === 'process' && class_exists(Process::class)) {
-            $process = new Process($args, base_path());
-            $process->disableOutput();
-            $process->start();
-
-            return null;
-        }
-
-        if ($this->isWindows()) {
-            if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
-                $process->disableOutput();
-                $process->start();
-            }
-
-            return null;
-        }
-
-        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 &';
-        exec($cmd);
+        // Background execution (non-blocking) to avoid freezing the UI.
+        // - On Linux/macOS: run in shell background.
+        // - On Windows: prefer Symfony Process start(), otherwise fallback to cmd.exe "start /B".
+        $this->spawnBackground($args);
 
         return null;
     }
@@ -113,24 +97,9 @@ class TriggerDispatcher
             return ['started' => true, 'pid' => null];
         }
 
-        if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
-            $process->disableOutput();
-            $process->start();
+        $pid = $this->spawnBackground($args);
 
-            return ['started' => true, 'pid' => $process->getPid() ?: null];
-        }
-
-        if ($this->isWindows()) {
-            exec(implode(' ', array_map('escapeshellarg', $args)));
-
-            return ['started' => true, 'pid' => null];
-        }
-
-        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
-        $pid = trim((string) shell_exec($cmd));
-
-        return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
+        return ['started' => true, 'pid' => $pid];
     }
 
 
@@ -160,24 +129,9 @@ class TriggerDispatcher
             return ['started' => true, 'pid' => null];
         }
 
-        if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
-            $process->disableOutput();
-            $process->start();
+        $pid = $this->spawnBackground($args);
 
-            return ['started' => true, 'pid' => $process->getPid() ?: null];
-        }
-
-        if ($this->isWindows()) {
-            exec(implode(' ', array_map('escapeshellarg', $args)));
-
-            return ['started' => true, 'pid' => null];
-        }
-
-        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
-        $pid = trim((string) shell_exec($cmd));
-
-        return ['started' => true, 'pid' => $pid !== '' ? (int) $pid : null];
+        return ['started' => true, 'pid' => $pid];
     }
 
     public function triggerRollback(): void
@@ -309,15 +263,8 @@ class TriggerDispatcher
     {
         $configured = strtolower(trim($this->driver));
         if ($configured === '' || $configured === 'auto') {
-            if ($this->isWindows()) {
-                return 'sync';
-            }
-
-            return 'background';
-        }
-
-        if ($this->isWindows() && in_array($configured, ['background', 'process'], true)) {
-            return 'sync';
+            // Auto should never freeze the UI. On Windows, prefer non-blocking execution.
+            return $this->isWindows() ? 'process' : 'background';
         }
 
         return $configured;
@@ -326,6 +273,50 @@ class TriggerDispatcher
     private function isWindows(): bool
     {
         return PHP_OS_FAMILY === 'Windows';
+    }
+
+    /**
+     * Spawns a background process.
+     *
+     * @param array<int,string> $args
+     */
+    private function spawnBackground(array $args): ?int
+    {
+        // Prefer Symfony Process when available.
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->disableOutput();
+            $process->start();
+
+            return $process->getPid() ?: null;
+        }
+
+        if ($this->isWindows()) {
+            // Fallback for Windows without symfony/process: use cmd.exe start /B to detach.
+            // Example: cmd /C start "" /B "php" "artisan" "system:update:run" "--force"
+            $cmd = $this->buildWindowsDetachedCommand($args);
+            // popen/pclose avoids blocking even when exec() would wait.
+            @pclose(@popen($cmd, 'r'));
+
+            return null;
+        }
+
+        // Linux/macOS fallback
+        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
+        $pid = trim((string) @shell_exec($cmd));
+
+        return $pid !== '' ? (int) $pid : null;
+    }
+
+    /**
+     * @param array<int,string> $args
+     */
+    private function buildWindowsDetachedCommand(array $args): string
+    {
+        $escaped = array_map(static fn ($a) => '"' . str_replace('"', '\\"', (string) $a) . '"', $args);
+        $joined = implode(' ', $escaped);
+
+        return 'cmd /C start "" /B ' . $joined;
     }
 
     private function buildUpdateCommandArgs(array $options): array
