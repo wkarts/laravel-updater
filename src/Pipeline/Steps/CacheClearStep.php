@@ -19,7 +19,7 @@ class CacheClearStep implements PipelineStepInterface
 
     public function handle(array &$context): void
     {
-        foreach (['optimize:clear', 'config:cache', 'route:cache', 'view:cache'] as $command) {
+        foreach ($this->commandsToRun($context) as $command) {
             try {
                 $this->shellRunner->runOrFail(['php', 'artisan', $command]);
             } catch (UpdaterException $exception) {
@@ -41,7 +41,52 @@ class CacheClearStep implements PipelineStepInterface
         }
     }
 
-    public function rollback(array &$context): void
+    /**
+ * @return array<int,string>
+ */
+private function commandsToRun(array $context): array
+{
+    // Por padrão, NÃO executamos config:cache para evitar quebrar aplicações que usam env() em runtime
+    // (ex.: helpers/providers que exigem ENCRYPTION_KEY via env). Em Laravel, quando config é cacheado,
+    // o bootstrap não carrega .env, então env() passa a retornar vazio se a variável não existir no ambiente do SO.
+    // Você pode reativar config:cache explicitamente via:
+    // - config: updater.cache.config_cache = true
+    // - env: UPDATER_CACHE_CONFIG_CACHE=true
+    $runConfigCache = $this->shouldRunConfigCache();
+
+    $commands = ['optimize:clear'];
+
+    if ($runConfigCache) {
+        $commands[] = 'config:cache';
+    } else {
+        $commands[] = 'config:clear';
+    }
+
+    $commands[] = 'route:cache';
+    $commands[] = 'view:cache';
+
+    return $commands;
+}
+
+private function shouldRunConfigCache(): bool
+{
+    try {
+        if (function_exists('config')) {
+            return (bool) config('updater.cache.config_cache', false);
+        }
+    } catch (\Throwable) {
+        // fallback abaixo
+    }
+
+    $env = getenv('UPDATER_CACHE_CONFIG_CACHE');
+    if ($env === false || $env === null || $env === '') {
+        return false;
+    }
+
+    return filter_var($env, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? false;
+}
+
+public function rollback(array &$context): void
     {
         $this->shellRunner->run(['php', 'artisan', 'optimize:clear']);
     }

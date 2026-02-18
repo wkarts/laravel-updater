@@ -152,6 +152,9 @@ return [
     ],
 
     'cache' => [
+        // Se true, executa `php artisan config:cache` ao final da pipeline.
+        // Default false para evitar quebrar aplicações que dependem de env() em runtime.
+        'config_cache' => (bool) env('UPDATER_CACHE_CONFIG_CACHE', false),
         // Evita derrubar update quando route:cache falhar por rota duplicada no host.
         // Nesse caso o updater registra warning e executa route:clear.
         'ignore_route_cache_duplicate_name' => (bool) env('UPDATER_CACHE_IGNORE_ROUTE_CACHE_DUPLICATE_NAME', true),
