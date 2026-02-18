@@ -47,15 +47,18 @@ class SnapshotCodeStep implements PipelineStepInterface
         $snapshotBase = $path . '/snapshot_' . date('Ymd_His');
 
         $excludes = config('updater.paths.exclude_snapshot', []);
+        // Exclusões defensivas (evitam recursão do próprio snapshot/backups).
+        // Mesmo que o perfil tente incluir storage/app/updater, isso causará arquivo crescendo indefinidamente.
+        $excludes[] = "storage/app/updater";
+        $excludes[] = "storage/framework/down";
 
-        // Blindagem anti-loop/recursão: nunca permitir que o diretório operacional do updater entre no snapshot.
-        // Se alguém tentar “incluir somente storage/app/updater”, isso pode causar o zip crescer infinitamente
-        // ao capturar o próprio snapshot sendo gerado.
-        $excludes[] = 'storage/app/updater';
-        $excludes[] = 'storage/framework/down';
 
-        // Mantém compatibilidade com o comportamento anterior: controle de exclusão de storage é via config.
-        // (Se quiser excluir storage inteiro, configure em updater.paths.exclude_snapshot.)
+        // Snapshot deve ser leve e previsível: por padrão exclui storage inteiro.
+        // (Uploads relevantes ficam normalmente em public/uploads, já tratado em exclude_snapshot.)
+        $excludeStorage = (bool) (function_exists('config') ? config('updater.snapshot.exclude_storage', false) : true);
+        if ($excludeStorage) {
+            $excludes[] = 'storage';
+        }
         $includeVendor = (bool) ($context['options']['snapshot_include_vendor'] ?? ($this->config['include_vendor'] ?? false));
         if (!$includeVendor) {
             $excludes[] = 'vendor';

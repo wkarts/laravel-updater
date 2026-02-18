@@ -18,25 +18,6 @@ class ArchiveManager
         $this->disableTimeLimit();
         $resolved = $this->resolveFormat($format);
 
-        // Blindagem anti-recursão:
-        // Se o arquivo de saída estiver dentro do diretório de origem (ex.: snapshots em storage/app/updater),
-        // a compactação pode incluir o próprio arquivo em crescimento e explodir de tamanho.
-        // Portanto, sempre excluímos o diretório de saída relativo ao sourceDir.
-        $source = rtrim($this->normalizePath($sourceDir), '/');
-        $targetBase = $this->normalizePath($targetBasePath);
-        $targetDir = rtrim($this->normalizePath(dirname($targetBase)), '/');
-        if ($targetDir !== '' && str_starts_with($targetDir, $source . '/')) {
-            $relativeTargetDir = ltrim(substr($targetDir, strlen($source)), '/');
-            if ($relativeTargetDir !== '') {
-                $excludePaths[] = $relativeTargetDir;
-            }
-        }
-
-        // Nunca permitir que o diretório operacional do updater entre em snapshot/full.
-        // Isso evita loops (snapshots dentro de snapshots), além de reduzir peso e exposição.
-        $excludePaths[] = 'storage/app/updater';
-        $excludePaths[] = 'storage/framework/down';
-
         return match ($resolved) {
             '7z' => $this->create7zFromDirectory($sourceDir, $targetBasePath . '.7z', $excludePaths),
             'tgz' => $this->createTgzFromDirectory($sourceDir, $targetBasePath . '.tar.gz', $excludePaths),
@@ -50,6 +31,25 @@ class ArchiveManager
         $this->disableTimeLimit();
         $exclude = array_map([$this, 'normalizePath'], $excludePaths);
         $sourceDir = rtrim($this->normalizePath($sourceDir), '/');
+        // Proteção anti-recursão:
+        // snapshots/backups são gravados tipicamente em storage/app/updater/*.
+        // Se o snapshot incluir storage (ou subpaths), o ZIP pode tentar incluir o próprio arquivo em criação,
+        // fazendo o arquivo crescer indefinidamente.
+        // Esta exclusão é SEMPRE aplicada, independente de perfil/config.
+        $exclude[] = $this->normalizePath("storage/app/updater");
+        $exclude[] = $this->normalizePath("storage/framework/down");
+
+        // Se o target estiver dentro do sourceDir, exclui também o diretório do target.
+        $targetAbs = $this->normalizePath((string) (realpath(dirname($targetZip)) ?: dirname($targetZip)));
+        if (str_starts_with($targetAbs . "/", $sourceDir . "/")) {
+            $rel = ltrim(substr($targetAbs, strlen($sourceDir)), "/");
+            if ($rel !== "") {
+                $exclude[] = $this->normalizePath($rel);
+            }
+        }
+
+        $exclude = array_values(array_unique(array_filter($exclude, static fn ($v) => is_string($v) && trim($v) !== "")));
+
 
         $dir = dirname($targetZip);
         if (!is_dir($dir)) {
