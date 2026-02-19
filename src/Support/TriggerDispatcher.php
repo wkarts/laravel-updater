@@ -46,7 +46,7 @@ class TriggerDispatcher
 
             $before = (int) (($this->store->lastRun()['id'] ?? 0));
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->setTimeout(null);
                 $process->run();
 
@@ -97,7 +97,7 @@ class TriggerDispatcher
         $args = ['php', 'artisan', 'system:update', '--help'];
 
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->setTimeout(20);
             $process->run();
 
@@ -123,7 +123,7 @@ class TriggerDispatcher
 
         if ($driver === 'sync') {
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->setTimeout(null);
                 $process->run();
                 if (!$process->isSuccessful()) {
@@ -155,7 +155,7 @@ class TriggerDispatcher
 
         if ($driver === 'sync') {
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->setTimeout(null);
                 $process->run();
                 if (!$process->isSuccessful()) {
@@ -195,7 +195,7 @@ class TriggerDispatcher
 
         if ($driver === 'sync') {
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->setTimeout(null);
                 $process->run();
                 if (!$process->isSuccessful()) {
@@ -211,7 +211,7 @@ class TriggerDispatcher
         }
 
         if ($driver === 'process' && class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->disableOutput();
             $process->start();
 
@@ -220,7 +220,7 @@ class TriggerDispatcher
 
         if ($this->isWindows()) {
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->disableOutput();
                 $process->start();
             }
@@ -237,7 +237,7 @@ class TriggerDispatcher
     {
         $args = ['php', 'artisan', 'system:update:backup', '--help'];
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->setTimeout(20);
             $process->run();
             if (!$process->isSuccessful()) {
@@ -258,7 +258,7 @@ class TriggerDispatcher
     {
         $args = ['php', 'artisan', 'system:update:backup-upload', '--help'];
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->setTimeout(20);
             $process->run();
             if (!$process->isSuccessful()) {
@@ -295,7 +295,7 @@ class TriggerDispatcher
         $args = ['php', 'artisan', 'system:update:run', '--help'];
 
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->setTimeout(20);
             $process->run();
 
@@ -332,7 +332,7 @@ class TriggerDispatcher
     {
         // Prefer Symfony Process when available.
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->disableOutput();
             $process->start();
 
@@ -425,5 +425,42 @@ class TriggerDispatcher
         }
 
         return $args;
+    }
+
+    /**
+     * Resolve a safe project base path.
+     *
+     * Motivação:
+     * - O helper global base_path() depende de app()->basePath().
+     * - Em cenários de testes/unit do pacote, o "app()" pode ser apenas um Container
+     *   simples (sem basePath), causando erro fatal.
+     *
+     * Regra:
+     * - Se houver Application com basePath(), usa.
+     * - Caso contrário, tenta APP_BASE_PATH.
+     * - Por fim, cai para getcwd() (mais previsível em CI).
+     */
+    private function resolveProjectBasePath(): string
+    {
+        try {
+            if (function_exists('app')) {
+                $app = app();
+                if (is_object($app) && method_exists($app, 'basePath')) {
+                    $path = (string) $app->basePath();
+                    if (trim($path) !== '') {
+                        return rtrim($path, DIRECTORY_SEPARATOR);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // ignora e faz fallback
+        }
+
+        $env = (string) (getenv('APP_BASE_PATH') ?: ($_SERVER['APP_BASE_PATH'] ?? ''));
+        if (trim($env) !== '') {
+            return rtrim($env, DIRECTORY_SEPARATOR);
+        }
+
+        return (string) (getcwd() ?: '.');
     }
 }
