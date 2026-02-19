@@ -39,6 +39,11 @@ class FullBackupStep implements PipelineStepInterface
             return false;
         }
 
+        // Não duplica full backup dentro do mesmo run
+        if (!empty($context['full_backup_file'])) {
+            return false;
+        }
+
         $type = $this->resolveBackupType($context);
 
         // Criar "full" quando o tipo de backup pedir FULL.

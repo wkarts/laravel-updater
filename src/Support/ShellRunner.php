@@ -73,7 +73,106 @@ class ShellRunner
 
 
     /** @param array<int,string> $command */
-    private function resolveWorkingDirectory(?string $cwd, array $command): string
+    
+
+    /**
+     * Executa um comando com timeout (em segundos).
+     *
+     * Mantém compatibilidade: não altera o comportamento do run() existente.
+     *
+     * @return array{code:int,stdout:string,stderr:string,cmd:string}
+     */
+    public function runWithTimeout(array $command, ?string $cwd = null, array $env = [], int $timeoutSeconds = 600): array
+    {
+        $cmd = $this->normalizeCommand($command);
+
+        $descriptorspec = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w'],
+        ];
+
+        $process = proc_open(
+            $cmd,
+            $descriptorspec,
+            $pipes,
+            $cwd ?? base_path(),
+            $this->buildEnv($env)
+        );
+
+        if (!is_resource($process)) {
+            return [
+                'code' => 1,
+                'stdout' => '',
+                'stderr' => 'Falha ao iniciar processo',
+                'cmd' => $cmd,
+            ];
+        }
+
+        fclose($pipes[0]);
+        stream_set_blocking($pipes[1], False);
+        stream_set_blocking($pipes[2], False);
+
+        $stdout = '';
+        $stderr = '';
+        $start = microtime(true);
+
+        while (true) {
+            $status = proc_get_status($process);
+
+            $stdout .= stream_get_contents($pipes[1]) ?: '';
+            $stderr .= stream_get_contents($pipes[2]) ?: '';
+
+            if (!$status['running']) {
+                break;
+            }
+
+            if ((microtime(true) - $start) >= $timeoutSeconds) {
+                @proc_terminate($process);
+                usleep(250000);
+                $statusAfter = proc_get_status($process);
+                if ($statusAfter['running']) {
+                    @proc_terminate($process, 9);
+                }
+
+                $stdout .= stream_get_contents($pipes[1]) ?: '';
+                $stderr .= stream_get_contents($pipes[2]) ?: '';
+
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                proc_close($process);
+
+                throw new UpdaterException(sprintf('Comando excedeu timeout (%ss): %s', $timeoutSeconds, $cmd));
+            }
+
+            usleep(100000);
+        }
+
+        $stdout .= stream_get_contents($pipes[1]) ?: '';
+        $stderr .= stream_get_contents($pipes[2]) ?: '';
+
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+
+        $code = proc_close($process);
+
+        return [
+            'code' => (int) $code,
+            'stdout' => $stdout,
+            'stderr' => $stderr,
+            'cmd' => $cmd,
+        ];
+    }
+
+    public function runOrFailWithTimeout(array $command, ?string $cwd = null, array $env = [], int $timeoutSeconds = 600): array
+    {
+        $res = $this->runWithTimeout($command, $cwd, $env, $timeoutSeconds);
+        if (($res['code'] ?? 1) !== 0) {
+            throw new UpdaterException($res['stderr'] ?: 'Comando falhou', $res);
+        }
+        return $res;
+    }
+private function resolveWorkingDirectory(?string $cwd, array $command): string
     {
         if (is_string($cwd) && trim($cwd) !== '') {
             return $cwd;

@@ -163,44 +163,54 @@ class GitDriver implements CodeDriverInterface
 
     public function update(): string
     {
-        $config = $this->runtimeConfig();
-        $remote = (string) ($config['remote'] ?? 'origin');
-        $branch = (string) ($config['branch'] ?? 'main');
-        $updateType = (string) ($config['update_type'] ?? 'git_ff_only');
+        $path = $this->path;
+        $remote = $this->remote;
+        $branch = $this->branch;
+        $mode = strtolower((string) config('updater.git.default_update_mode', env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge')));
+        $tag = (string) config('updater.git.target_tag', env('UPDATER_GIT_TARGET_TAG', ''));
 
-        if (!$this->isGitRepository()) {
-            if (!$this->tryInitRepository($config, $remote, $branch)) {
-                $cwd = $this->cwd();
-                throw new GitException('Diretório atual não é um repositório git válido: ' . $cwd . '. Defina UPDATER_GIT_PATH corretamente, limpe o cache de configuração (php artisan config:clear) e confirme permissões do usuário do PHP.');
+        $timeout = (int) env('UPDATER_STEP_TIMEOUT_GIT', 600);
+        $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
+
+        // Mantém repo saudável e evita crescimento do .git
+        if ((bool) env('UPDATER_GIT_AUTO_PRUNE', true)) {
+            $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--prune-tags', $remote], $path, [], $timeout);
+        }
+
+        // Nunca baixar todos os branches: fetch somente do branch/tag alvo
+        if ($mode === 'tag') {
+            if ($tag === '') {
+                throw new \RuntimeException('Modo tag ativo, mas UPDATER_GIT_TARGET_TAG não foi informado.');
+            }
+
+            // Busca somente a tag alvo (shallow)
+            $this->shellRunner->runOrFailWithTimeout(
+                ['git', 'fetch', '--prune', '--depth='.$depth, $remote, 'refs/tags/'.$tag.':refs/tags/'.$tag],
+                $path,
+                [],
+                $timeout
+            );
+
+            $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/'.$tag], $path, [], $timeout);
+        } else {
+            // Fetch shallow apenas do branch alvo
+            $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, [], $timeout);
+            $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', $branch], $path, [], $timeout);
+
+            if ($mode === 'ff-only' || $mode === 'ff_only') {
+                $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--ff-only', $remote.'/'.$branch], $path, [], $timeout);
+            } elseif ($mode === 'merge') {
+                $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--no-edit', $remote.'/'.$branch], $path, [], $timeout);
+            } elseif ($mode === 'full' || $mode === 'pull') {
+                // Full: força o branch local igual ao remoto
+                $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $remote.'/'.$branch], $path, [], $timeout);
+            } else {
+                throw new \RuntimeException('UPDATER_GIT_DEFAULT_UPDATE_MODE inválido: '.$mode);
             }
         }
 
-        if ($updateType === 'git_tag' && !empty($config['tag'])) {
-            $env = $this->gitEnv();
-            $result = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', $remote], $this->cwd(), $env);
-            if ($result['exit_code'] !== 0) {
-                throw new GitException($result['stderr'] ?: 'Falha ao buscar tags.');
-            }
-            // checkout de tag sem interações (editor/prompt)
-            $result = $this->shellRunner->run(['git', 'checkout', '--force', 'tags/' . (string) $config['tag']], $this->cwd(), $env);
-            if ($result['exit_code'] !== 0) {
-                throw new GitException($result['stderr'] ?: 'Falha ao realizar checkout da tag.');
-            }
-
-            return $this->currentRevision();
-        }
-
-        // git pull pode abrir editor em merge commit; forçamos --no-edit e env sem editor.
-        // (em ff-only, --no-edit é ignorado / não atrapalha)
-        $args = ['git', 'pull', '--no-edit', $remote, $branch];
-
-        if ($updateType === 'git_ff_only' || (($config['ff_only'] ?? false) === true && $updateType !== 'git_merge')) {
-            $args[] = '--ff-only';
-        }
-
-        $result = $this->shellRunner->run($args, $this->cwd(), $this->gitEnv());
-        if ($result['exit_code'] !== 0) {
-            throw new GitException($result['stderr'] ?: 'Falha ao atualizar código via git.');
+        if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
+            $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--aggressive', '--prune=now'], $path, [], $timeout);
         }
 
         return $this->currentRevision();
@@ -208,13 +218,20 @@ class GitDriver implements CodeDriverInterface
 
     public function rollback(string $revision): void
     {
-        if (!$this->isGitRepository()) {
-            throw new GitException('Diretório atual não é um repositório git válido.');
-        }
+        $timeout = (int) env('UPDATER_STEP_TIMEOUT_GIT', 600);
+        $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
 
-        $result = $this->shellRunner->run(['git', 'reset', '--hard', $revision], $this->cwd(), $this->gitEnv());
-        if ($result['exit_code'] !== 0) {
-            throw new GitException($result['stderr'] ?: 'Falha no rollback de código via git.');
+        $config = $this->runtimeConfig();
+        $path = (string) ($config['path'] ?? $this->path);
+        $remote = (string) ($config['remote'] ?? $this->remote);
+        $branch = (string) ($config['branch'] ?? $this->branch);
+
+        // Atualiza apenas o branch alvo (shallow) e volta pro revision (hard)
+        $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, $this->gitEnv(), $timeout);
+        $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $revision], $path, $this->gitEnv(), $timeout);
+
+        if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
+            $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--aggressive', '--prune=now'], $path, $this->gitEnv(), $timeout);
         }
     }
 

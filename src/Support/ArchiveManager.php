@@ -33,10 +33,12 @@ class ArchiveManager
         $sourceDir = rtrim($this->normalizePath($sourceDir), '/');
         // Proteção anti-recursão:
         // snapshots/backups são gravados tipicamente em storage/app/updater/*.
+        $exclude[] = $this->normalizePath(".git");
         // Se o snapshot incluir storage (ou subpaths), o ZIP pode tentar incluir o próprio arquivo em criação,
         // fazendo o arquivo crescer indefinidamente.
         // Esta exclusão é SEMPRE aplicada, independente de perfil/config.
         $exclude[] = $this->normalizePath("storage/app/updater");
+        $exclude[] = $this->normalizePath(".git");
         $exclude[] = $this->normalizePath("storage/framework/down");
 
         // Se o target estiver dentro do sourceDir, exclui também o diretório do target.
@@ -147,6 +149,14 @@ class ArchiveManager
         $this->disableTimeLimit();
         $sourceDir = rtrim($this->normalizePath($sourceDir), '/');
         $exclude = array_map([$this, 'normalizePath'], $excludePaths);
+
+        $exclude[] = $this->normalizePath("storage/app/updater");
+        $exclude[] = $this->normalizePath("storage/framework/down");
+        $exclude[] = $this->normalizePath(".git");
+
+        $exclude[] = $this->normalizePath("storage/app/updater");
+        $exclude[] = $this->normalizePath("storage/framework/down");
+        $exclude[] = $this->normalizePath(".git");
 
         $dir = dirname($targetTgz);
         if (!is_dir($dir)) {

@@ -60,6 +60,7 @@ class OperationsController extends Controller
 
         if ($shouldDryRunFirst) {
             $profile = $this->managerStore->activeProfile();
+        $profileOptions = is_array($profile) ? ($profile['options'] ?? []) : [];
             $profileOptions = $this->resolveActiveBackupOptions();
 
             try {
@@ -606,6 +607,7 @@ class OperationsController extends Controller
     private function resolveActiveBackupOptions(): array
     {
         $profile = $this->managerStore->activeProfile();
+        $profileOptions = is_array($profile) ? ($profile['options'] ?? []) : [];
 
         return [
             'compression' => (string) ($profile['snapshot_compression'] ?? config('updater.snapshot.compression', 'zip')),
