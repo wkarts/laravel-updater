@@ -310,6 +310,28 @@ class StateStore
         return $row ?: null;
     }
 
+
+    public function activeRun(): ?array
+    {
+        $stmt = $this->connect()->query("SELECT * FROM runs WHERE status = 'running' AND (finished_at IS NULL OR finished_at = '') ORDER BY id DESC LIMIT 1");
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $row ?: null;
+    }
+
+    public function hasActiveRun(): bool
+    {
+        return $this->activeRun() !== null;
+    }
+
+    public function activeRunId(): ?int
+    {
+        $run = $this->activeRun();
+
+        return $run ? (int) ($run['id'] ?? 0) : null;
+    }
+
+
     /** @return array<int,array<string,mixed>> */
     public function recentRuns(int $limit = 20, int $offset = 0): array
     {

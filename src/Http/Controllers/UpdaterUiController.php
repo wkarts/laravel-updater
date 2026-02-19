@@ -69,8 +69,12 @@ class UpdaterUiController extends Controller
         return response()->json($kernel->status());
     }
 
-    public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher, ShellRunner $shellRunner): RedirectResponse
+    public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher, ShellRunner $shellRunner, UpdaterKernel $kernel): RedirectResponse
     {
+        if ($kernel->stateStore()->hasActiveRun()) {
+            return back()->withErrors(["update" => "Já existe uma execução em andamento. Aguarde finalizar para disparar outra."]);
+        }
+
         $activeProfile = $this->managerStore->activeProfile();
         $preUpdateCommands = $this->parseCommands((string) ($activeProfile['pre_update_commands'] ?? ''));
         $postUpdateCommands = $this->parseCommands((string) ($activeProfile['post_update_commands'] ?? ''));
@@ -116,8 +120,12 @@ class UpdaterUiController extends Controller
         return array_values(array_unique($commands));
     }
 
-    public function triggerRollback(TriggerDispatcher $dispatcher): RedirectResponse
+    public function triggerRollback(TriggerDispatcher $dispatcher, UpdaterKernel $kernel): RedirectResponse
     {
+        if ($kernel->stateStore()->hasActiveRun()) {
+            return back()->withErrors(["rollback" => "Já existe uma execução em andamento. Aguarde finalizar para disparar rollback."]);
+        }
+
         $dispatcher->triggerRollback();
 
         return back()->with('status', 'Rollback disparado com sucesso.');
