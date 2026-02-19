@@ -52,13 +52,24 @@ class MaintenanceOnStep implements PipelineStepInterface
                 break;
             } catch (\Throwable $e) {
                 if ($includeExcept && $this->hasExceptOptionError($e)) {
-                    // O host app/framework não suporta --except (varia por versão/stack).
-                    // Se entrarmos em manutenção sem except, o updater pode ficar bloqueado e "travar tudo".
-                    // Estratégia segura: NÃO entrar em manutenção quando --except não existe.
-                    $context['maintenance_on_warning'][] = 'O comando artisan down não suporta a opção --except neste ambiente. Manutenção será ignorada para não bloquear o updater.';
-                    $context['maintenance'] = false;
-                    return;
-                }
+    // O host app/framework não suporta --except (varia por versão/stack).
+    // Estratégia corretiva:
+    // 1) Entra em manutenção SEM --except (para realmente bloquear a aplicação),
+    // 2) Em seguida, ajusta storage/framework/down para incluir as rotas do updater no array "except".
+    $includeExcept = false;
+
+    try {
+        $this->shellRunner->runOrFail($this->downCommand($view, false), env: $downEnv);
+        $entered = true;
+        break;
+    } catch (\Throwable $e2) {
+        $context['maintenance_on_error'][] = [
+            'view' => $view,
+            'error' => $e2->getMessage(),
+        ];
+        continue;
+    }
+}
 
                 // Try next candidate (common failure: host view expects REQUEST_URI in CLI).
                 $context['maintenance_on_error'][] = [

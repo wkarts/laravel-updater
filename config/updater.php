@@ -38,6 +38,9 @@ return [
         // porque é uma operação somente leitura. Se quiser bloquear também no check:
         // UPDATER_GIT_ALLOW_DIRTY_CHECK=false
         'allow_dirty_check' => (bool) env('UPDATER_GIT_ALLOW_DIRTY_CHECK', true),
+		// Otimizações para update por tag (evita baixar histórico completo e explodir o tamanho do .git)
+		'shallow_tag_fetch' => (bool) env('UPDATER_GIT_SHALLOW_TAG_FETCH', true),
+		'tag_fetch_depth' => (int) env('UPDATER_GIT_TAG_FETCH_DEPTH', 1),
     ],
 'git_maintenance' => [
     // Ativa/desativa o recurso de manutenção automática do .git
@@ -70,6 +73,9 @@ return [
         'pre_update' => (bool) env('UPDATER_BACKUP_PRE_UPDATE', true),
         // Tipos aceitos: full, snapshot, database, full+snapshot, full+database.
         'pre_update_type' => (string) env('UPDATER_BACKUP_TYPE', 'full'),
+        // Se true, cria também um arquivo "full" (DB + Snapshot) empacotado num único zip/tar.
+        // Por padrão é false para evitar duplicar artefatos e aumentar tempo/tamanho de backup.
+        'create_full_archive' => (bool) env('UPDATER_BACKUP_CREATE_FULL_ARCHIVE', true),
         'keep' => (int) env('UPDATER_BACKUP_KEEP', 10),
         'path' => env('UPDATER_BACKUP_PATH', storage_path('app/updater/backups')),
         'compress' => (bool) env('UPDATER_BACKUP_COMPRESS', true),
