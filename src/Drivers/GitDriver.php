@@ -23,6 +23,10 @@ class GitDriver implements CodeDriverInterface
             'GIT_TERMINAL_PROMPT' => '0',
             'GIT_ASKPASS' => 'echo',
             'SSH_ASKPASS' => 'echo',
+            // Impede abertura de editor (merge message / rebase todo), que causaria “run eterno”.
+            'GIT_EDITOR' => 'true',
+            'GIT_SEQUENCE_EDITOR' => 'true',
+            'GIT_MERGE_AUTOEDIT' => 'no',
         ];
 
         return $extra ? array_merge($base, $extra) : $base;
@@ -172,52 +176,23 @@ class GitDriver implements CodeDriverInterface
         }
 
         if ($updateType === 'git_tag' && !empty($config['tag'])) {
-	    $tag = (string) $config['tag'];
-	
-	    // Evita crescimento explosivo do .git: em update por TAG, não é necessário baixar TODAS as tags/histórico.
-	    // Preferimos fetch shallow apenas da tag alvo (depth configurável). Em caso de incompatibilidade, faz fallback para fetch completo.
-	    $shallow = (bool) ($config['shallow_tag_fetch'] ?? true);
-	    $depth = max(1, (int) ($config['tag_fetch_depth'] ?? 1));
-	
-	    if ($shallow) {
-        $result = $this->shellRunner->run(['git', 'fetch', '--force', '--prune', '--prune-tags', '--depth=' . $depth, $remote, 'tag', $tag], $this->cwd(), $this->gitEnv());
-        if (($result['exit_code'] ?? 1) !== 0) {
-            // Fallback defensivo: alguns servidores/versões podem não aceitar combinação de opções.
-            $result = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', '--prune', '--prune-tags', $remote], $this->cwd(), $this->gitEnv());
-            if (($result['exit_code'] ?? 1) !== 0) {
-                throw new GitException($result['stderr'] ?: 'Falha ao buscar tags (fallback).');
+            $env = $this->gitEnv();
+            $result = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', $remote], $this->cwd(), $env);
+            if ($result['exit_code'] !== 0) {
+                throw new GitException($result['stderr'] ?: 'Falha ao buscar tags.');
             }
-            $result = $this->shellRunner->run(['git', 'checkout', '--force', 'tags/' . $tag], $this->cwd(), $this->gitEnv());
-            if (($result['exit_code'] ?? 1) !== 0) {
-                throw new GitException($result['stderr'] ?: 'Falha ao realizar checkout da tag (fallback).');
+            // checkout de tag sem interações (editor/prompt)
+            $result = $this->shellRunner->run(['git', 'checkout', '--force', 'tags/' . (string) $config['tag']], $this->cwd(), $env);
+            if ($result['exit_code'] !== 0) {
+                throw new GitException($result['stderr'] ?: 'Falha ao realizar checkout da tag.');
             }
 
             return $this->currentRevision();
         }
 
-        // Checkout direto do FETCH_HEAD evita necessidade de manter refs de todas as tags localmente.
-        $result = $this->shellRunner->run(['git', 'checkout', '--force', 'FETCH_HEAD'], $this->cwd(), $this->gitEnv());
-        if (($result['exit_code'] ?? 1) !== 0) {
-            throw new GitException($result['stderr'] ?: 'Falha ao realizar checkout da tag (FETCH_HEAD).');
-        }
-
-	        return $this->currentRevision();
-	    }
-	
-	    // Modo tradicional (não recomendado em repos grandes)
-	    $result = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', '--prune', '--prune-tags', $remote], $this->cwd(), $this->gitEnv());
-	    if (($result['exit_code'] ?? 1) !== 0) {
-	        throw new GitException($result['stderr'] ?: 'Falha ao buscar tags.');
-	    }
-	
-	    $result = $this->shellRunner->run(['git', 'checkout', '--force', 'tags/' . $tag], $this->cwd(), $this->gitEnv());
-	    if (($result['exit_code'] ?? 1) !== 0) {
-	        throw new GitException($result['stderr'] ?: 'Falha ao realizar checkout da tag.');
-	    }
-	
-	    return $this->currentRevision();
-	}
-	$args = ['git', 'pull', $remote, $branch];
+        // git pull pode abrir editor em merge commit; forçamos --no-edit e env sem editor.
+        // (em ff-only, --no-edit é ignorado / não atrapalha)
+        $args = ['git', 'pull', '--no-edit', $remote, $branch];
 
         if ($updateType === 'git_ff_only' || (($config['ff_only'] ?? false) === true && $updateType !== 'git_merge')) {
             $args[] = '--ff-only';
@@ -396,4 +371,3 @@ class GitDriver implements CodeDriverInterface
         return $this->isGitRepository();
     }
 }
-
