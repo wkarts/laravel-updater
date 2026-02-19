@@ -631,6 +631,8 @@ class ManagerController extends Controller
             '#php artisan vendor:publish --tag=updater-config --force',
             '#php artisan vendor:publish --tag=updater-views --force',
             '#composer update',
+            '#php artisan migrate:rollback --step=20 --force',
+            '#php artisan migrate --force',
             '#php artisan db:seed --class=ReformaTributariaSeeder --force',
             '#php artisan cache:clear',
             '#php artisan config:clear',
