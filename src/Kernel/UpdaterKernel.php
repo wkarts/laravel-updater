@@ -63,7 +63,7 @@ class UpdaterKernel
         ];
 
         if ($maintenanceEarly) {
-            $steps[] = new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null);
+            $steps[] = new MaintenanceOnStep($services['shell'], $services['store']);
         }
 
         $steps = array_merge($steps, [
@@ -74,7 +74,7 @@ class UpdaterKernel
         ]);
 
         if (!$maintenanceEarly) {
-            $steps[] = new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null);
+            $steps[] = new MaintenanceOnStep($services['shell'], $services['store']);
         }
 
         $steps = array_merge($steps, [
@@ -89,7 +89,7 @@ class UpdaterKernel
             new CacheClearStep($services['shell']),
             new PostUpdateCommandsStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
-            new MaintenanceOffStep($services['shell'], $services['lock']),
+            new MaintenanceOffStep($services['shell'], $services['store']),
         ]);
 
         return new UpdatePipeline($steps, $services['logger'], $services['store']);
