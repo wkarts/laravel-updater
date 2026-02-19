@@ -84,7 +84,9 @@ class ShellRunner
      */
     public function runWithTimeout(array $command, ?string $cwd = null, array $env = [], int $timeoutSeconds = 600): array
     {
-        $cmd = $this->normalizeCommand($command);
+        // Para evitar dependência do shell (e problemas de quoting/segurança),
+        // usamos proc_open com o comando em array, assim como o run().
+        $cmdForLog = $this->formatCommandForLog($command);
 
         $descriptorspec = [
             0 => ['pipe', 'r'],
@@ -92,8 +94,8 @@ class ShellRunner
             2 => ['pipe', 'w'],
         ];
 
-        $process = proc_open(
-            $cmd,
+        $process = @proc_open(
+            $command,
             $descriptorspec,
             $pipes,
             $cwd ?? base_path(),
@@ -102,16 +104,16 @@ class ShellRunner
 
         if (!is_resource($process)) {
             return [
-                'code' => 1,
+                'code' => 127,
                 'stdout' => '',
-                'stderr' => 'Falha ao iniciar processo',
-                'cmd' => $cmd,
+                'stderr' => 'Falha ao iniciar processo (proc_open). Verifique permissões, PATH e binário.',
+                'cmd' => $cmdForLog,
             ];
         }
 
         fclose($pipes[0]);
-        stream_set_blocking($pipes[1], False);
-        stream_set_blocking($pipes[2], False);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
 
         $stdout = '';
         $stderr = '';
@@ -142,7 +144,7 @@ class ShellRunner
                 fclose($pipes[2]);
                 proc_close($process);
 
-                throw new UpdaterException(sprintf('Comando excedeu timeout (%ss): %s', $timeoutSeconds, $cmd));
+                throw new UpdaterException(sprintf('Comando excedeu timeout (%ss): %s', $timeoutSeconds, $cmdForLog));
             }
 
             usleep(100000);
@@ -160,7 +162,7 @@ class ShellRunner
             'code' => (int) $code,
             'stdout' => $stdout,
             'stderr' => $stderr,
-            'cmd' => $cmd,
+            'cmd' => $cmdForLog,
         ];
     }
 
@@ -185,6 +187,7 @@ class ShellRunner
                 $cmdStr = is_string($res['cmd']) ? $res['cmd'] : (is_array($res['cmd']) ? implode(' ', $res['cmd']) : (string) $res['cmd']);
                 if ($cmdStr !== '') {
                     $msg .= ' | cmd=' . $cmdStr;
+                $msg .= ' | exit=' . $code;
                 }
             }
 
@@ -194,7 +197,27 @@ class ShellRunner
     }
 
 
+    
     /**
+     * Formata o comando para log/diagnóstico, sem depender do shell.
+     *
+     * @param array<int,string> $command
+     */
+    private function formatCommandForLog(array $command): string
+    {
+        $parts = [];
+        foreach ($command as $part) {
+            $p = trim((string) $part);
+            if ($p === '') {
+                continue;
+            }
+            // Mantém aspas simples no log para ficar claro onde há espaços
+            $parts[] = "'" . str_replace("'", "\'", $p) . "'";
+        }
+        return implode(' ', $parts);
+    }
+
+/**
      * Normaliza um comando (array) para string segura para uso com proc_open(string).
      *
      * Observação: o run() já aceita array diretamente, mas o runWithTimeout()
