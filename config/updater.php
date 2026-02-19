@@ -120,6 +120,9 @@ return [
     'lock' => [
         'driver' => env('UPDATER_LOCK_DRIVER', 'file'),
         'timeout' => (int) env('UPDATER_LOCK_TIMEOUT', 600),
+        // Quanto tempo (segundos) o updater deve aguardar o lock via cache antes de falhar.
+        // (file-lock já faz espera pelo próprio timeout)
+        'block_seconds' => (int) env('UPDATER_LOCK_BLOCK_SECONDS', 10),
     ],
 
     'trigger' => [

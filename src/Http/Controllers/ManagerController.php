@@ -8,6 +8,8 @@ use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
 use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
+use Argws\LaravelUpdater\Support\GitMaintenance;
+use Argws\LaravelUpdater\Support\UpdaterLockTools;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\UiPermission;
 use Illuminate\Http\RedirectResponse;
@@ -51,12 +53,38 @@ class ManagerController extends Controller
                     $request->input('q')
                 ),
             ]),
-            'security' => view('laravel-updater::sections.security'),
+            'security' => view('laravel-updater::sections.security', [
+                'gitSizeBytes' => app(GitMaintenance::class)->sizeBytes(),
+                'gitMaintenanceEnabled' => (bool) config('updater.git_maintenance.enabled', true),
+                'lockInfo' => app(UpdaterLockTools::class)->info('system-update'),
+            ]),
             'seeds' => redirect()->route('updater.seeds.index'),
             'admin-users' => redirect()->route('updater.users.index'),
             'settings' => redirect()->route('updater.settings.index'),
             default => abort(404),
         };
+    }
+
+    public function gitMaintainNow(Request $request): RedirectResponse
+    {
+        $this->ensureAdmin();
+
+        try {
+            app(GitMaintenance::class)->maintain('ui');
+        } catch (\Throwable $e) {
+            return back()->withErrors(['git' => 'Falha ao executar manutenção do Git: ' . $e->getMessage()]);
+        }
+
+        return back()->with('status', 'Manutenção do Git executada com sucesso.');
+    }
+
+    public function forceClearUpdateLock(Request $request): RedirectResponse
+    {
+        $this->ensureAdmin();
+
+        app(UpdaterLockTools::class)->forceClear('system-update');
+
+        return back()->with('status', 'Lock de atualização limpo. Se houver uma execução em andamento, ela poderá falhar.');
     }
 
     public function usersIndex()
