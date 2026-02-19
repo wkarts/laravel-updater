@@ -20,7 +20,7 @@ class LockStep implements PipelineStepInterface
     public function handle(array &$context): void
     {
         if (!$this->lock->acquire('system-update', $this->timeout)) {
-            throw new UpdaterException('Não foi possível adquirir lock de atualização.');
+            throw new UpdaterException('Não foi possível adquirir lock de atualização. Possível execução anterior travada. Use a seção Segurança do Updater para verificar/limpar o lock ou aguarde o término de uma execução em andamento.');
         }
         $context['lock'] = true;
     }

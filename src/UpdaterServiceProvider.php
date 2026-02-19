@@ -45,6 +45,7 @@ use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\Totp;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Argws\LaravelUpdater\Support\UiPermission;
+use Argws\LaravelUpdater\Support\UpdaterLockTools;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Artisan;
@@ -74,6 +75,7 @@ class UpdaterServiceProvider extends ServiceProvider
         $this->app->singleton('updater.store', fn () => $this->app->make(StateStore::class));
         $this->app->singleton(Totp::class, fn () => new Totp());
         $this->app->singleton(UiPermission::class, fn () => new UiPermission());
+        $this->app->singleton(UpdaterLockTools::class, fn () => new UpdaterLockTools());
 
         $this->app->singleton(LockInterface::class, function () {
             if ((string) config('updater.lock.driver', 'file') === 'cache') {

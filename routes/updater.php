@@ -95,6 +95,10 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::delete('/sources/{id}', [ManagerController::class, 'deleteSource'])->name('updater.sources.delete');
                 Route::post('/sources/test', [ManagerController::class, 'testSourceConnection'])->name('updater.sources.test');
 
+                // Operações administrativas (Git / Locks)
+                Route::post('/security/git/maintain', [ManagerController::class, 'gitMaintainNow'])->name('updater.security.git.maintain');
+                Route::post('/security/lock/clear', [ManagerController::class, 'forceClearUpdateLock'])->name('updater.security.lock.clear');
+
                 Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds'])->name('updater.section');
             });
         });
