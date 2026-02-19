@@ -322,7 +322,14 @@ class GitDriver implements CodeDriverInterface
 
         $result = $this->shellRunner->run(['git', 'rev-parse', '--is-inside-work-tree'], $cwd);
 
-        return $result['exit_code'] === 0 && trim((string) $result['stdout']) === 'true';
+        if ($result['exit_code'] !== 0 || trim((string) $result['stdout']) !== 'true') {
+            return false;
+        }
+
+        // Repositório vazio (ex.: criado por "git init" sem commits) NÃO serve para o updater.
+        // Evita "fatal: ambiguous argument 'HEAD'" e mantém a UI funcionando.
+        $head = $this->shellRunner->run(['git', 'rev-parse', '--verify', 'HEAD'], $cwd);
+        return $head['exit_code'] === 0;
     }
 
     private function tryInitRepository(array $config, string $remote, string $branch): bool
@@ -336,6 +343,15 @@ class GitDriver implements CodeDriverInterface
         }
 
         $env = ['GIT_TERMINAL_PROMPT' => '0'];
+
+        // Segurança: não inicializa git dentro de uma aplicação já existente.
+        $hasApp = is_file($cwd . DIRECTORY_SEPARATOR . 'artisan')
+            || is_file($cwd . DIRECTORY_SEPARATOR . 'composer.json')
+            || is_dir($cwd . DIRECTORY_SEPARATOR . 'vendor')
+            || is_dir($cwd . DIRECTORY_SEPARATOR . 'app');
+        if ($hasApp && !is_dir($cwd . DIRECTORY_SEPARATOR . '.git')) {
+            return false;
+        }
 
         $init = $this->shellRunner->run(['git', 'init'], $cwd, $env);
         if ($init['exit_code'] !== 0) {

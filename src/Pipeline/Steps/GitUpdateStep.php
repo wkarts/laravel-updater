@@ -267,14 +267,39 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
     {
         $result = $this->shellRunner?->run(['git', 'rev-parse', '--is-inside-work-tree'], $cwd, $env);
 
-        return is_array($result)
-            && (int) ($result['exit_code'] ?? 1) === 0
-            && trim((string) ($result['stdout'] ?? '')) === 'true';
+        if (!is_array($result)
+            || (int) ($result['exit_code'] ?? 1) !== 0
+            || trim((string) ($result['stdout'] ?? '')) !== 'true') {
+            return false;
+        }
+
+        // Repositório vazio (git init sem commits) não tem HEAD.
+        $head = $this->shellRunner?->run(['git', 'rev-parse', '--verify', 'HEAD'], $cwd, $env);
+        return is_array($head) && (int) ($head['exit_code'] ?? 1) === 0;
     }
 
     /** @param array<string,string> $env */
     private function bootstrapRepository(string $cwd, string $url, string $branch, array $env): void
     {
+        // Segurança: NÃO inicializa um repositório git dentro de uma aplicação já deployada
+        // (deploy por artefato sem .git). Isso cria um .git vazio, quebra rev-parse HEAD
+        // e mascara o problema real (instância não é git-aware).
+        // Só permitimos bootstrap quando o diretório está efetivamente vazio.
+        $hasApp = is_file($cwd . DIRECTORY_SEPARATOR . 'artisan')
+            || is_file($cwd . DIRECTORY_SEPARATOR . 'composer.json')
+            || is_dir($cwd . DIRECTORY_SEPARATOR . 'vendor')
+            || is_dir($cwd . DIRECTORY_SEPARATOR . 'app');
+
+        // Se já existe aplicação (diretório não vazio) e ainda assim não é um repositório válido,
+        // não tentamos "consertar" criando/ajustando .git automaticamente.
+        if ($hasApp && !$this->isGitRepository($cwd, $env)) {
+            throw new \Argws\LaravelUpdater\Exceptions\UpdaterException(
+                'Diretório não é um repositório git válido (sem .git ou repositório vazio/sem HEAD). '
+                . 'Esta instância foi deployada sem metadados do git, portanto o modo git_tag/inplace não pode operar com segurança. '
+                . 'Solução: faça deploy contendo o diretório .git (clone) OU use um modo/fonte por artefato (snapshot/zip).'
+            );
+        }
+
         $this->shellRunner?->runOrFail(['git', 'init'], $cwd, $env);
         $this->shellRunner?->run(['git', 'remote', 'remove', 'origin'], $cwd, $env);
         $this->shellRunner?->runOrFail(['git', 'remote', 'add', 'origin', $url], $cwd, $env);
