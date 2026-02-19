@@ -23,7 +23,6 @@ use Argws\LaravelUpdater\Drivers\MysqlBackupDriver;
 use Argws\LaravelUpdater\Drivers\PgsqlBackupDriver;
 use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthMiddleware;
 use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthorizeMiddleware;
-use Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Migration\IdempotentMigrationService;
 use Argws\LaravelUpdater\Migration\MigrationDriftDetector;
@@ -53,7 +52,6 @@ use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Psr\Log\LoggerInterface;
 
 class UpdaterServiceProvider extends ServiceProvider
@@ -176,14 +174,6 @@ $this->app->singleton(UpdaterKernel::class, function () {
     {
         $router->aliasMiddleware('updater.auth', UpdaterAuthMiddleware::class);
         $router->aliasMiddleware('updater.authorize', UpdaterAuthorizeMiddleware::class);
-
-        // Soft maintenance must run BEFORE Laravel's native maintenance middleware.
-        // This keeps the updater UI accessible while blocking the host app.
-        try {
-            $this->app->make(HttpKernel::class)->prependMiddleware(SoftMaintenanceMiddleware::class);
-        } catch (\Throwable $e) {
-            // noop
-        }
 
         $this->publishes([
             __DIR__ . '/../config/updater.php' => config_path('updater.php'),

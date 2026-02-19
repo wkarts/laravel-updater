@@ -14,13 +14,28 @@ class GitDriver implements CodeDriverInterface
     {
     }
 
+    private function gitEnv(array $extra = []): array
+    {
+        // Evita que o git fique aguardando input interativo (credenciais/merge editor),
+        // o que travaria a pipeline e manteria a execução em "running" indefinidamente.
+        // Em caso de necessidade de credenciais, o comando deve falhar rápido.
+        $base = [
+            'GIT_TERMINAL_PROMPT' => '0',
+            'GIT_ASKPASS' => 'echo',
+            'SSH_ASKPASS' => 'echo',
+        ];
+
+        return $extra ? array_merge($base, $extra) : $base;
+    }
+
+
     public function currentRevision(): string
     {
         if (!$this->isGitRepository()) {
             return 'N/A';
         }
 
-        return trim($this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD'], $this->cwd())['stdout']);
+        return trim($this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD'], $this->cwd(), $this->gitEnv())['stdout']);
     }
 
     public function hasUpdates(): bool
@@ -50,13 +65,13 @@ class GitDriver implements CodeDriverInterface
         $config = $this->runtimeConfig();
         $remote = (string) ($config['remote'] ?? 'origin');
         $branch = (string) ($config['branch'] ?? 'main');
-        $this->shellRunner->runOrFail(['git', 'fetch', $remote, $branch], $this->cwd());
+        $this->shellRunner->runOrFail(['git', 'fetch', $remote, $branch], $this->cwd(), $this->gitEnv());
 
-        $local = trim($this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD'], $this->cwd())['stdout']);
-        $remoteHead = trim($this->shellRunner->runOrFail(['git', 'rev-parse', "{$remote}/{$branch}"], $this->cwd())['stdout']);
+        $local = trim($this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD'], $this->cwd(), $this->gitEnv())['stdout']);
+        $remoteHead = trim($this->shellRunner->runOrFail(['git', 'rev-parse', "{$remote}/{$branch}"], $this->cwd(), $this->gitEnv())['stdout']);
 
-        $ahead = (int) trim($this->shellRunner->runOrFail(['git', 'rev-list', '--count', "{$remote}/{$branch}..HEAD"], $this->cwd())['stdout']);
-        $behind = (int) trim($this->shellRunner->runOrFail(['git', 'rev-list', '--count', "HEAD..{$remote}/{$branch}"], $this->cwd())['stdout']);
+        $ahead = (int) trim($this->shellRunner->runOrFail(['git', 'rev-list', '--count', "{$remote}/{$branch}..HEAD"], $this->cwd(), $this->gitEnv())['stdout']);
+        $behind = (int) trim($this->shellRunner->runOrFail(['git', 'rev-list', '--count', "HEAD..{$remote}/{$branch}"], $this->cwd(), $this->gitEnv())['stdout']);
 
         $latestTag = $this->resolveRemoteTagLatest();
         $currentTag = $this->currentTag();
@@ -81,9 +96,9 @@ class GitDriver implements CodeDriverInterface
 
         $config = $this->runtimeConfig();
         $remote = (string) ($config['remote'] ?? 'origin');
-        $this->shellRunner->runOrFail(['git', 'fetch', '--tags', $remote], $this->cwd());
+        $this->shellRunner->runOrFail(['git', 'fetch', '--tags', $remote], $this->cwd(), $this->gitEnv());
 
-        $output = $this->shellRunner->runOrFail(['git', 'tag', '--list', '--sort=-version:refname'], $this->cwd())['stdout'];
+        $output = $this->shellRunner->runOrFail(['git', 'tag', '--list', '--sort=-version:refname'], $this->cwd(), $this->gitEnv())['stdout'];
         $tags = array_values(array_filter(array_map('trim', explode("\n", (string) $output))));
 
         return array_slice($tags, 0, max(1, $limit));
@@ -109,7 +124,7 @@ class GitDriver implements CodeDriverInterface
             $allowlist = ['config/updater.php', '.env', 'storage/', 'bootstrap/cache/'];
         }
 
-        $result = $this->shellRunner->runOrFail(['git', 'status', '--porcelain'], $this->cwd());
+        $result = $this->shellRunner->runOrFail(['git', 'status', '--porcelain'], $this->cwd(), $this->gitEnv());
         $lines = array_filter(array_map('trim', explode("\n", (string) $result['stdout'])));
 
         foreach ($lines as $line) {
@@ -157,7 +172,7 @@ class GitDriver implements CodeDriverInterface
         }
 
         if ($updateType === 'git_tag' && !empty($config['tag'])) {
-            $result = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', $remote], $this->cwd());
+            $result = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', $remote], $this->cwd(), $this->gitEnv());
             if ($result['exit_code'] !== 0) {
                 throw new GitException($result['stderr'] ?: 'Falha ao buscar tags.');
             }
@@ -189,7 +204,7 @@ class GitDriver implements CodeDriverInterface
             throw new GitException('Diretório atual não é um repositório git válido.');
         }
 
-        $result = $this->shellRunner->run(['git', 'reset', '--hard', $revision], $this->cwd());
+        $result = $this->shellRunner->run(['git', 'reset', '--hard', $revision], $this->cwd(), $this->gitEnv());
         if ($result['exit_code'] !== 0) {
             throw new GitException($result['stderr'] ?: 'Falha no rollback de código via git.');
         }
@@ -248,7 +263,7 @@ class GitDriver implements CodeDriverInterface
 
     private function currentTag(): ?string
     {
-        $result = $this->shellRunner->run(['git', 'describe', '--tags', '--exact-match'], $this->cwd());
+        $result = $this->shellRunner->run(['git', 'describe', '--tags', '--exact-match'], $this->cwd(), $this->gitEnv());
         if ($result['exit_code'] !== 0) {
             return null;
         }
