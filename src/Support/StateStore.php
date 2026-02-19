@@ -433,48 +433,6 @@ class StateStore
         return $this->connect();
     }
 
-
-    public function get(string $key, mixed $default = null): mixed
-    {
-        return $this->getRuntimeOption($key, $default);
-    }
-
-    public function set(string $key, mixed $value): void
-    {
-        $this->setRuntimeOption($key, $value);
-    }
-
-    public function getRuntimeOption(string $key, mixed $default = null): mixed
-    {
-        $this->ensureTables();
-
-        $stmt = $this->connect()->prepare("SELECT value FROM updater_runtime_settings WHERE key = :key");
-        $stmt->execute([":key" => $key]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-
-        if (!$row) {
-            return $default;
-        }
-
-        $value = (string) ($row["value"] ?? "");
-        if ($value === "") {
-            return $default;
-        }
-
-        $decoded = json_decode($value, true);
-        return (json_last_error() === JSON_ERROR_NONE) ? $decoded : $value;
-    }
-
-    public function setRuntimeOption(string $key, mixed $value): void
-    {
-        $this->ensureTables();
-
-        $encoded = is_string($value) ? $value : json_encode($value);
-        $stmt = $this->connect()->prepare("INSERT INTO updater_runtime_settings (key, value, updated_at) VALUES (:key, :value, :updated_at)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at");
-        $stmt->execute([":key" => $key, ":value" => $encoded, ":updated_at" => date(DATE_ATOM)]);
-    }
-
     public function connect(): PDO
     {
         if ($this->pdo instanceof PDO) {
