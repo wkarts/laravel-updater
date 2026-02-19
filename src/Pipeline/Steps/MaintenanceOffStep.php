@@ -4,45 +4,36 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Pipeline\Steps;
 
+use Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware;
+use Argws\LaravelUpdater\Contracts\LockInterface;
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
 use Argws\LaravelUpdater\Support\ShellRunner;
-use Argws\LaravelUpdater\Support\StateStore;
+use Illuminate\Support\Facades\Cache;
 
-/**
- * Desativa "soft maintenance" e tenta (best-effort) executar artisan up.
- */
 class MaintenanceOffStep implements PipelineStepInterface
 {
-    public function __construct(
-        private readonly ShellRunner $shellRunner,
-        private readonly StateStore $stateStore,
-    ) {
+    public function __construct(private readonly ShellRunner $shellRunner, private readonly LockInterface $lock)
+    {
     }
 
     public function name(): string { return 'maintenance_off'; }
-
-    public function shouldRun(array $context): bool
-    {
-        return (bool) ($context['maintenance'] ?? false);
-    }
+    public function shouldRun(array $context): bool { return true; }
 
     public function handle(array &$context): void
     {
-        $this->stateStore->set('soft_maintenance', [
-            'enabled' => false,
-        ]);
+        // Desativa manutenção soft sempre (mesmo que o modo nativo não tenha sido usado)
+        Cache::forget(SoftMaintenanceMiddleware::CACHE_KEY);
 
-        try {
-            $this->shellRunner->run('php artisan up');
-        } catch (\Throwable) {
-            // ignore
-        }
-
+        // Best-effort: se o app estiver em maintenance nativo, sobe.
+        $this->shellRunner->run(['php', 'artisan', 'up']);
+        $this->lock->release();
         $context['maintenance'] = false;
     }
 
     public function rollback(array &$context): void
     {
-        // nada
+        Cache::forget(SoftMaintenanceMiddleware::CACHE_KEY);
+        $this->lock->release();
+        $this->shellRunner->run(['php', 'artisan', 'up']);
     }
 }

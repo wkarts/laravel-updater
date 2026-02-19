@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Pipeline\Steps;
 
+use Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware;
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
 use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ShellRunner;
+use Illuminate\Support\Facades\Cache;
 
 class MaintenanceOnStep implements PipelineStepInterface
 {
@@ -19,6 +21,15 @@ class MaintenanceOnStep implements PipelineStepInterface
 
     public function handle(array &$context): void
     {
+        // Manutenção "soft" (padrão): não usa artisan down.
+        // Motivo: evita travar o próprio updater e dribla inconsistências da opção --except.
+        if ((bool) config('updater.maintenance.soft_enabled', true)) {
+            Cache::forever(SoftMaintenanceMiddleware::CACHE_KEY, true);
+            $context['maintenance'] = true;
+            $context['maintenance_mode'] = 'soft';
+            return;
+        }
+
         // Prefer a safe, package-provided view by default.
         // If the host app wants to keep its own errors::503, it can set UPDATER_MAINTENANCE_VIEW=errors::503
         // or updater.maintenance.render_view accordingly.
@@ -52,24 +63,13 @@ class MaintenanceOnStep implements PipelineStepInterface
                 break;
             } catch (\Throwable $e) {
                 if ($includeExcept && $this->hasExceptOptionError($e)) {
-    // O host app/framework não suporta --except (varia por versão/stack).
-    // Estratégia corretiva:
-    // 1) Entra em manutenção SEM --except (para realmente bloquear a aplicação),
-    // 2) Em seguida, ajusta storage/framework/down para incluir as rotas do updater no array "except".
-    $includeExcept = false;
-
-    try {
-        $this->shellRunner->runOrFail($this->downCommand($view, false), env: $downEnv);
-        $entered = true;
-        break;
-    } catch (\Throwable $e2) {
-        $context['maintenance_on_error'][] = [
-            'view' => $view,
-            'error' => $e2->getMessage(),
-        ];
-        continue;
-    }
-}
+                    // O host app/framework não suporta --except (varia por versão/stack).
+                    // Se entrarmos em manutenção sem except, o updater pode ficar bloqueado e "travar tudo".
+                    // Estratégia segura: NÃO entrar em manutenção quando --except não existe.
+                    $context['maintenance_on_warning'][] = 'O comando artisan down não suporta a opção --except neste ambiente. Manutenção será ignorada para não bloquear o updater.';
+                    $context['maintenance'] = false;
+                    return;
+                }
 
                 // Try next candidate (common failure: host view expects REQUEST_URI in CLI).
                 $context['maintenance_on_error'][] = [

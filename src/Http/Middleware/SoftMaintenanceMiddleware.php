@@ -4,54 +4,47 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Http\Middleware;
 
-use Argws\LaravelUpdater\Support\StateStore;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
-/**
- * Soft maintenance mode controlled by the updater.
- *
- * Por que existe:
- * - O maintenance nativo do Laravel (artisan down) bloqueia TUDO, incluindo a UI do updater.
- * - Aqui bloqueamos o app inteiro, mas mantemos SEMPRE o prefixo do updater liberado.
- */
-final class SoftMaintenanceMiddleware
+class SoftMaintenanceMiddleware
 {
-    public function __construct(
-        private readonly StateStore $stateStore,
-    ) {
-    }
+    /**
+     * Chave única para ativar/desativar manutenção "soft".
+     *
+     * Observação:
+     * - Intencionalmente não depende de artisan down/up, porque isso tende a bloquear o próprio updater
+     *   e (em versões recentes) o "--except" é inconsistente.
+     * - A manutenção soft preserva o acesso ao prefixo do updater (UPDATER_UI_PREFIX).
+     */
+    public const CACHE_KEY = 'argws_laravel_updater_soft_maintenance';
 
     public function handle(Request $request, Closure $next): Response
     {
-        if (app()->runningInConsole()) {
-            return $next($request);
-        }
-
-        $state = $this->stateStore->get('soft_maintenance', ['enabled' => false]);
-        $enabled = (bool) ($state['enabled'] ?? false);
-
+        $enabled = (bool) Cache::get(self::CACHE_KEY, false);
         if (!$enabled) {
             return $next($request);
         }
 
         $prefix = trim((string) config('updater.ui.prefix', '_updater'), '/');
-        if ($prefix !== '' && ($request->is($prefix) || $request->is($prefix . '/*'))) {
+
+        // Sempre libera o próprio updater
+        if ($prefix !== '' && ($request->is($prefix) || $request->is($prefix.'/*'))) {
             return $next($request);
         }
 
-        $message = (string) ($state['message'] ?? 'Estamos atualizando o sistema. Volte em alguns minutos.');
-        $title = (string) ($state['title'] ?? 'Atualização em andamento');
-
-        $view = (string) ($state['view'] ?? 'laravel-updater::maintenance');
-        if (trim($view) === '') {
-            $view = 'laravel-updater::maintenance';
+        // Permite também healthchecks (opcional) para evitar falsos negativos
+        $healthAllow = (array) config('updater.maintenance.soft_allow', ['/updater/health', '/health', '/healthz']);
+        foreach ($healthAllow as $path) {
+            $path = trim((string) $path);
+            if ($path !== '' && $request->is(ltrim($path, '/'))) {
+                return $next($request);
+            }
         }
 
-        return response()->view($view, [
-            'title' => $title,
-            'message' => $message,
-        ], 503);
+        // Resposta 503 usando a view do pacote (whitelabel)
+        return response()->view('laravel-updater::maintenance', [], 503);
     }
 }

@@ -23,7 +23,6 @@ use Argws\LaravelUpdater\Drivers\MysqlBackupDriver;
 use Argws\LaravelUpdater\Drivers\PgsqlBackupDriver;
 use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthMiddleware;
 use Argws\LaravelUpdater\Http\Middleware\UpdaterAuthorizeMiddleware;
-use Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware;
 use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Migration\IdempotentMigrationService;
 use Argws\LaravelUpdater\Migration\MigrationDriftDetector;
@@ -173,11 +172,18 @@ $this->app->singleton(UpdaterKernel::class, function () {
 
     public function boot(Router $router): void
     {
+        // Manutenção "soft": bloqueia a aplicação com 503, mas mantém o updater sempre acessível.
+        // Prepend no grupo web para ser avaliado antes do resto do stack.
+        if ((bool) config('updater.maintenance.soft_enabled', true)) {
+            try {
+                $router->prependMiddlewareToGroup('web', \Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware::class);
+            } catch (\Throwable $e) {
+                // não interrompe o boot do pacote
+            }
+        }
+
         $router->aliasMiddleware('updater.auth', UpdaterAuthMiddleware::class);
         $router->aliasMiddleware('updater.authorize', UpdaterAuthorizeMiddleware::class);
-
-        // Soft maintenance (não bloqueia o updater)
-        $router->prependMiddlewareToGroup('web', SoftMaintenanceMiddleware::class);
 
         $this->publishes([
             __DIR__ . '/../config/updater.php' => config_path('updater.php'),

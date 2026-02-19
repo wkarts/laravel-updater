@@ -24,6 +24,13 @@ class TriggerDispatcher
         $forceSync = (bool) ($options['sync'] ?? false);
         $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
 
+        // Se não houver nenhum comando de update disponível, força execução inline.
+        // Isso evita o cenário onde a UI fica em "running" para sempre porque o updater tentou
+        // disparar um comando inexistente em background.
+        if ($driver !== 'sync' && !$this->isAnyUpdateCommandAvailable()) {
+            return $this->runUpdateInline($options);
+        }
+
         if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunUpdateJob($options));
 
@@ -33,7 +40,7 @@ class TriggerDispatcher
         $args = $this->buildUpdateCommandArgs($options);
 
         if ($driver === 'sync') {
-            if (!$this->isUpdateCommandAvailable()) {
+            if (!$this->isAnyUpdateCommandAvailable()) {
                 return $this->runUpdateInline($options);
             }
 
@@ -72,6 +79,39 @@ class TriggerDispatcher
         $this->spawnBackground($args);
 
         return null;
+    }
+
+    private function resolveUpdateCommandName(): string
+    {
+        // Preferencial: comando namespaced (novo)
+        if ($this->isUpdateCommandAvailable()) {
+            return 'system:update:run';
+        }
+
+        // Fallback: comando legado sem namespace
+        return 'system:update';
+    }
+
+    private function isLegacyUpdateCommandAvailable(): bool
+    {
+        $args = ['php', 'artisan', 'system:update', '--help'];
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, base_path());
+            $process->setTimeout(20);
+            $process->run();
+
+            return $process->isSuccessful();
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+
+        return (int) $exitCode === 0;
+    }
+
+    private function isAnyUpdateCommandAvailable(): bool
+    {
+        return $this->isUpdateCommandAvailable() || $this->isLegacyUpdateCommandAvailable();
     }
 
 
@@ -329,7 +369,7 @@ class TriggerDispatcher
 
     private function buildUpdateCommandArgs(array $options): array
     {
-        $args = ['php', 'artisan', 'system:update:run', '--force'];
+        $args = ['php', 'artisan', $this->resolveUpdateCommandName(), '--force'];
 
         if ((bool) ($options['dry_run'] ?? false)) {
             $args[] = '--dry-run';
