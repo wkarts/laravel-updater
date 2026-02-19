@@ -17,6 +17,10 @@ class TriggerDispatcher
 
     public function triggerUpdate(array $options = []): ?int
     {
+
+        if ($this->store->hasActiveRun()) {
+            throw new \RuntimeException("Já existe uma execução em andamento.");
+        }
         $forceSync = (bool) ($options['sync'] ?? false);
         $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
 
@@ -136,6 +140,10 @@ class TriggerDispatcher
 
     public function triggerRollback(): void
     {
+
+        if ($this->store->hasActiveRun()) {
+            throw new \RuntimeException("Já existe uma execução em andamento.");
+        }
         $driver = $this->resolveDriver();
         if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunRollbackJob());

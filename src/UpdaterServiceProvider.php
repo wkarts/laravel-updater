@@ -35,6 +35,7 @@ use Argws\LaravelUpdater\Support\CacheLock;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\FileLock;
 use Argws\LaravelUpdater\Support\FileManager;
+use Argws\LaravelUpdater\Support\GitMaintenance;
 use Argws\LaravelUpdater\Support\LoggerFactory;
 use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ManagerStore;
