@@ -127,6 +127,9 @@
             @endif
             @if(!is_array($user) || $perm->has($user, 'settings.manage'))
                 <a class="{{ request()->routeIs('updater.settings.*') ? 'active' : '' }}" href="{{ route('updater.settings.index') }}">✦ Configurações</a>
+            @if(!is_array($user) || $perm->has($user, 'settings.manage'))
+                <a class="{{ request()->route('section') === 'security' ? 'active' : '' }}" href="{{ route('updater.section', 'security') }}">🔒 Segurança</a>
+            @endif
             @endif
         </nav>
 

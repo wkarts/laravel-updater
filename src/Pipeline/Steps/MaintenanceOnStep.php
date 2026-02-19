@@ -7,15 +7,10 @@ namespace Argws\LaravelUpdater\Pipeline\Steps;
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
 use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ShellRunner;
-use Argws\LaravelUpdater\Support\StateStore;
 
 class MaintenanceOnStep implements PipelineStepInterface
 {
-    public function __construct(
-        private readonly ShellRunner $shellRunner,
-        private readonly StateStore $stateStore,
-        private readonly ?MaintenanceMode $maintenanceMode = null,
-    )
+    public function __construct(private readonly ShellRunner $shellRunner, private readonly ?MaintenanceMode $maintenanceMode = null)
     {
     }
 
@@ -24,27 +19,64 @@ class MaintenanceOnStep implements PipelineStepInterface
 
     public function handle(array &$context): void
     {
-        // IMPORTANT:
-        // We do NOT use Laravel's native `artisan down` here.
-        // Native maintenance mode blocks ALL routes (including the updater UI), and `--except` is not
-        // available/consistent across Laravel 10/11/12 stacks.
-        //
-        // Instead, we enable a "soft maintenance" mode controlled by this package:
-        // - blocks the host app
-        // - keeps the updater prefix always accessible
+        // Prefer a safe, package-provided view by default.
+        // If the host app wants to keep its own errors::503, it can set UPDATER_MAINTENANCE_VIEW=errors::503
+        // or updater.maintenance.render_view accordingly.
+        $preferred = (string) config('updater.maintenance.render_view', (string) env('UPDATER_MAINTENANCE_VIEW', 'laravel-updater::maintenance'));
 
-        $preferredView = (string) config('updater.maintenance.render_view', (string) env('UPDATER_MAINTENANCE_VIEW', 'laravel-updater::maintenance'));
-        if ($preferredView === '') {
-            $preferredView = 'laravel-updater::maintenance';
+        $candidates = [];
+        if (!empty($preferred)) { $candidates[] = $preferred; }
+
+        // Keep legacy compatibility: some installations rely on errors::503.
+        // We try it as a fallback if not already chosen.
+        if (!in_array('errors::503', $candidates, true)) {
+            $candidates[] = 'errors::503';
         }
 
-        $this->stateStore->set('soft_maintenance', [
-            'enabled' => true,
-            'started_at' => now()->toIso8601String(),
-            'title' => (string) config('updater.maintenance.title', (string) env('UPDATER_MAINTENANCE_TITLE', 'Atualização em andamento')),
-            'message' => (string) config('updater.maintenance.message', (string) env('UPDATER_MAINTENANCE_MESSAGE', 'Estamos atualizando o sistema. Volte em alguns minutos.')),
-            'view' => $preferredView,
-        ]);
+        $entered = false;
+
+        $downEnv = [
+            'REQUEST_URI' => '/',
+            'HTTP_HOST' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
+            'SERVER_NAME' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
+            'SERVER_PORT' => (string) (parse_url((string) config('app.url', 'http://localhost'), PHP_URL_PORT) ?: 80),
+            'HTTPS' => str_starts_with((string) config('app.url', 'http://localhost'), 'https://') ? 'on' : 'off',
+        ];
+
+        $includeExcept = true;
+
+        foreach ($candidates as $view) {
+            try {
+                $this->shellRunner->runOrFail($this->downCommand($view, $includeExcept), env: $downEnv);
+                $entered = true;
+                break;
+            } catch (\Throwable $e) {
+                if ($includeExcept && $this->hasExceptOptionError($e)) {
+                    // O host app/framework não suporta --except (varia por versão/stack).
+                    // Se entrarmos em manutenção sem except, o updater pode ficar bloqueado e "travar tudo".
+                    // Estratégia segura: NÃO entrar em manutenção quando --except não existe.
+                    $context['maintenance_on_warning'][] = 'O comando artisan down não suporta a opção --except neste ambiente. Manutenção será ignorada para não bloquear o updater.';
+                    $context['maintenance'] = false;
+                    return;
+                }
+
+                // Try next candidate (common failure: host view expects REQUEST_URI in CLI).
+                $context['maintenance_on_error'][] = [
+                    'view' => $view,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        if (!$entered) {
+            // Last resort: enter maintenance without custom render.
+            $this->shellRunner->runOrFail($this->downCommand(null, $includeExcept), env: $downEnv);
+        }
+
+        // Hard guarantee: keep updater routes accessible while in maintenance.
+        // Laravel 11/12 may fail to persist --except into storage/framework/down in some environments.
+        // We patch the down file defensively to ensure the updater prefix is always excluded.
+        $this->ensureUpdaterExceptInDownFile($context);
 
         $context['maintenance'] = true;
     }
