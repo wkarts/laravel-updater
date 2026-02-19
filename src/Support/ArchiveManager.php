@@ -38,8 +38,6 @@ class ArchiveManager
         // Esta exclusão é SEMPRE aplicada, independente de perfil/config.
         $exclude[] = $this->normalizePath("storage/app/updater");
         $exclude[] = $this->normalizePath("storage/framework/down");
-        // Nunca incluir o repositório git no snapshot/full.
-        $exclude[] = $this->normalizePath(".git");
 
         // Se o target estiver dentro do sourceDir, exclui também o diretório do target.
         $targetAbs = $this->normalizePath((string) (realpath(dirname($targetZip)) ?: dirname($targetZip)));

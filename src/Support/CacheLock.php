@@ -15,12 +15,7 @@ class CacheLock implements LockInterface
     {
         $this->lock = Cache::lock($key, $timeout);
 
-        // Aguarda até $timeout segundos para adquirir o lock (evita falha imediata quando há run em andamento).
-        try {
-            return $this->lock->block($timeout);
-        } catch (\Throwable $e) {
-            return false;
-        }
+        return $this->lock->get();
     }
 
     public function release(): void

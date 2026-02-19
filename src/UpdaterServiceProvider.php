@@ -8,6 +8,8 @@ use Argws\LaravelUpdater\Commands\UpdateBackupCommand;
 use Argws\LaravelUpdater\Commands\UpdateBackupUploadCommand;
 use Argws\LaravelUpdater\Commands\UpdateCheckCommand;
 use Argws\LaravelUpdater\Commands\UpdateEnvSyncCommand;
+use Argws\LaravelUpdater\Commands\UpdateGitMaintainCommand;
+use Argws\LaravelUpdater\Commands\UpdateGitSizeCommand;
 use Argws\LaravelUpdater\Commands\UpdateNotifyCommand;
 use Argws\LaravelUpdater\Commands\UpdateRollbackCommand;
 use Argws\LaravelUpdater\Commands\UpdateRunCommand;
@@ -47,6 +49,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Console\Scheduling\Schedule;
 use Psr\Log\LoggerInterface;
 
 class UpdaterServiceProvider extends ServiceProvider
@@ -126,13 +129,19 @@ class UpdaterServiceProvider extends ServiceProvider
             return new TriggerDispatcher((string) config('updater.trigger.driver', 'queue'), $this->app->make(StateStore::class));
         });
 
-        $this->app->singleton(UpdaterKernel::class, function () {
+        
+        $this->app->singleton(GitMaintenance::class, function ($app) {
+            return new GitMaintenance($app->make(ShellRunner::class), (array) config('updater'));
+        });
+
+$this->app->singleton(UpdaterKernel::class, function () {
             $services = [
                 'lock' => $this->app->make(LockInterface::class),
                 'shell' => $this->app->make(ShellRunner::class),
                 'backup' => $this->app->make(BackupDriverInterface::class),
                 'files' => $this->app->make(FileManager::class),
                 'archive' => $this->app->make(ArchiveManager::class),
+                'git_maintenance' => $this->app->make(GitMaintenance::class),
                 'code' => $this->app->make(CodeDriverInterface::class),
                 'logger' => $this->app->make(LoggerInterface::class),
                 'store' => $this->app->make(StateStore::class),
@@ -198,7 +207,40 @@ class UpdaterServiceProvider extends ServiceProvider
                 UpdateNotifyCommand::class,
                 UpdateEnvSyncCommand::class,
                 UpdaterMigrateCommand::class,
+                UpdateGitMaintainCommand::class,
+                UpdateGitSizeCommand::class,
             ]);
+// Agenda manutenção do .git automaticamente (se o projeto executar schedule:run)
+$this->app->booted(function () {
+    try {
+        $cfg = (array) config('updater.git_maintenance', []);
+        $enabled = (bool) ($cfg['enabled'] ?? true);
+        $scheduleEnabled = (bool) ($cfg['schedule_enabled'] ?? true);
+        if (!$enabled || !$scheduleEnabled) {
+            return;
+        }
+
+        /** @var \Illuminate\Console\Scheduling\Schedule $schedule */
+        $schedule = $this->app->make(Schedule::class);
+
+        $frequency = (string) ($cfg['schedule_frequency'] ?? 'daily');
+        $event = $schedule->command('updater:git:maintain --reason=schedule')
+            ->withoutOverlapping()
+            ->onOneServer();
+
+        // Frequências suportadas: daily|weekly|hourly
+        if ($frequency === 'hourly') {
+            $event->hourly();
+        } elseif ($frequency === 'weekly') {
+            $event->weekly();
+        } else {
+            $event->daily();
+        }
+    } catch (\Throwable) {
+        // Não falha boot se scheduler não estiver disponível
+    }
+});
+
         }
     }
     private function syncAssetsIfNeeded(): void

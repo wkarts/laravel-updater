@@ -13,6 +13,7 @@ use Argws\LaravelUpdater\Pipeline\Steps\CacheClearStep;
 use Argws\LaravelUpdater\Pipeline\Steps\FullBackupStep;
 use Argws\LaravelUpdater\Pipeline\Steps\ComposerInstallStep;
 use Argws\LaravelUpdater\Pipeline\Steps\GitUpdateStep;
+use Argws\LaravelUpdater\Pipeline\Steps\GitMaintenanceStep;
 use Argws\LaravelUpdater\Pipeline\Steps\HealthCheckStep;
 use Argws\LaravelUpdater\Pipeline\Steps\LockStep;
 use Argws\LaravelUpdater\Pipeline\Steps\MaintenanceOffStep;
@@ -77,7 +78,9 @@ class UpdaterKernel
         }
 
         $steps = array_merge($steps, [
+            new GitMaintenanceStep($services['git_maintenance'], 'pre_update'),
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
+            new GitMaintenanceStep($services['git_maintenance'], 'post_update'),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
             new SeedStep($services['shell'], $services['store']),

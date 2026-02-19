@@ -49,9 +49,10 @@ class SnapshotCodeStep implements PipelineStepInterface
         $excludes = config('updater.paths.exclude_snapshot', []);
         // Exclusões defensivas (evitam recursão do próprio snapshot/backups).
         // Mesmo que o perfil tente incluir storage/app/updater, isso causará arquivo crescendo indefinidamente.
+        $excludes[] = ".git";
+        $excludes[] = ".git/";
         $excludes[] = "storage/app/updater";
         $excludes[] = "storage/framework/down";
-        $excludes[] = ".git";
 
 
         // Snapshot deve ser leve e previsível: por padrão exclui storage inteiro.

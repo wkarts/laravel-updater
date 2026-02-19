@@ -39,6 +39,25 @@ return [
         // UPDATER_GIT_ALLOW_DIRTY_CHECK=false
         'allow_dirty_check' => (bool) env('UPDATER_GIT_ALLOW_DIRTY_CHECK', true),
     ],
+'git_maintenance' => [
+    // Ativa/desativa o recurso de manutenção automática do .git
+    'enabled' => (bool) env('UPDATER_GIT_MAINTENANCE_ENABLED', true),
+
+    // Agenda automática via Laravel Scheduler (se o projeto executar schedule:run)
+    'schedule_enabled' => (bool) env('UPDATER_GIT_MAINTENANCE_SCHEDULE_ENABLED', true),
+    // daily|weekly|hourly
+    'schedule_frequency' => env('UPDATER_GIT_MAINTENANCE_SCHEDULE_FREQUENCY', 'daily'),
+
+    // Thresholds (em MB)
+    'aggressive_threshold_mb' => (int) env('UPDATER_GIT_MAINTENANCE_AGGRESSIVE_THRESHOLD_MB', 512),
+    'max_size_mb' => (int) env('UPDATER_GIT_MAINTENANCE_MAX_SIZE_MB', 1024),
+
+    // Light mode: converte o repo para shallow quando exceder max_size_mb
+    'light_mode_enabled' => (bool) env('UPDATER_GIT_MAINTENANCE_LIGHT_MODE_ENABLED', true),
+    'shallow_depth' => (int) env('UPDATER_GIT_MAINTENANCE_SHALLOW_DEPTH', 50),
+    'light_mode_fetch_tags' => (bool) env('UPDATER_GIT_MAINTENANCE_LIGHT_MODE_FETCH_TAGS', true),
+],
+
 
     'composer' => [
         // Pode ser: "composer", "composer2", "/usr/bin/composer" ou "/caminho/composer.phar".
@@ -77,7 +96,7 @@ return [
 
     'paths' => [
         'exclude_snapshot' => [
-            '.env',
+            '.git',
             'bootstrap/cache',
             'node_modules',
             'public/uploads',
