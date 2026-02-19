@@ -63,18 +63,18 @@ class UpdaterKernel
         ];
 
         if ($maintenanceEarly) {
-            $steps[] = new MaintenanceOnStep($services['shell'], $services['store']);
+            $steps[] = new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null);
         }
 
         $steps = array_merge($steps, [
             new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
             new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot'), $services['archive'] ?? null),
-            new FullBackupStep($services['files'], $services['archive'], $services['store'], (bool) config('updater.backup.enabled', true)),
+            new FullBackupStep($services['files'], $services['archive'], $services['store'], (bool) config('updater.backup.create_full_archive', false)),
             new PreUpdateCommandsStep($services['shell']),
         ]);
 
         if (!$maintenanceEarly) {
-            $steps[] = new MaintenanceOnStep($services['shell'], $services['store']);
+            $steps[] = new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null);
         }
 
         $steps = array_merge($steps, [
@@ -89,7 +89,7 @@ class UpdaterKernel
             new CacheClearStep($services['shell']),
             new PostUpdateCommandsStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
-            new MaintenanceOffStep($services['shell'], $services['store']),
+            new MaintenanceOffStep($services['shell'], $services['lock']),
         ]);
 
         return new UpdatePipeline($steps, $services['logger'], $services['store']);
