@@ -58,9 +58,10 @@ class OperationsController extends Controller
         $action = (string) $request->input('action', 'apply');
         $shouldDryRunFirst = $action === 'simulate' || ($action === '' && (bool) $request->boolean('dry_run_before', true));
 
+        $profile = $this->managerStore->activeProfile();
+        $profileOptions = $this->resolveActiveBackupOptions();
+
         if ($shouldDryRunFirst) {
-            $profile = $this->managerStore->activeProfile();
-            $profileOptions = $this->resolveActiveBackupOptions();
 
             try {
                 $runId = $dispatcher->triggerUpdate([
@@ -76,11 +77,7 @@ class OperationsController extends Controller
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
                 ]);
-                return [
-                'provider' => $provider,
-                'remote_path' => (string) ($result['remote_path'] ?? ''),
-            ];
-        } catch (\Throwable $e) {
+            } catch (\Throwable $e) {
                 return back()->withErrors(['update' => 'Falha ao executar dry-run: ' . $e->getMessage()])->withInput();
             }
 
@@ -112,11 +109,11 @@ class OperationsController extends Controller
                 'profile_id' => (int) $data['profile_id'],
                 'source_id' => (int) $data['source_id'],
                 'sync' => false,
-                    'allow_http' => true,
-                    'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
-                    'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
-                    'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
-                ]);
+                'allow_http' => true,
+                'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
+                'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
+                'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
+            ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao aplicar atualização: ' . $e->getMessage()])->withInput();
         }
