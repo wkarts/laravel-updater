@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Pipeline\Steps;
 
+use Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware;
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
 use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ShellRunner;
+use Illuminate\Support\Facades\Cache;
 
 class MaintenanceOnStep implements PipelineStepInterface
 {
@@ -19,6 +21,15 @@ class MaintenanceOnStep implements PipelineStepInterface
 
     public function handle(array &$context): void
     {
+        // Manutenção "soft" (padrão): não usa artisan down.
+        // Motivo: evita travar o próprio updater e dribla inconsistências da opção --except.
+        if ((bool) config('updater.maintenance.soft_enabled', true)) {
+            Cache::forever(SoftMaintenanceMiddleware::CACHE_KEY, true);
+            $context['maintenance'] = true;
+            $context['maintenance_mode'] = 'soft';
+            return;
+        }
+
         // Prefer a safe, package-provided view by default.
         // If the host app wants to keep its own errors::503, it can set UPDATER_MAINTENANCE_VIEW=errors::503
         // or updater.maintenance.render_view accordingly.

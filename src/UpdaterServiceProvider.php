@@ -172,6 +172,16 @@ $this->app->singleton(UpdaterKernel::class, function () {
 
     public function boot(Router $router): void
     {
+        // Manutenção "soft": bloqueia a aplicação com 503, mas mantém o updater sempre acessível.
+        // Prepend no grupo web para ser avaliado antes do resto do stack.
+        if ((bool) config('updater.maintenance.soft_enabled', true)) {
+            try {
+                $router->prependMiddlewareToGroup('web', \Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware::class);
+            } catch (\Throwable $e) {
+                // não interrompe o boot do pacote
+            }
+        }
+
         $router->aliasMiddleware('updater.auth', UpdaterAuthMiddleware::class);
         $router->aliasMiddleware('updater.authorize', UpdaterAuthorizeMiddleware::class);
 

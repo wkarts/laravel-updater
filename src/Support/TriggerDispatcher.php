@@ -24,6 +24,13 @@ class TriggerDispatcher
         $forceSync = (bool) ($options['sync'] ?? false);
         $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
 
+        // Se não houver nenhum comando de update disponível, força execução inline.
+        // Isso evita o cenário onde a UI fica em "running" para sempre porque o updater tentou
+        // disparar um comando inexistente em background.
+        if ($driver !== 'sync' && !$this->isAnyUpdateCommandAvailable()) {
+            return $this->runUpdateInline($options);
+        }
+
         if ($driver === 'queue' && function_exists('dispatch')) {
             dispatch(new RunUpdateJob($options));
 
@@ -33,13 +40,13 @@ class TriggerDispatcher
         $args = $this->buildUpdateCommandArgs($options);
 
         if ($driver === 'sync') {
-            if (!$this->isUpdateCommandAvailable()) {
+            if (!$this->isAnyUpdateCommandAvailable()) {
                 return $this->runUpdateInline($options);
             }
 
             $before = (int) (($this->store->lastRun()['id'] ?? 0));
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->setTimeout(null);
                 $process->run();
 
@@ -74,6 +81,39 @@ class TriggerDispatcher
         return null;
     }
 
+    private function resolveUpdateCommandName(): string
+    {
+        // Preferencial: comando namespaced (novo)
+        if ($this->isUpdateCommandAvailable()) {
+            return 'system:update:run';
+        }
+
+        // Fallback: comando legado sem namespace
+        return 'system:update';
+    }
+
+    private function isLegacyUpdateCommandAvailable(): bool
+    {
+        $args = ['php', 'artisan', 'system:update', '--help'];
+
+        if (class_exists(Process::class)) {
+            $process = new Process($args, $this->resolveProjectBasePath());
+            $process->setTimeout(20);
+            $process->run();
+
+            return $process->isSuccessful();
+        }
+
+        exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+
+        return (int) $exitCode === 0;
+    }
+
+    private function isAnyUpdateCommandAvailable(): bool
+    {
+        return $this->isUpdateCommandAvailable() || $this->isLegacyUpdateCommandAvailable();
+    }
+
 
     public function triggerManualBackup(string $type, int $runId): array
     {
@@ -83,7 +123,7 @@ class TriggerDispatcher
 
         if ($driver === 'sync') {
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->setTimeout(null);
                 $process->run();
                 if (!$process->isSuccessful()) {
@@ -115,7 +155,7 @@ class TriggerDispatcher
 
         if ($driver === 'sync') {
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->setTimeout(null);
                 $process->run();
                 if (!$process->isSuccessful()) {
@@ -155,7 +195,7 @@ class TriggerDispatcher
 
         if ($driver === 'sync') {
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->setTimeout(null);
                 $process->run();
                 if (!$process->isSuccessful()) {
@@ -171,7 +211,7 @@ class TriggerDispatcher
         }
 
         if ($driver === 'process' && class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->disableOutput();
             $process->start();
 
@@ -180,7 +220,7 @@ class TriggerDispatcher
 
         if ($this->isWindows()) {
             if (class_exists(Process::class)) {
-                $process = new Process($args, base_path());
+                $process = new Process($args, $this->resolveProjectBasePath());
                 $process->disableOutput();
                 $process->start();
             }
@@ -197,7 +237,7 @@ class TriggerDispatcher
     {
         $args = ['php', 'artisan', 'system:update:backup', '--help'];
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->setTimeout(20);
             $process->run();
             if (!$process->isSuccessful()) {
@@ -218,7 +258,7 @@ class TriggerDispatcher
     {
         $args = ['php', 'artisan', 'system:update:backup-upload', '--help'];
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->setTimeout(20);
             $process->run();
             if (!$process->isSuccessful()) {
@@ -255,7 +295,7 @@ class TriggerDispatcher
         $args = ['php', 'artisan', 'system:update:run', '--help'];
 
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->setTimeout(20);
             $process->run();
 
@@ -292,7 +332,7 @@ class TriggerDispatcher
     {
         // Prefer Symfony Process when available.
         if (class_exists(Process::class)) {
-            $process = new Process($args, base_path());
+            $process = new Process($args, $this->resolveProjectBasePath());
             $process->disableOutput();
             $process->start();
 
@@ -329,7 +369,7 @@ class TriggerDispatcher
 
     private function buildUpdateCommandArgs(array $options): array
     {
-        $args = ['php', 'artisan', 'system:update:run', '--force'];
+        $args = ['php', 'artisan', $this->resolveUpdateCommandName(), '--force'];
 
         if ((bool) ($options['dry_run'] ?? false)) {
             $args[] = '--dry-run';
@@ -385,5 +425,42 @@ class TriggerDispatcher
         }
 
         return $args;
+    }
+
+    /**
+     * Resolve a safe project base path.
+     *
+     * Motivação:
+     * - O helper global base_path() depende de app()->basePath().
+     * - Em cenários de testes/unit do pacote, o "app()" pode ser apenas um Container
+     *   simples (sem basePath), causando erro fatal.
+     *
+     * Regra:
+     * - Se houver Application com basePath(), usa.
+     * - Caso contrário, tenta APP_BASE_PATH.
+     * - Por fim, cai para getcwd() (mais previsível em CI).
+     */
+    private function resolveProjectBasePath(): string
+    {
+        try {
+            if (function_exists('app')) {
+                $app = app();
+                if (is_object($app) && method_exists($app, 'basePath')) {
+                    $path = (string) $app->basePath();
+                    if (trim($path) !== '') {
+                        return rtrim($path, DIRECTORY_SEPARATOR);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // ignora e faz fallback
+        }
+
+        $env = (string) (getenv('APP_BASE_PATH') ?: ($_SERVER['APP_BASE_PATH'] ?? ''));
+        if (trim($env) !== '') {
+            return rtrim($env, DIRECTORY_SEPARATOR);
+        }
+
+        return (string) (getcwd() ?: '.');
     }
 }
