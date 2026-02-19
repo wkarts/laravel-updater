@@ -172,6 +172,69 @@ class ShellRunner
         }
         return $res;
     }
+
+
+    /**
+     * Normaliza um comando (array) para string segura para uso com proc_open(string).
+     *
+     * Observação: o run() já aceita array diretamente, mas o runWithTimeout()
+     * utiliza proc_open(string) para permitir controle manual do loop/timeout.
+     *
+     * @param array<int,string> $command
+     */
+    private function normalizeCommand(array $command): string
+    {
+        if ($command === []) {
+            throw new UpdaterException('Comando inválido: vazio.');
+        }
+
+        // Remove itens vazios e normaliza tipo
+        $parts = [];
+        foreach ($command as $part) {
+            $p = trim((string) $part);
+            if ($p === '') {
+                continue;
+            }
+            $parts[] = $p;
+        }
+
+        if ($parts === []) {
+            throw new UpdaterException('Comando inválido: vazio.');
+        }
+
+        // Em Linux/macOS, proc_open(string) invoca o shell.
+        // Então escapamos cada argumento para evitar quebra por espaços/caracteres especiais.
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            return implode(' ', array_map('escapeshellarg', $parts));
+        }
+
+        // Windows: mantém a compatibilidade; ainda escapamos com aspas quando necessário.
+        $escaped = [];
+        foreach ($parts as $p) {
+            if (preg_match('/\s|["]/', $p)) {
+                $p = '"' . str_replace('"', '\"', $p) . '"';
+            }
+            $escaped[] = $p;
+        }
+
+        return implode(' ', $escaped);
+    }
+
+    /**
+     * Monta o ambiente para execução de processos.
+     *
+     * @param array<string,string> $env
+     * @return array<string,string>
+     */
+    private function buildEnv(array $env = []): array
+    {
+        // Reusa a lógica que:
+        // - herda variáveis do processo (PATH etc.)
+        // - complementa chaves a partir do .env (quando necessário)
+        // - garante diretórios padrão para execuções não-interativas
+        return $this->normalizeEnv($env, base_path());
+    }
+
 private function resolveWorkingDirectory(?string $cwd, array $command): string
     {
         if (is_string($cwd) && trim($cwd) !== '') {

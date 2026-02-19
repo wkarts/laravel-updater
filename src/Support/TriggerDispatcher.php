@@ -97,7 +97,7 @@ class TriggerDispatcher
         $args = ['php', 'artisan', 'system:update', '--help'];
 
         if (class_exists(Process::class)) {
-            $process = new Process($args, $this->resolveProjectBasePath());
+            $process = new Process($args, $this->resolveProjectBasePath(), $this->probeEnv());
             $process->setTimeout(20);
             $process->run();
 
@@ -295,7 +295,7 @@ class TriggerDispatcher
         $args = ['php', 'artisan', 'system:update:run', '--help'];
 
         if (class_exists(Process::class)) {
-            $process = new Process($args, $this->resolveProjectBasePath());
+            $process = new Process($args, $this->resolveProjectBasePath(), $this->probeEnv());
             $process->setTimeout(20);
             $process->run();
 
@@ -440,7 +440,40 @@ class TriggerDispatcher
      * - Caso contrário, tenta APP_BASE_PATH.
      * - Por fim, cai para getcwd() (mais previsível em CI).
      */
-    private function resolveProjectBasePath(): string
+    
+
+    /**
+     * Ambiente seguro para "probes" (checagens rápidas) via `php artisan ... --help`.
+     * Evita poluir storage/logs/laravel.log quando o comando não existe ou o bootstrap falha.
+     *
+     * @return array<string,string>
+     */
+    private function probeEnv(): array
+    {
+        $merged = [];
+        foreach ([$_SERVER ?? [], $_ENV ?? []] as $src) {
+            if (!is_array($src)) {
+                continue;
+            }
+            foreach ($src as $k => $v) {
+                if (!is_string($k)) {
+                    continue;
+                }
+                if (is_string($v) || is_numeric($v)) {
+                    $merged[$k] = (string) $v;
+                }
+            }
+        }
+
+        // Direciona logs do Laravel para STDERR durante probes (não grava em arquivo).
+        $merged['LOG_CHANNEL'] = 'stderr';
+        $merged['APP_DEBUG'] = 'false';
+        $merged['UPDATER_INTERNAL_PROBE'] = '1';
+
+        return $merged;
+    }
+
+private function resolveProjectBasePath(): string
     {
         try {
             if (function_exists('app')) {
