@@ -168,7 +168,27 @@ class ShellRunner
     {
         $res = $this->runWithTimeout($command, $cwd, $env, $timeoutSeconds);
         if (($res['code'] ?? 1) !== 0) {
-            throw new UpdaterException($res['stderr'] ?: 'Comando falhou', $res);
+            // UpdaterException herda de RuntimeException (assinatura padrão: __construct(string $message = "", int $code = 0, ?Throwable $previous = null)).
+            // Não podemos passar array no segundo parâmetro.
+            $code = (int) ($res['code'] ?? 1);
+
+            $msg = trim((string) ($res['stderr'] ?? ''));
+            if ($msg === '') {
+                $msg = trim((string) ($res['stdout'] ?? ''));
+            }
+            if ($msg === '') {
+                $msg = 'Comando falhou';
+            }
+
+            // Inclui o comando para facilitar diagnóstico.
+            if (isset($res['cmd'])) {
+                $cmdStr = is_string($res['cmd']) ? $res['cmd'] : (is_array($res['cmd']) ? implode(' ', $res['cmd']) : (string) $res['cmd']);
+                if ($cmdStr !== '') {
+                    $msg .= ' | cmd=' . $cmdStr;
+                }
+            }
+
+            throw new UpdaterException($msg, $code);
         }
         return $res;
     }
