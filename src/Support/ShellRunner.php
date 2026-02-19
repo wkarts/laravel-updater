@@ -371,7 +371,15 @@ private function resolveWorkingDirectory(?string $cwd, array $command): string
     /** @param array<string, string> $env */
     public function runOrFail(array $command, ?string $cwd = null, array $env = []): array
     {
-        $result = $this->run($command, $cwd, $env);
+        // Evita "run eterno": alguns comandos podem ficar aguardando input (git auth)
+        // ou travar por tempo indeterminado em produção.
+        $timeout = $this->guessTimeoutSeconds($command);
+
+        if ($timeout !== null && $timeout > 0) {
+            $result = $this->runOrFailWithTimeout($command, $cwd, $env, $timeout);
+        } else {
+            $result = $this->run($command, $cwd, $env);
+        }
         if ($result['exit_code'] !== 0) {
             $cmdStr = implode(' ', array_map(static fn ($p) => (string) $p, $command));
             $msg = trim((string) ($result['stderr'] ?: $result['stdout']));
@@ -380,6 +388,34 @@ private function resolveWorkingDirectory(?string $cwd, array $command): string
         }
 
         return $result;
+    }
+
+    /**
+     * Timeout por tipo de comando, configurável por .env.
+     *
+     * UPDATER_TIMEOUT_GIT (default 300)
+     * UPDATER_TIMEOUT_COMPOSER (default 1800)
+     * UPDATER_TIMEOUT_ARTISAN (default 1800)
+     * UPDATER_TIMEOUT_DEFAULT (default 0 = sem timeout)
+     */
+    private function guessTimeoutSeconds(array $command): ?int
+    {
+        $bin = strtolower((string) ($command[0] ?? ''));
+        $default = (int) env('UPDATER_TIMEOUT_DEFAULT', 0);
+
+        if ($bin === 'git') {
+            return (int) env('UPDATER_TIMEOUT_GIT', 300);
+        }
+
+        if (str_contains($bin, 'composer')) {
+            return (int) env('UPDATER_TIMEOUT_COMPOSER', 1800);
+        }
+
+        if ($bin === 'php' && isset($command[1]) && (string) $command[1] === 'artisan') {
+            return (int) env('UPDATER_TIMEOUT_ARTISAN', 1800);
+        }
+
+        return $default > 0 ? $default : null;
     }
 
     public function binaryExists(string $binary): bool
