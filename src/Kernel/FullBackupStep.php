@@ -5,99 +5,114 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Kernel;
 
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
-use Argws\LaravelUpdater\Support\ShellRunner;
-use Argws\LaravelUpdater\Support\UpdaterPaths;
+use Argws\LaravelUpdater\Support\ArchiveManager;
+use Argws\LaravelUpdater\Support\FileManager;
+use Argws\LaravelUpdater\Support\StateStore;
+use RuntimeException;
 
 /**
- * FullBackupStep (compatibilidade)
+ * FullBackupStep (OPCIONAL)
  *
- * Regras IMPORTANTES (não remover):
- * - Esta etapa existe porque algumas versões do UpdaterKernel referenciam
- *   explicitamente Argws\LaravelUpdater\Kernel\FullBackupStep.
- * - O sistema NÃO deve gerar backups duplicados.
- *   Se um full backup já foi gerado nesta execução (context['full_backup_file']),
- *   esta etapa deve ser ignorada.
- * - Por padrão, o full backup EXCLUI vendor para não duplicar com snapshot/db.
- *   Caso precise incluir vendor, usar context['full_backup_include_vendor']=true
- *   (ou mapear isso a partir do perfil/config antes de rodar a pipeline).
+ * Regra clara:
+ * - Por padrão fica DESABILITADO para evitar backup duplicado.
+ * - Quando habilitado, cria um único arquivo (ZIP/TGZ) do projeto para facilitar download/transferência.
+ * - Habilitar via: config('updater.backup.create_full_archive') = true
  */
-class FullBackupStep implements PipelineStepInterface
+final class FullBackupStep implements PipelineStepInterface
 {
     public function __construct(
-        private readonly ShellRunner $shell,
-        private readonly UpdaterPaths $paths,
+        private readonly FileManager $files,
+        private readonly ?ArchiveManager $archive,
+        private readonly StateStore $store,
+        private readonly bool $enabled = false,
     ) {
     }
 
     public function name(): string
     {
-        return 'full_backup';
+        return 'full_backup_archive';
     }
 
+    /**
+     * @param array<string,mixed> $context
+     */
     public function shouldRun(array $context): bool
     {
-        // no_backup desativa TODOS os backups (db/snapshot/full)
-        if ((bool) ($context['no_backup'] ?? false)) {
+        if (!$this->enabled) {
             return false;
         }
 
-        // permite desativar full backup explicitamente
-        if ((bool) ($context['full_backup_enabled'] ?? true) === false) {
+        if (!empty($context['options']['dry_run'])) {
             return false;
         }
 
-        // evita duplicidade: já existe full_backup_file definido
-        if (is_string($context['full_backup_file'] ?? null) && trim((string) $context['full_backup_file']) !== '') {
+        if (!empty($context['options']['no_backup'])) {
+            return false;
+        }
+
+        if ($this->archive === null) {
             return false;
         }
 
         return true;
     }
 
-    public function handle(array &$context): void
+    /**
+     * @param array<string,mixed> $context
+     * @return array<string,mixed>
+     */
+    public function handle(array $context): array
     {
+        if ($this->archive === null) {
+            throw new RuntimeException('ArchiveManager não disponível para FullBackupStep.');
+        }
+
+        $projectRoot = base_path();
+        $backupsDir = $this->store->backupsPath();
+
         $timestamp = date('Ymd_His');
-        $fullFile = $this->paths->backupPath("full_{$timestamp}.zip");
+        $ext = $this->archive->defaultExtension();
+        $filename = sprintf('full_%s.%s', $timestamp, $ext);
+        $target = rtrim($backupsDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename;
 
-        $root = rtrim($this->paths->basePath(), '/');
-
-        // Exclui diretórios pesados/voláteis e segredos.
-        // (O objetivo é um "snapshot do código" amplo, mas sem duplicar o que já existe
-        // em outras etapas e sem explodir o storage.)
+        // Evita zipar os próprios backups/snapshots e caches.
         $exclude = [
-            '.git',
-            'node_modules',
+            'storage/app/updater',
             'storage/logs',
-            'storage/framework/cache',
-            'storage/framework/sessions',
-            'storage/framework/views',
+            'bootstrap/cache',
+            '.git',
+            '.idea',
+            '.vscode',
+            'node_modules',
         ];
 
-        $includeVendor = (bool) ($context['full_backup_include_vendor'] ?? false);
+        // Se o snapshot foi configurado para não incluir vendor, respeitamos aqui também.
+        $includeVendor = (bool) ($context['options']['snapshot_include_vendor'] ?? config('updater.snapshot.include_vendor', false));
         if (!$includeVendor) {
             $exclude[] = 'vendor';
         }
 
-        $excludeArgs = [];
-        foreach ($exclude as $path) {
-            $excludeArgs[] = "-x '{$path}/*'";
-        }
+        $this->files->ensureDirectoryExists(dirname($target));
 
-        $cmd = "cd '{$root}' && zip -r '{$fullFile}' . " . implode(' ', $excludeArgs);
-        $this->shell->run($cmd, allowFail: false);
+        $this->archive->createFromDirectory(
+            sourceDir: $projectRoot,
+            targetFile: $target,
+            exclude: $exclude,
+        );
 
-        $context['full_backup_file'] = $fullFile;
+        $context['full_backup_file'] = $target;
+        $context['files']['full_backup'] = $target;
+
+        return $context;
     }
 
-    public function shouldRollback(array $context): bool
+    /**
+     * @param array<string,mixed> $context
+     */
+    public function rollback(array $context): void
     {
-        return is_string($context['full_backup_file'] ?? null) && trim((string) $context['full_backup_file']) !== '';
-    }
-
-    public function rollback(array &$context): void
-    {
-        $file = trim((string) ($context['full_backup_file'] ?? ''));
-        if ($file !== '' && file_exists($file)) {
+        $file = (string) ($context['full_backup_file'] ?? '');
+        if ($file !== '' && is_file($file)) {
             @unlink($file);
         }
     }
