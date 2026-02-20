@@ -68,12 +68,23 @@ class UpdaterServiceProvider extends ServiceProvider
             $store = new StateStore((string) config('updater.sqlite.path'));
             $store->ensureSchema();
             return $store;
+        });
 
-        // Garante registro dos comandos também na fase de register(),
-        // para evitar cenários onde o boot() não registra (cache/ordem de providers).
-        $this->registerCommands();
-    
-    });
+        // IMPORTANTE:
+        // Os comandos abaixo PRECISAM existir para compatibilidade histórica.
+        // NUNCA remova esses comandos (namespace system:update:*), pois existem ambientes em produção
+        // e rotinas de automação que dependem deles.
+        //
+        // Comandos obrigatórios:
+        // - system:update:run
+        // - system:update:check
+        // - system:update:rollback
+        // - system:update:status
+        //
+        // O comando "system:update" (sem sufixo) pode existir, mas NÃO substitui os acima.
+        if ($this->app->runningInConsole()) {
+            $this->registerCommands();
+        }
         $this->app->singleton(AuthStore::class, fn () => new AuthStore($this->app->make(StateStore::class)));
         $this->app->singleton(ManagerStore::class, fn () => new ManagerStore($this->app->make(StateStore::class)));
         $this->app->singleton(BackupCloudUploader::class, fn () => new BackupCloudUploader());

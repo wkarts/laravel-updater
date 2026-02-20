@@ -177,11 +177,16 @@ class GitDriver implements CodeDriverInterface
             $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--prune-tags', $remote], $path, [], $timeout);
         }
 
-        // Nunca baixar todos os branches: fetch somente do branch/tag alvo
-        if ($mode === 'tag') {
-            if ($tag === '') {
-                throw new \RuntimeException('Modo tag ativo, mas UPDATER_GIT_TARGET_TAG não foi informado.');
-            }
+        // NUNCA substituir o .env atual.
+        // Mesmo em tag/branch que contenha arquivos semelhantes, a aplicação SEMPRE deve reaproveitar o .env atual.
+        $this->preserveEnvFile($path);
+
+        try {
+            // Nunca baixar todos os branches: fetch somente do branch/tag alvo
+            if ($mode === 'tag') {
+                if ($tag === '') {
+                    throw new \RuntimeException('Modo tag ativo, mas UPDATER_GIT_TARGET_TAG não foi informado.');
+                }
 
             // Busca somente a tag alvo (shallow)
             $this->shellRunner->runOrFailWithTimeout(
@@ -191,11 +196,19 @@ class GitDriver implements CodeDriverInterface
                 $timeout
             );
 
-            $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/'.$tag], $path, [], $timeout);
-        } else {
-            // Fetch shallow apenas do branch alvo
-            $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, [], $timeout);
-            $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', $branch], $path, [], $timeout);
+            // Se existirem arquivos untracked que conflitam com o conteúdo do tag, o checkout aborta.
+            // Ex.: "untracked working tree files would be overwritten by checkout".
+            $this->quarantineUntrackedConflicts('tags/'.$tag, $path, $timeout);
+
+                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/'.$tag], $path, [], $timeout);
+            } else {
+                // Fetch shallow apenas do branch alvo
+                $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, [], $timeout);
+
+                // Evita aborto por untracked conflitantes com o branch remoto
+                $this->quarantineUntrackedConflicts($remote.'/'.$branch, $path, $timeout);
+
+                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', $branch], $path, [], $timeout);
 
             if ($mode === 'ff-only' || $mode === 'ff_only') {
                 $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--ff-only', $remote.'/'.$branch], $path, [], $timeout);
@@ -209,11 +222,154 @@ class GitDriver implements CodeDriverInterface
             }
         }
 
-        if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
-            $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--aggressive', '--prune=now'], $path, [], $timeout);
+            if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
+                $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--aggressive', '--prune=now'], $path, [], $timeout);
+            }
+
+            return $this->currentRevision();
+        } finally {
+            // Restaura o .env original SEMPRE (sucesso ou falha).
+            $this->restoreEnvFile($path);
+        }
+    }
+
+    /** @var string|null */
+    private ?string $envBackupPath = null;
+
+    /**
+     * Faz backup do .env para que NUNCA seja substituído por checkout/reset.
+     */
+    private function preserveEnvFile(string $cwd): void
+    {
+        $envPath = rtrim($cwd, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.env';
+        if (!is_file($envPath)) {
+            $this->envBackupPath = null;
+            return;
         }
 
-        return $this->currentRevision();
+        $tmpDir = function_exists('storage_path')
+            ? storage_path('app/updater/tmp')
+            : rtrim($cwd, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.updater' . DIRECTORY_SEPARATOR . 'tmp';
+
+        if (!is_dir($tmpDir)) {
+            @mkdir($tmpDir, 0775, true);
+        }
+
+        $tmp = $tmpDir . DIRECTORY_SEPARATOR . 'env_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4));
+        @copy($envPath, $tmp);
+        $this->envBackupPath = is_file($tmp) ? $tmp : null;
+    }
+
+    /**
+     * Restaura o .env original (caso exista backup).
+     */
+    private function restoreEnvFile(string $cwd): void
+    {
+        if (!$this->envBackupPath || !is_file($this->envBackupPath)) {
+            return;
+        }
+        $envPath = rtrim($cwd, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.env';
+        @copy($this->envBackupPath, $envPath);
+        @unlink($this->envBackupPath);
+        $this->envBackupPath = null;
+    }
+
+    /**
+     * Move para quarentena SOMENTE arquivos/pastas untracked que conflitam com o alvo.
+     * Isso resolve o erro do git ao trocar para tag/branch em ambientes "sujos".
+     */
+    private function quarantineUntrackedConflicts(string $ref, string $cwd, int $timeout): void
+    {
+        $untracked = (string) ($this->shellRunner->runOrFailWithTimeout(['git', 'ls-files', '--others', '--exclude-standard'], $cwd, [], $timeout)['stdout'] ?? '');
+        $untracked = trim($untracked);
+        if ($untracked === '') {
+            return;
+        }
+
+        $untrackedList = array_values(array_filter(array_map('trim', preg_split('/\R/', $untracked))));
+        if (!$untrackedList) {
+            return;
+        }
+
+        $tracked = (string) ($this->shellRunner->runOrFailWithTimeout(['git', 'ls-tree', '-r', '--name-only', $ref], $cwd, [], $timeout)['stdout'] ?? '');
+        $tracked = trim($tracked);
+        if ($tracked === '') {
+            return;
+        }
+        $trackedSet = array_flip(array_values(array_filter(array_map('trim', preg_split('/\R/', $tracked)))));
+
+        $conflicts = [];
+        foreach ($untrackedList as $path) {
+            if ($path === '.env') {
+                continue;
+            }
+            if (str_starts_with($path, 'storage/') || str_starts_with($path, 'vendor/') || str_starts_with($path, 'node_modules/')) {
+                continue;
+            }
+            if (isset($trackedSet[$path])) {
+                $conflicts[] = $path;
+            }
+        }
+        if (!$conflicts) {
+            return;
+        }
+
+        $base = function_exists('storage_path')
+            ? storage_path('app/updater/untracked')
+            : rtrim($cwd, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . '.updater' . DIRECTORY_SEPARATOR . 'untracked';
+
+        $runDir = $base . DIRECTORY_SEPARATOR . 'run_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4));
+        @mkdir($runDir, 0775, true);
+
+        foreach ($conflicts as $rel) {
+            $src = rtrim($cwd, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $rel;
+            if (!file_exists($src)) {
+                continue;
+            }
+
+            $dst = $runDir . DIRECTORY_SEPARATOR . $rel;
+            $dstDir = dirname($dst);
+            if (!is_dir($dstDir)) {
+                @mkdir($dstDir, 0775, true);
+            }
+
+            if (!@rename($src, $dst)) {
+                $this->copyRecursive($src, $dst);
+                $this->removeRecursive($src);
+            }
+        }
+    }
+
+    private function copyRecursive(string $src, string $dst): void
+    {
+        if (is_dir($src) && !is_link($src)) {
+            @mkdir($dst, 0775, true);
+            $items = scandir($src) ?: [];
+            foreach ($items as $item) {
+                if ($item === '.' || $item === '..') {
+                    continue;
+                }
+                $this->copyRecursive($src . DIRECTORY_SEPARATOR . $item, $dst . DIRECTORY_SEPARATOR . $item);
+            }
+            return;
+        }
+        @copy($src, $dst);
+    }
+
+    private function removeRecursive(string $path): void
+    {
+        if (is_dir($path) && !is_link($path)) {
+            $items = scandir($path) ?: [];
+            foreach ($items as $item) {
+                if ($item === '.' || $item === '..') {
+                    continue;
+                }
+                $this->removeRecursive($path . DIRECTORY_SEPARATOR . $item);
+            }
+            @rmdir($path);
+            return;
+        }
+        @unlink($path);
     }
 
     public function rollback(string $revision): void
