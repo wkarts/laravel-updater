@@ -350,41 +350,13 @@ class GitDriver implements CodeDriverInterface
             || is_dir($cwd . DIRECTORY_SEPARATOR . 'vendor')
             || is_dir($cwd . DIRECTORY_SEPARATOR . 'app');
         if ($hasApp && !is_dir($cwd . DIRECTORY_SEPARATOR . '.git')) {
-            // Se a instância foi deployada sem .git, só permitimos auto-init quando
-		// UPDATER_GIT_AUTO_INIT_FORCE=true (ou config updater.git.auto_init_force).
-		$force = (bool) (config('updater.git.auto_init_force') ?? false);
-		if (!$force) {
-			return false;
-		}
-
+            return false;
         }
 
         $init = $this->shellRunner->run(['git', 'init'], $cwd, $env);
         if ($init['exit_code'] !== 0) {
             return false;
         }
-
-        // Se o repositório acabou de ser inicializado (sem commits), o git não possui HEAD.
-        // Nesse cenário, o checkout de tag/branch falha com "ambiguous argument 'HEAD'" e/ou
-        // "untracked working tree files would be overwritten" porque todos os arquivos são untracked.
-        //
-        // Estratégia segura do updater (pois já existe snapshot/backup antes do update):
-        // 1) cria um commit de bootstrap com o working tree atual
-        // 2) em seguida realiza fetch/checkout forçado do alvo
-        $head = $this->shellRunner->run(['git', 'rev-parse', '--verify', 'HEAD'], $cwd, $env);
-        if ($head['exit_code'] !== 0) {
-            $authorName = (string) (config('updater.git.bootstrap_author_name') ?? 'Updater');
-            $authorEmail = (string) (config('updater.git.bootstrap_author_email') ?? 'updater@localhost');
-
-            $this->shellRunner->run(['git', 'config', 'user.name', $authorName], $cwd, $env);
-            $this->shellRunner->run(['git', 'config', 'user.email', $authorEmail], $cwd, $env);
-
-            // Garante index consistente
-            $this->shellRunner->run(['git', 'add', '-A'], $cwd, $env);
-            $commit = $this->shellRunner->run(['git', 'commit', '-m', 'bootstrap working tree for updater', '--no-gpg-sign'], $cwd, $env);
-            // commit pode retornar !=0 se não houver nada para commitar; nesse caso seguimos.
-        }
-
 
         $this->shellRunner->run(['git', 'remote', 'remove', $remote], $cwd, $env);
         $setRemote = $this->shellRunner->run(['git', 'remote', 'add', $remote, $remoteUrl], $cwd, $env);
@@ -401,7 +373,7 @@ class GitDriver implements CodeDriverInterface
                 return false;
             }
 
-            $checkoutTag = $this->shellRunner->run(['git', 'checkout', '--detach', '--force', $targetTag], $cwd, $env);
+            $checkoutTag = $this->shellRunner->run(['git', 'checkout', '--force', 'tags/' . $targetTag], $cwd, $env);
             if ($checkoutTag['exit_code'] !== 0) {
                 return false;
             }

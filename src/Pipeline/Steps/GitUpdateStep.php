@@ -115,18 +115,17 @@ if (!$isDryRun && $this->shellRunner !== null) {
             // Mesmo com stash -a, alguns ambientes podem recriar assets imediatamente ou manter arquivos fora do controle do git.
             // Estratégia: detectar a assinatura do erro, mover os arquivos conflitantes para uma pasta de quarentena e tentar 1 vez.
             if ($this->shellRunner !== null && $this->shouldRetryAfterUntrackedOverwrite($e)) {
-    // Para git_tag, preferimos limpar untracked (preservando .env/storage) e tentar novamente.
-    // Isso evita mover milhares de arquivos para quarantine em instâncias bootstrapadas por artefato.
-    if ($requestedUpdateType === 'git_tag') {
-        $this->forceCleanUntrackedForCheckout($context);
-        $this->codeDriver->update($context, $requestedUpdateType, $requestedTag, $requestedBranch);
+                // Cenário comum em instâncias deployadas por artefato (sem clone): arquivos locais ficam como "untracked".
+                // Ao tentar trocar para uma tag/commit, o git aborta porque sobrescreveria esses untracked.
+                // A correção segura aqui NÃO é apagar arquivos (git clean), e sim criar um commit baseline local
+                // (respeitando .gitignore) para permitir o checkout/merge.
 
-        return;
-    }
                 $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
                 $env = ['GIT_TERMINAL_PROMPT' => '0'];
-                $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd);
-                $context['git_update_log'][] = 'Arquivos untracked conflitantes foram movidos para quarentena e o update será tentado novamente.';
+
+                $this->ensureBaselineCommit($cwd, $env);
+                $context['git_update_log'][] = 'Baseline local criado para permitir checkout/merge sem sobrescrever untracked; retry executado.';
+
                 $context['revision_after'] = $this->codeDriver->update();
             } else {
                 throw $e;
@@ -357,7 +356,56 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
         $this->shellRunner?->run(['git', 'branch', '--set-upstream-to=origin/' . $branch, $branch], $cwd, $env);
     }
 
-    private function shouldRetryAfterUntrackedOverwrite(\Throwable $e): bool
+    
+    /**
+     * Cria um commit baseline local (respeitando .gitignore) para transformar untracked em rastreados.
+     * Isso permite checkout de tag/commit sem o git abortar por sobrescrita de untracked.
+     */
+    private function ensureBaselineCommit(string $cwd, array $env): void
+    {
+        $enabled = (bool) config('updater.git.bootstrap_on_untracked', true);
+        if (!$enabled) {
+            return;
+        }
+
+        // Se já existe HEAD e não há untracked, não faz nada.
+        $hasHead = true;
+        try {
+            $this->shellRunner->runOrFail(['git', 'rev-parse', '--verify', 'HEAD'], $cwd, $env);
+        } catch (\Throwable $e) {
+            $hasHead = false;
+        }
+
+        if ($hasHead) {
+            $status = $this->shellRunner->runOrFail(['git', 'status', '--porcelain'], $cwd, $env);
+            $porcelain = (string) ($status['stdout'] ?? '');
+            if (!str_contains($porcelain, '?? ')) {
+                return;
+            }
+        }
+
+        $this->shellRunner->runOrFail(['git', 'add', '-A'], $cwd, $env);
+
+        // Commit pode retornar "nothing to commit"; nesse caso ignoramos.
+        try {
+            $this->shellRunner->runOrFail([
+                'git',
+                '-c', 'user.name=Laravel Updater',
+                '-c', 'user.email=updater@localhost',
+                'commit',
+                '-m', 'chore(updater): bootstrap baseline local',
+                '--no-gpg-sign',
+            ], $cwd, $env);
+        } catch (UpdaterException $e) {
+            $msg = $e->getMessage();
+            if (str_contains($msg, 'nothing to commit')) {
+                return;
+            }
+            throw $e;
+        }
+    }
+
+private function shouldRetryAfterUntrackedOverwrite(\Throwable $e): bool
     {
         $msg = mb_strtolower($e->getMessage());
         return str_contains($msg, 'untracked working tree files would be overwritten')

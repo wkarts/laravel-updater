@@ -175,6 +175,16 @@ class ShellRunner
 		if ((int) $code === -1 && trim((string) $stderr) === '') {
 		    $code = 0;
 		}
+
+		// Heurística extra para "git init": em alguns ambientes a mensagem de sucesso vem no STDERR e o exit pode vir -1.
+		// Tratamos como sucesso se o stderr contiver apenas mensagens conhecidas de inicialização.
+		if ((int) $code === -1 && isset($command[0], $command[1]) && $command[0] === 'git' && $command[1] === 'init') {
+		    $s = trim((string) $stderr);
+		    if ($s !== '' && !str_contains($s, 'fatal:') && (str_starts_with($s, 'Initialized empty Git repository') || str_starts_with($s, 'Reinitialized existing Git repository'))) {
+		        $code = 0;
+		        $stderr = '';
+		    }
+		}
 		return [
             'code' => (int) $code,
             'stdout' => $stdout,
