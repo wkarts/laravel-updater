@@ -10,7 +10,6 @@ use Argws\LaravelUpdater\Pipeline\UpdatePipeline;
 use Argws\LaravelUpdater\Pipeline\Steps\BackupDatabaseStep;
 use Argws\LaravelUpdater\Pipeline\Steps\BuildAssetsStep;
 use Argws\LaravelUpdater\Pipeline\Steps\CacheClearStep;
-use Argws\LaravelUpdater\Pipeline\Steps\FullBackupStep;
 use Argws\LaravelUpdater\Pipeline\Steps\ComposerInstallStep;
 use Argws\LaravelUpdater\Pipeline\Steps\GitUpdateStep;
 use Argws\LaravelUpdater\Pipeline\Steps\GitMaintenanceStep;

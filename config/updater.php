@@ -75,7 +75,7 @@ return [
         'pre_update_type' => (string) env('UPDATER_BACKUP_TYPE', 'full'),
         // Se true, cria também um arquivo "full" (DB + Snapshot) empacotado num único zip/tar.
         // Por padrão é false para evitar duplicar artefatos e aumentar tempo/tamanho de backup.
-        'create_full_archive' => (bool) env('UPDATER_BACKUP_CREATE_FULL_ARCHIVE', true),
+        'create_full_archive' => (bool) env('UPDATER_BACKUP_CREATE_FULL_ARCHIVE', false),
         'keep' => (int) env('UPDATER_BACKUP_KEEP', 10),
         'path' => env('UPDATER_BACKUP_PATH', storage_path('app/updater/backups')),
         'compress' => (bool) env('UPDATER_BACKUP_COMPRESS', true),
