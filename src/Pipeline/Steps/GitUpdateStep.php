@@ -119,7 +119,7 @@ if (!$isDryRun && $this->shellRunner !== null) {
     // Isso evita mover milhares de arquivos para quarantine em instâncias bootstrapadas por artefato.
     if ($requestedUpdateType === 'git_tag') {
         $this->forceCleanUntrackedForCheckout($context);
-        $codeDriver->update($context, $requestedUpdateType, $requestedTag, $requestedBranch);
+        $this->codeDriver->update($context, $requestedUpdateType, $requestedTag, $requestedBranch);
 
         return;
     }

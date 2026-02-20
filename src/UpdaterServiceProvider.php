@@ -68,7 +68,12 @@ class UpdaterServiceProvider extends ServiceProvider
             $store = new StateStore((string) config('updater.sqlite.path'));
             $store->ensureSchema();
             return $store;
-        });
+
+        // Garante registro dos comandos também na fase de register(),
+        // para evitar cenários onde o boot() não registra (cache/ordem de providers).
+        $this->registerCommands();
+    
+    });
         $this->app->singleton(AuthStore::class, fn () => new AuthStore($this->app->make(StateStore::class)));
         $this->app->singleton(ManagerStore::class, fn () => new ManagerStore($this->app->make(StateStore::class)));
         $this->app->singleton(BackupCloudUploader::class, fn () => new BackupCloudUploader());
@@ -368,4 +373,19 @@ $this->app->booted(function () {
         }
     }
 
+
+
+    private function registerCommands(): void
+    {
+        if (!$this->app->runningInConsole()) {
+            return;
+        }
+
+        $this->commands([
+            \Argws\LaravelUpdater\Commands\UpdateRunCommand::class,
+            \Argws\LaravelUpdater\Commands\UpdateCheckCommand::class,
+            \Argws\LaravelUpdater\Commands\UpdateRollbackCommand::class,
+            \Argws\LaravelUpdater\Commands\UpdateStatusCommand::class,
+        ]);
+    }
 }
