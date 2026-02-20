@@ -177,6 +177,15 @@ $this->app->singleton(UpdaterKernel::class, function () {
         if ((bool) config('updater.maintenance.soft_enabled', true)) {
             try {
                 $router->prependMiddlewareToGroup('web', \Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware::class);
+
+                // Muitos projetos expõem rotas fora do grupo 'web' (ex.: 'api', webhooks, healthchecks).
+                // Para manter a regra "bloqueia tudo exceto o updater" consistente, também
+                // tentamos adicionar ao grupo 'api' quando existir.
+                try {
+                    $router->prependMiddlewareToGroup('api', \Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware::class);
+                } catch (\Throwable $e2) {
+                    // ignora quando o host não define o grupo 'api'
+                }
             } catch (\Throwable $e) {
                 // não interrompe o boot do pacote
             }

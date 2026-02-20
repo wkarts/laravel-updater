@@ -119,6 +119,10 @@ class ShellRunner
         $stderr = '';
         $start = microtime(true);
 
+        // Guardamos o exitcode detectado no loop porque proc_close() pode retornar -1
+        // mesmo quando o comando foi bem-sucedido (varia por ambiente).
+        $finalExitCode = null;
+
         while (true) {
             $status = proc_get_status($process);
 
@@ -126,6 +130,7 @@ class ShellRunner
             $stderr .= stream_get_contents($pipes[2]) ?: '';
 
             if (!$status['running']) {
+                $finalExitCode = (int) ($status['exitcode'] ?? -1);
                 break;
             }
 
@@ -157,6 +162,11 @@ class ShellRunner
         fclose($pipes[2]);
 
         $code = proc_close($process);
+
+        // Se proc_close() retornar -1, tentamos usar o exitcode capturado.
+        if ((int) $code === -1 && is_int($finalExitCode) && $finalExitCode >= 0) {
+            $code = $finalExitCode;
+        }
 
         return [
             'code' => (int) $code,
@@ -193,7 +203,13 @@ class ShellRunner
 
             throw new UpdaterException($msg, $code);
         }
-        return $res;
+        // Normaliza a estrutura para ficar compatível com run()/runOrFail().
+        return [
+            'command' => (string) ($res['cmd'] ?? $this->formatCommandForLog($command)),
+            'stdout' => trim((string) ($res['stdout'] ?? '')),
+            'stderr' => trim((string) ($res['stderr'] ?? '')),
+            'exit_code' => (int) ($res['code'] ?? 0),
+        ];
     }
 
 
@@ -486,7 +502,13 @@ private function resolveWorkingDirectory(?string $cwd, array $command): string
         } else {
             $result = $this->run($command, $cwd, $env);
         }
-        if ($result['exit_code'] !== 0) {
+
+        // Compatibilidade defensiva: alguns chamadores antigos podem retornar 'code'.
+        if (!array_key_exists('exit_code', $result) && array_key_exists('code', $result)) {
+            $result['exit_code'] = (int) $result['code'];
+        }
+
+        if (((int) ($result['exit_code'] ?? 1)) !== 0) {
             $cmdStr = implode(' ', array_map(static fn ($p) => (string) $p, $command));
             $msg = trim((string) ($result['stderr'] ?: $result['stdout']));
             $suffix = $msg !== '' ? (' ' . $msg) : '';
