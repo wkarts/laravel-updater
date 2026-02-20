@@ -164,11 +164,18 @@ class ShellRunner
         $code = proc_close($process);
 
         // Se proc_close() retornar -1, tentamos usar o exitcode capturado.
-        if ((int) $code === -1 && is_int($finalExitCode) && $finalExitCode >= 0) {
-            $code = $finalExitCode;
-        }
-
-        return [
+		if ((int) $code === -1 && is_int($finalExitCode) && $finalExitCode >= 0) {
+		    $code = $finalExitCode;
+		}
+		
+		// Heurística de segurança:
+		// Em alguns ambientes, proc_close() e proc_get_status() podem retornar -1 mesmo após execução bem-sucedida.
+		// Para não "quebrar" operações inofensivas (ex.: `git init`) quando não houve stderr,
+		// tratamos -1 como sucesso SOMENTE se não há stderr.
+		if ((int) $code === -1 && trim((string) $stderr) === '') {
+		    $code = 0;
+		}
+		return [
             'code' => (int) $code,
             'stdout' => $stdout,
             'stderr' => $stderr,
@@ -194,14 +201,13 @@ class ShellRunner
 
             // Inclui o comando para facilitar diagnóstico.
             if (isset($res['cmd'])) {
-                $cmdStr = is_string($res['cmd']) ? $res['cmd'] : (is_array($res['cmd']) ? implode(' ', $res['cmd']) : (string) $res['cmd']);
-                if ($cmdStr !== '') {
-                    $msg .= ' | cmd=' . $cmdStr;
-                $msg .= ' | exit=' . $code;
-                }
-            }
-
-            throw new UpdaterException($msg, $code);
+    $cmdStr = is_string($res['cmd']) ? $res['cmd'] : (is_array($res['cmd']) ? implode(' ', $res['cmd']) : (string) $res['cmd']);
+    if ($cmdStr !== '') {
+        $msg .= ' | cmd=' . $cmdStr;
+    }
+    $msg .= ' | exit=' . $code;
+}
+throw new UpdaterException($msg, $code);
         }
         // Normaliza a estrutura para ficar compatível com run()/runOrFail().
         return [

@@ -115,6 +115,14 @@ if (!$isDryRun && $this->shellRunner !== null) {
             // Mesmo com stash -a, alguns ambientes podem recriar assets imediatamente ou manter arquivos fora do controle do git.
             // Estratégia: detectar a assinatura do erro, mover os arquivos conflitantes para uma pasta de quarentena e tentar 1 vez.
             if ($this->shellRunner !== null && $this->shouldRetryAfterUntrackedOverwrite($e)) {
+    // Para git_tag, preferimos limpar untracked (preservando .env/storage) e tentar novamente.
+    // Isso evita mover milhares de arquivos para quarantine em instâncias bootstrapadas por artefato.
+    if ($requestedUpdateType === 'git_tag') {
+        $this->forceCleanUntrackedForCheckout($context);
+        $codeDriver->update($context, $requestedUpdateType, $requestedTag, $requestedBranch);
+
+        return;
+    }
                 $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
                 $env = ['GIT_TERMINAL_PROMPT' => '0'];
                 $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd);
@@ -472,4 +480,54 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
         @rmdir($dir);
     }
 
+/**
+ * Força limpeza de arquivos/diretórios NÃO rastreados (untracked) antes de um checkout de tag.
+ *
+ * Motivo:
+ * - Em instâncias onde o repositório foi "bootstrapado" no servidor, o working tree pode estar cheio
+ *   de arquivos não rastreados pelo git local (porque o deploy anterior foi por artefato/zip).
+ * - Ao tentar `git checkout <tag>`, o git aborta com:
+ *     "untracked working tree files would be overwritten by checkout"
+ * - Como o Updater já gera snapshot + full backup antes do update, é seguro mover/limpar esses untracked,
+ *   preservando itens críticos (.env, storage, caches) para não quebrar a instância.
+ *
+ * Regras:
+ * - NUNCA remove `.env` e `storage/`.
+ * - Permite customização por env `UPDATER_GIT_CLEAN_EXCLUDES` (separado por ;;).
+ *
+ * @param array<string,mixed> $context
+ */
+private function forceCleanUntrackedForCheckout(array $context): void
+{
+    $cwd = (string) ($context['cwd'] ?? base_path());
+
+    // Exclusões padrão (preserva ambiente e dados).
+    $excludes = [
+        '.env',
+        '.env.*',
+        'storage/',
+        'bootstrap/cache/',
+        'public/storage/',
+    ];
+
+    $extra = trim((string) env('UPDATER_GIT_CLEAN_EXCLUDES', ''));
+    if ($extra !== '') {
+        foreach (preg_split('/;;|\r\n|\r|\n/', $extra) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+            $excludes[] = $line;
+        }
+    }
+
+    $args = ['git', 'clean', '-fd'];
+    foreach (array_values(array_unique($excludes)) as $ex) {
+        $args[] = '-e';
+        $args[] = $ex;
+    }
+
+    // Não explode se falhar: se não for repo, o fluxo superior já aborta de forma clara.
+    $this->shellRunner->runOrFailWithTimeout($args, $cwd, [], 600);
+}
 }
