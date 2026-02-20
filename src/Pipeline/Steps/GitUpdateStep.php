@@ -68,7 +68,7 @@ class GitUpdateStep implements PipelineStepInterface
                         throw new \RuntimeException('Repositório git ausente em ' . $cwd . '. Habilite UPDATER_GIT_AUTO_INIT=true ou execute com --force para bootstrap automático.');
                     }
 
-                    $this->bootstrapRepository($cwd, $url, $branch, $env);
+                    $this->bootstrapRepository($cwd, $url, $branch, $requestedUpdateType, $requestedTag, $env);
                     $context['git_bootstrapped'] = true;
                 } else {
                     $this->shellRunner->runOrFail(['git', 'remote', 'set-url', 'origin', $url], $cwd, $env);
@@ -279,7 +279,7 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
     }
 
     /** @param array<string,string> $env */
-    private function bootstrapRepository(string $cwd, string $url, string $branch, array $env): void
+    private function bootstrapRepository(string $cwd, string $url, string $branch, string $requestedUpdateType, string $requestedTag, array $env): void
     {
         // Segurança: NÃO inicializa um repositório git dentro de uma aplicação já deployada
         // (deploy por artefato sem .git). Isso cria um .git vazio, quebra rev-parse HEAD
@@ -290,20 +290,55 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
             || is_dir($cwd . DIRECTORY_SEPARATOR . 'vendor')
             || is_dir($cwd . DIRECTORY_SEPARATOR . 'app');
 
-        // Se já existe aplicação (diretório não vazio) e ainda assim não é um repositório válido,
-        // não tentamos "consertar" criando/ajustando .git automaticamente.
+        // Bootstrap controlado:
+        // - Para update_type=git_tag (checkout por tag), permitimos inicializar .git dentro da aplicação
+        //   DESDE QUE exista uma source (remote_url) e uma tag alvo. Isso habilita operações "full replace" via git,
+        //   sem depender de histórico local anterior.
+        // - Para modos que dependem de merge/pull (git_ff_only/git_merge), exigir .git pré-existente com HEAD válido.
         if ($hasApp && !$this->isGitRepository($cwd, $env)) {
-            throw new \Argws\LaravelUpdater\Exceptions\UpdaterException(
-                'Diretório não é um repositório git válido (sem .git ou repositório vazio/sem HEAD). '
-                . 'Esta instância foi deployada sem metadados do git, portanto o modo git_tag/inplace não pode operar com segurança. '
-                . 'Solução: faça deploy contendo o diretório .git (clone) OU use um modo/fonte por artefato (snapshot/zip).'
-            );
+            if ($requestedUpdateType !== 'git_tag') {
+                throw new \Argws\LaravelUpdater\Exceptions\UpdaterException(
+                    'Diretório não é um repositório git válido (sem .git ou repositório vazio/sem HEAD). '
+                    . 'Para operar com segurança em modos de merge/pull, esta instância precisa ter sido deployada contendo o diretório .git (clone). '
+                    . 'Alternativa: utilize update_type=git_tag (checkout por tag) ou um modo/fonte por artefato (snapshot/zip).'
+                );
+            }
+
+            if (trim($url) === '' || trim($requestedTag) === '') {
+                throw new \Argws\LaravelUpdater\Exceptions\UpdaterException(
+                    'Bootstrap git solicitado para update_type=git_tag, mas faltam parâmetros obrigatórios: repo_url e/ou target_tag.'
+                );
+            }
         }
 
         $this->shellRunner?->runOrFail(['git', 'init'], $cwd, $env);
         $this->shellRunner?->run(['git', 'remote', 'remove', 'origin'], $cwd, $env);
         $this->shellRunner?->runOrFail(['git', 'remote', 'add', 'origin', $url], $cwd, $env);
 
+        $this->shellRunner?->runOrFail(['git', 'fetch', '--tags', 'origin'], $cwd, $env);
+
+        if ($requestedUpdateType === 'git_tag') {
+            // Checkout direto por tag (modo "full replace" via git):
+            // - garante HEAD válido
+            // - não depende do histórico anterior do servidor (deploy por artefato)
+            // - mantém remote configurado para futuras consultas de tags
+            $tag = $requestedTag;
+
+            // Normaliza: aceita "vX.Y" ou "X.Y" conforme o remoto.
+            // Primeiro tenta buscar a ref da tag explicitamente.
+            $fetchTag = $this->shellRunner?->run(['git', 'fetch', '--depth=1', 'origin', 'tag', $tag], $cwd, $env);
+            if (!is_array($fetchTag) || (int) ($fetchTag['exit_code'] ?? 1) !== 0) {
+                // fallback: busca completa (tags já foram buscadas acima)
+                $this->shellRunner?->runOrFail(['git', 'fetch', 'origin', '--tags'], $cwd, $env);
+            }
+
+            // Checkout em detached HEAD (mais previsível para tags)
+            $this->shellRunner?->runOrFail(['git', 'checkout', '--detach', $tag], $cwd, $env);
+            $this->shellRunner?->runOrFail(['git', 'reset', '--hard'], $cwd, $env);
+            return;
+        }
+
+        // Modos baseados em branch (ff_only/merge): exige histórico e upstream
         $fetch = $this->shellRunner?->run(['git', 'fetch', '--depth=1', 'origin', $branch], $cwd, $env);
         if (!is_array($fetch) || (int) ($fetch['exit_code'] ?? 1) !== 0) {
             $this->shellRunner?->runOrFail(['git', 'fetch', 'origin', $branch], $cwd, $env);

@@ -82,8 +82,25 @@ class GitMaintenance
         $before = $this->sizeBytes();
 
         // Camada 1: higiene rápida sempre
-        $this->runOk(['git', 'remote', 'prune', 'origin'], $actions, 'remote_prune');
-        $this->runOk(['git', 'fetch', '--prune', '--prune-tags', 'origin'], $actions, 'fetch_prune');
+        // Se não existe remote origin (ex.: bootstrap parcial/ambiente sem remoto), ignora ações que dependem do remoto.
+        $hasOrigin = $this->hasRemoteOrigin();
+        if ($hasOrigin) {
+            $this->runOk(['git', 'remote', 'prune', 'origin'], $actions, 'remote_prune');
+            $this->runOk(['git', 'fetch', '--prune', '--prune-tags', 'origin'], $actions, 'fetch_prune');
+        } else {
+            $actions[] = [
+                'action' => 'remote_prune',
+                'cmd' => 'git remote prune origin',
+                'ok' => false,
+                'stderr' => "skip: remote 'origin' não configurado",
+            ];
+            $actions[] = [
+                'action' => 'fetch_prune',
+                'cmd' => 'git fetch --prune --prune-tags origin',
+                'ok' => false,
+                'stderr' => "skip: remote 'origin' não configurado",
+            ];
+        }
         $this->runOk(['git', 'gc', '--prune=now'], $actions, 'gc_prune_now');
 
         $afterQuick = $this->sizeBytes();
@@ -153,7 +170,15 @@ class GitMaintenance
         return $this->cwd() . DIRECTORY_SEPARATOR . '.git';
     }
 
-    private function isGitRepository(): bool
+    
+    private function hasRemoteOrigin(): bool
+    {
+        // git remote get-url origin (exit 0) indica origin configurado
+        $res = $this->shell->run(['git', 'remote', 'get-url', 'origin'], $this->cwd());
+        return is_array($res) && (int) ($res['exit_code'] ?? 1) === 0 && trim((string) ($res['stdout'] ?? '')) !== '';
+    }
+
+private function isGitRepository(): bool
     {
         return is_dir($this->gitDir());
     }
