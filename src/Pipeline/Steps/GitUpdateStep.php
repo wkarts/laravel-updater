@@ -503,7 +503,6 @@ class GitUpdateStep implements PipelineStepInterface
             }
             $this->shellRunner?->run(['git', 'branch', '-D', $branch], $cwd, $env);
         }
-    }
 
     private function forceCleanUntrackedForCheckout(array &$context, string $cwd, array $env): void
     {
