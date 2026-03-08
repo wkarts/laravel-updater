@@ -488,24 +488,43 @@ class GitUpdateStep implements PipelineStepInterface
 
     private function pruneLocalBranches(string $cwd, array $env): void
     {
-        $current = $this->shellRunner?->run(['git', 'branch', '--show-current'], $cwd, $env);
+        if ($this->shellRunner === null) {
+            return;
+        }
+
+        $current = $this->shellRunner->run(['git', 'branch', '--show-current'], $cwd, $env);
         $currentBranch = trim((string) ($current['stdout'] ?? ''));
         if ($currentBranch === '') {
             return;
         }
 
-        $branches = $this->shellRunner?->run(['git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], $cwd, $env);
-        $list = array_values(array_filter(array_map('trim', preg_split('/\R/', (string) ($branches['stdout'] ?? '')) ?: [])));
+        $branches = $this->shellRunner->run(['git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], $cwd, $env);
+        $stdout = (string) ($branches['stdout'] ?? '');
+        $parts = preg_split('/\r\n|\r|\n/', $stdout);
+        if (!is_array($parts)) {
+            return;
+        }
+        $list = [];
+        foreach ($parts as $part) {
+            $value = trim((string) $part);
+            if ($value !== '') {
+                $list[] = $value;
+            }
+        }
 
         foreach ($list as $branch) {
             if ($branch === '' || $branch === $currentBranch) {
                 continue;
             }
-            $this->shellRunner?->run(['git', 'branch', '-D', $branch], $cwd, $env);
+            $this->shellRunner->run(['git', 'branch', '-D', $branch], $cwd, $env);
         }
 
     private function forceCleanUntrackedForCheckout(array &$context, string $cwd, array $env): void
     {
+        if ($this->shellRunner === null) {
+            return;
+        }
+
         $excludes = [
             '.env',
             '.env.*',
@@ -532,7 +551,7 @@ class GitUpdateStep implements PipelineStepInterface
             $args[] = $exclude;
         }
 
-        $this->shellRunner?->runOrFailWithTimeout($args, $cwd, $env, 600);
+        $this->shellRunner->runOrFailWithTimeout($args, $cwd, $env, 600);
         $context['git_update_log'][] = 'git clean controlado executado (preservando .env/storage/uploads).';
     }
 }
