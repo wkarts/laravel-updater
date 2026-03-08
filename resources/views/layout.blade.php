@@ -23,6 +23,7 @@
     $updateChannel = (string) config('updater.channel', 'stable');
     $sourceType = 'n/d';
     $sourceOrigin = 'n/d';
+    $instanceStatus = (string) (($status['last_run']['status'] ?? '') !== '' ? $status['last_run']['status'] : 'idle');
 
     try {
         $backupUpload = $managerStore->backupUploadSettings();
@@ -132,9 +133,7 @@
             @endif
             @if(!is_array($user) || $perm->has($user, 'settings.manage'))
                 <a class="{{ request()->routeIs('updater.settings.*') ? 'active' : '' }}" href="{{ route('updater.settings.index') }}">✦ Configurações</a>
-            @if(!is_array($user) || $perm->has($user, 'settings.manage'))
                 <a class="{{ request()->route('section') === 'security' ? 'active' : '' }}" href="{{ route('updater.section', 'security') }}">🔒 Segurança</a>
-            @endif
             @endif
         </nav>
 
@@ -155,6 +154,7 @@
                     <li><span>Updater</span><strong>{{ $updaterInstalled }}</strong></li>
                     <li><span>Tag local</span><strong>{{ $localTag !== '' ? $localTag : 'n/d' }}</strong></li>
                     <li><span>Versão disponível</span><strong>{{ $remoteTag }}</strong></li>
+                    <li><span>Instância</span><strong>{{ $instanceStatus }}</strong></li>
                     <li><span>Origem ativa</span><strong title="{{ $sourceOrigin }}">{{ \Illuminate\Support\Str::limit($sourceOrigin, 28) }}</strong></li>
                     <li><span>Usuário</span><strong>{{ is_array($user) ? (($user['name'] ?? '') !== '' ? $user['name'] : ($user['email'] ?? '-')) : '-' }}</strong></li>
                     <li><span>Agora</span><strong id="updater-sidebar-now">{{ now()->format('d/m/Y H:i:s') }}</strong></li>

@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
@@ -69,7 +70,7 @@ class UpdaterUiController extends Controller
         return response()->json($kernel->status());
     }
 
-    public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher, ShellRunner $shellRunner, UpdaterKernel $kernel): RedirectResponse
+    public function triggerUpdate(Request $request, TriggerDispatcher $dispatcher, UpdaterKernel $kernel): RedirectResponse
     {
         if ($kernel->stateStore()->hasActiveRun()) {
             return back()->withErrors(["update" => "Já existe uma execução em andamento. Aguarde finalizar para disparar outra."]);
@@ -199,11 +200,15 @@ class UpdaterUiController extends Controller
             $installed = \Composer\InstalledVersions::getPrettyVersion('argws/laravel-updater') ?: 'n/d';
         }
 
+        $cacheKey = sprintf('updater:version_bar:%s:%s', (string) ($activeSource['id'] ?? 'none'), (string) ($status['channel'] ?? config('updater.channel', 'stable')));
         try {
-            $check = $kernel->check(true);
-            $available = (string) ($check['latest_tag'] ?? $check['remote'] ?? 'n/d');
+            $available = (string) Cache::remember($cacheKey, now()->addMinutes(3), static function () use ($kernel): string {
+                $check = $kernel->check(true);
+
+                return (string) ($check['latest_tag'] ?? $check['remote'] ?? 'n/d');
+            });
         } catch (\Throwable $e) {
-            // Não bloqueia o dashboard se o remoto estiver indisponível.
+            $available = (string) Cache::get($cacheKey, 'n/d');
         }
 
         return [
@@ -226,13 +231,8 @@ class UpdaterUiController extends Controller
 
     public function apiTrigger(Request $request, TriggerDispatcher $dispatcher): JsonResponse
     {
-        $token = (string) $request->bearerToken();
-        if ($token === '') {
-            $token = (string) $request->header('X-Updater-Token', '');
-        }
-
-        if ($token === '' || !$this->managerStore->validateApiToken($token)) {
-            return response()->json(['ok' => false, 'message' => 'Token inválido'], 401);
+        if (($authError = $this->validateApiRequest($request)) !== null) {
+            return $authError;
         }
 
         $options = [
@@ -251,6 +251,59 @@ class UpdaterUiController extends Controller
             'run_id' => null,
             'options' => $options,
         ]);
+    }
+
+    public function apiStatus(Request $request, UpdaterKernel $kernel): JsonResponse
+    {
+        if (($authError = $this->validateApiRequest($request)) !== null) {
+            return $authError;
+        }
+
+        return response()->json([
+            'ok' => true,
+            'data' => $kernel->status(),
+            'requested_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    public function apiCheck(Request $request, UpdaterKernel $kernel): JsonResponse
+    {
+        if (($authError = $this->validateApiRequest($request)) !== null) {
+            return $authError;
+        }
+
+        return response()->json([
+            'ok' => true,
+            'data' => $kernel->check((bool) $request->boolean('allow_dirty', true)),
+            'requested_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    public function apiRuns(Request $request, UpdaterKernel $kernel): JsonResponse
+    {
+        if (($authError = $this->validateApiRequest($request)) !== null) {
+            return $authError;
+        }
+
+        $limit = min(max((int) $request->query('limit', 20), 1), 100);
+        $runs = $kernel->stateStore()->recentRuns($limit);
+
+        return response()->json([
+            'ok' => true,
+            'count' => count($runs),
+            'data' => $runs,
+            'requested_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    private function validateApiRequest(Request $request): ?JsonResponse
+    {
+        $token = (string) ($request->bearerToken() ?: $request->header('X-Updater-Token', ''));
+        if ($token === '' || !$this->managerStore->validateApiToken($token)) {
+            return response()->json(['ok' => false, 'message' => 'Token inválido'], 401);
+        }
+
+        return null;
     }
 
     public function assetCss()
