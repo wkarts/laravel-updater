@@ -119,7 +119,7 @@ if (!$isDryRun && $this->shellRunner !== null) {
     // Isso evita mover milhares de arquivos para quarantine em instâncias bootstrapadas por artefato.
     if ($requestedUpdateType === 'git_tag') {
         $this->forceCleanUntrackedForCheckout($context);
-        $this->codeDriver->update($context, $requestedUpdateType, $requestedTag, $requestedBranch);
+        $context['revision_after'] = $this->codeDriver->update();
 
         return;
     }
@@ -161,6 +161,7 @@ if (!$isDryRun && $this->shellRunner !== null) {
 
         $context['git_update_log'][] = sprintf('revision_before: %s', (string) ($context['revision_before'] ?? 'N/A'));
         $context['git_update_log'][] = sprintf('revision_after: %s', (string) ($context['revision_after'] ?? 'N/A'));
+        $this->pruneRepositoryAfterUpdate();
         $this->restoreDotEnv($context);
     }
 
@@ -370,8 +371,10 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
         // Extrai lista de arquivos do erro do git (linhas com tab prefix).
         $files = [];
         foreach (preg_split('/\r?\n/', $message) as $line) {
-            $line = trim($line);
-            if ($line === '' || $line[0] !== '\t') {
+            if ($line === '') {
+                continue;
+            }
+            if (!str_starts_with($line, "\t")) {
                 continue;
             }
             $p = trim(ltrim($line, "\t"));
@@ -480,6 +483,22 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
         @rmdir($dir);
     }
 
+
+
+private function pruneRepositoryAfterUpdate(): void
+{
+    if ($this->shellRunner === null) {
+        return;
+    }
+
+    $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+    $env = ['GIT_TERMINAL_PROMPT' => '0'];
+
+    $this->shellRunner->run(['git', 'remote', 'prune', 'origin'], $cwd, $env);
+    $this->shellRunner->run(['git', 'reflog', 'expire', '--expire=now', '--all'], $cwd, $env);
+    $this->shellRunner->run(['git', 'gc', '--prune=now'], $cwd, $env);
+}
+
 /**
  * Força limpeza de arquivos/diretórios NÃO rastreados (untracked) antes de um checkout de tag.
  *
@@ -499,7 +518,7 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
  */
 private function forceCleanUntrackedForCheckout(array $context): void
 {
-    $cwd = (string) ($context['cwd'] ?? base_path());
+    $cwd = (string) ($context['cwd'] ?? config('updater.git.path', base_path()));
 
     // Exclusões padrão (preserva ambiente e dados).
     $excludes = [
