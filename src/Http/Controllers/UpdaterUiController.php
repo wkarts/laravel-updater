@@ -244,12 +244,12 @@ class UpdaterUiController extends Controller
             'allow_http' => true,
         ];
 
-        $dispatcher->triggerUpdate($options);
+        $runId = $dispatcher->triggerUpdate($options);
 
         return response()->json([
             'ok' => true,
             'queued' => true,
-            'run_id' => null,
+            'run_id' => $runId,
             'options' => $options,
             'requested_at' => now()->toIso8601String(),
         ]);

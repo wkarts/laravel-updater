@@ -473,7 +473,8 @@ class GitUpdateStep implements PipelineStepInterface
 
         $this->shellRunner->run(['git', 'remote', 'prune', 'origin'], $cwd, $env);
 
-        if ($updateType !== 'git_tag') {
+        $pruneLocalBranches = (bool) config('updater.git.prune_local_branches', false);
+        if ($pruneLocalBranches && $updateType !== 'git_tag') {
             $this->pruneLocalBranches($cwd, $env);
         }
 
