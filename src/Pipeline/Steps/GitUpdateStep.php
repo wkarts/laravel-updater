@@ -191,10 +191,14 @@ class GitUpdateStep implements PipelineStepInterface
         $allowDirty = (bool) ($context['options']['allow_dirty'] ?? false);
         $autoStash = (bool) ($context['options']['auto_stash'] ?? config('updater.git.auto_stash', true));
 
-        $status = $this->shellRunner?->run(['git', 'status', '--porcelain'], $cwd, $env);
+        if ($this->shellRunner === null) {
+            return;
+        }
+
+        $status = $this->shellRunner->run(['git', 'status', '--porcelain'], $cwd, $env);
         $porcelain = trim((string) ($status['stdout'] ?? ''));
 
-        $untracked = $this->shellRunner?->run(['git', 'ls-files', '--others', '--exclude-standard'], $cwd, $env);
+        $untracked = $this->shellRunner->run(['git', 'ls-files', '--others', '--exclude-standard'], $cwd, $env);
         $hasUntracked = trim((string) ($untracked['stdout'] ?? '')) !== '';
 
         if ($porcelain === '' && !$hasUntracked) {
@@ -282,7 +286,11 @@ class GitUpdateStep implements PipelineStepInterface
             return null;
         }
 
-        $result = $this->shellRunner?->run(['git', 'describe', '--tags', '--exact-match'], $cwd, $env);
+        if ($this->shellRunner === null) {
+            return null;
+        }
+
+        $result = $this->shellRunner->run(['git', 'describe', '--tags', '--exact-match'], $cwd, $env);
         if (!is_array($result) || (int) ($result['exit_code'] ?? 1) !== 0) {
             return null;
         }
@@ -293,7 +301,11 @@ class GitUpdateStep implements PipelineStepInterface
 
     private function isGitRepository(string $cwd, array $env): bool
     {
-        $result = $this->shellRunner?->run(['git', 'rev-parse', '--is-inside-work-tree'], $cwd, $env);
+        if ($this->shellRunner === null) {
+            return false;
+        }
+
+        $result = $this->shellRunner->run(['git', 'rev-parse', '--is-inside-work-tree'], $cwd, $env);
 
         if (!is_array($result)
             || (int) ($result['exit_code'] ?? 1) !== 0
@@ -301,12 +313,16 @@ class GitUpdateStep implements PipelineStepInterface
             return false;
         }
 
-        $head = $this->shellRunner?->run(['git', 'rev-parse', '--verify', 'HEAD'], $cwd, $env);
+        $head = $this->shellRunner->run(['git', 'rev-parse', '--verify', 'HEAD'], $cwd, $env);
         return is_array($head) && (int) ($head['exit_code'] ?? 1) === 0;
     }
 
     private function bootstrapRepository(array &$context, string $cwd, string $url, string $branch, string $requestedUpdateType, string $requestedTag, array $env): void
     {
+        if ($this->shellRunner === null) {
+            throw new \RuntimeException('ShellRunner não disponível para bootstrap do repositório.');
+        }
+
         $hasApp = is_file($cwd . DIRECTORY_SEPARATOR . 'artisan')
             || is_file($cwd . DIRECTORY_SEPARATOR . 'composer.json')
             || is_dir($cwd . DIRECTORY_SEPARATOR . 'vendor')
@@ -322,15 +338,15 @@ class GitUpdateStep implements PipelineStepInterface
             }
         }
 
-        $this->shellRunner?->runOrFail(['git', 'init'], $cwd, $env);
-        $this->shellRunner?->run(['git', 'remote', 'remove', 'origin'], $cwd, $env);
-        $this->shellRunner?->runOrFail(['git', 'remote', 'add', 'origin', $url], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'init'], $cwd, $env);
+        $this->shellRunner->run(['git', 'remote', 'remove', 'origin'], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'remote', 'add', 'origin', $url], $cwd, $env);
 
         if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
             $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
-            $this->shellRunner?->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'tag', $requestedTag], $cwd, $env);
+            $this->shellRunner->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'tag', $requestedTag], $cwd, $env);
             try {
-                $this->shellRunner?->runOrFail(['git', 'checkout', '--detach', $requestedTag], $cwd, $env);
+                $this->shellRunner->runOrFail(['git', 'checkout', '--detach', $requestedTag], $cwd, $env);
             } catch (\Throwable $e) {
                 if (!$this->shouldRetryAfterUntrackedOverwrite($e)) {
                     throw $e;
@@ -339,16 +355,16 @@ class GitUpdateStep implements PipelineStepInterface
                 $context['git_update_log'][] = 'Bootstrap/tag detectou conflito de untracked no checkout; aplicando limpeza controlada e retry.';
                 $this->forceCleanUntrackedForCheckout($context, $cwd, $env);
                 $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd, $env);
-                $this->shellRunner?->runOrFail(['git', 'checkout', '--detach', '-f', $requestedTag], $cwd, $env);
+                $this->shellRunner->runOrFail(['git', 'checkout', '--detach', '-f', $requestedTag], $cwd, $env);
             }
-            $this->shellRunner?->runOrFail(['git', 'reset', '--hard'], $cwd, $env);
+            $this->shellRunner->runOrFail(['git', 'reset', '--hard'], $cwd, $env);
             return;
         }
 
-        $this->shellRunner?->runOrFail(['git', 'fetch', '--prune', '--depth=1', 'origin', $branch], $cwd, $env);
-        $this->shellRunner?->runOrFail(['git', 'checkout', '-B', $branch], $cwd, $env);
-        $this->shellRunner?->runOrFail(['git', 'reset', '--hard', 'FETCH_HEAD'], $cwd, $env);
-        $this->shellRunner?->run(['git', 'branch', '--set-upstream-to=origin/' . $branch, $branch], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'fetch', '--prune', '--depth=1', 'origin', $branch], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'checkout', '-B', $branch], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'reset', '--hard', 'FETCH_HEAD'], $cwd, $env);
+        $this->shellRunner->run(['git', 'branch', '--set-upstream-to=origin/' . $branch, $branch], $cwd, $env);
     }
 
     private function shouldRetryAfterUntrackedOverwrite(\Throwable $e): bool
@@ -410,7 +426,9 @@ class GitUpdateStep implements PipelineStepInterface
             $context['git_quarantined_files'][] = $rel;
         }
 
-        $this->shellRunner?->run(['git', 'clean', '-fd', '-e', '.env', '-e', '.env.*', '-e', 'storage/', '-e', 'public/storage/'], $cwd, $env);
+        if ($this->shellRunner !== null) {
+            $this->shellRunner->run(['git', 'clean', '-fd', '-e', '.env', '-e', '.env.*', '-e', 'storage/', '-e', 'public/storage/'], $cwd, $env);
+        }
     }
 
     private function isProtectedPath(string $path): bool
