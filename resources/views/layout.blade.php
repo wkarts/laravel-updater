@@ -20,6 +20,10 @@
     $localTag = '';
     $remoteTag = 'n/d';
     $updaterInstalled = 'n/d';
+    $updateChannel = (string) config('updater.channel', 'stable');
+    $sourceType = 'n/d';
+    $sourceOrigin = 'n/d';
+    $instanceStatus = (string) (($status['last_run']['status'] ?? '') !== '' ? $status['last_run']['status'] : 'idle');
 
     try {
         $backupUpload = $managerStore->backupUploadSettings();
@@ -43,6 +47,8 @@
         $activeSource = $managerStore->activeSource();
         $activeProfileName = (string) ($activeProfile['name'] ?? 'n/d');
         $activeSourceName = (string) ($activeSource['name'] ?? 'n/d');
+        $sourceType = (string) ($activeSource['type'] ?? 'n/d');
+        $sourceOrigin = (string) ($activeSource['repo_url'] ?? 'n/d');
 
         if (class_exists('Composer\InstalledVersions')) {
             if (\Composer\InstalledVersions::isInstalled('argws/laravel-updater')) {
@@ -55,7 +61,7 @@
 
         // Evita bloqueio/timeout de renderização da sidebar por consulta remota.
         // Exibe apenas um indicativo rápido baseado na fonte ativa.
-        $remoteTag = trim((string) ($activeSource['branch'] ?? ''));
+        $remoteTag = trim((string) ($versionBar['updater']['latest'] ?? ($activeSource['branch'] ?? '')));
         if ($remoteTag === '') {
             $remoteTag = 'n/d';
         }
@@ -127,9 +133,7 @@
             @endif
             @if(!is_array($user) || $perm->has($user, 'settings.manage'))
                 <a class="{{ request()->routeIs('updater.settings.*') ? 'active' : '' }}" href="{{ route('updater.settings.index') }}">✦ Configurações</a>
-            @if(!is_array($user) || $perm->has($user, 'settings.manage'))
                 <a class="{{ request()->route('section') === 'security' ? 'active' : '' }}" href="{{ route('updater.section', 'security') }}">🔒 Segurança</a>
-            @endif
             @endif
         </nav>
 
@@ -144,10 +148,14 @@
                     <li><span>Conexão</span><strong>{{ $cloudStatusText }}</strong></li>
                     <li><span>Upload auto</span><strong>{{ $autoUpload ? 'ativo' : 'inativo' }}</strong></li>
                     <li><span>Fonte</span><strong>{{ $activeSourceName }}</strong></li>
+                    <li><span>Canal</span><strong>{{ $updateChannel }}</strong></li>
+                    <li><span>Tipo de origem</span><strong>{{ $sourceType }}</strong></li>
                     <li><span>Perfil</span><strong>{{ $activeProfileName }}</strong></li>
                     <li><span>Updater</span><strong>{{ $updaterInstalled }}</strong></li>
                     <li><span>Tag local</span><strong>{{ $localTag !== '' ? $localTag : 'n/d' }}</strong></li>
-                    <li><span>Ref remota</span><strong>{{ $remoteTag }}</strong></li>
+                    <li><span>Versão disponível</span><strong>{{ $remoteTag }}</strong></li>
+                    <li><span>Instância</span><strong>{{ $instanceStatus }}</strong></li>
+                    <li><span>Origem ativa</span><strong title="{{ $sourceOrigin }}">{{ \Illuminate\Support\Str::limit($sourceOrigin, 28) }}</strong></li>
                     <li><span>Usuário</span><strong>{{ is_array($user) ? (($user['name'] ?? '') !== '' ? $user['name'] : ($user['email'] ?? '-')) : '-' }}</strong></li>
                     <li><span>Agora</span><strong id="updater-sidebar-now">{{ now()->format('d/m/Y H:i:s') }}</strong></li>
                 </ul>
