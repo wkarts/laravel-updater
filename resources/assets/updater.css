@@ -135,6 +135,7 @@ body {
 .sidebar-meta-card li span {
     color: var(--muted);
     line-height: 1.2;
+    min-width: 0;
 }
 
 .sidebar-meta-card li strong {
@@ -145,7 +146,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    max-width: 58%;
+    max-width: 60%;
 }
 
 .sidebar-meta-card li strong[title] {

@@ -150,7 +150,7 @@ class GitUpdateStep implements PipelineStepInterface
                     throw new \RuntimeException('Repositório git ausente em ' . $cwd . '. Habilite UPDATER_GIT_AUTO_INIT=true ou execute com --force para bootstrap automático.');
                 }
 
-                $this->bootstrapRepository($cwd, $url, $branch, $requestedUpdateType, $requestedTag, $env);
+                $this->bootstrapRepository($context, $cwd, $url, $branch, $requestedUpdateType, $requestedTag, $env);
                 $context['git_bootstrapped'] = true;
             } else {
                 $this->shellRunner->runOrFail(['git', 'remote', 'set-url', 'origin', $url], $cwd, $env);
@@ -305,7 +305,7 @@ class GitUpdateStep implements PipelineStepInterface
         return is_array($head) && (int) ($head['exit_code'] ?? 1) === 0;
     }
 
-    private function bootstrapRepository(string $cwd, string $url, string $branch, string $requestedUpdateType, string $requestedTag, array $env): void
+    private function bootstrapRepository(array &$context, string $cwd, string $url, string $branch, string $requestedUpdateType, string $requestedTag, array $env): void
     {
         $hasApp = is_file($cwd . DIRECTORY_SEPARATOR . 'artisan')
             || is_file($cwd . DIRECTORY_SEPARATOR . 'composer.json')
@@ -329,7 +329,18 @@ class GitUpdateStep implements PipelineStepInterface
         if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
             $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
             $this->shellRunner?->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'tag', $requestedTag], $cwd, $env);
-            $this->shellRunner?->runOrFail(['git', 'checkout', '--detach', $requestedTag], $cwd, $env);
+            try {
+                $this->shellRunner?->runOrFail(['git', 'checkout', '--detach', $requestedTag], $cwd, $env);
+            } catch (\Throwable $e) {
+                if (!$this->shouldRetryAfterUntrackedOverwrite($e)) {
+                    throw $e;
+                }
+
+                $context['git_update_log'][] = 'Bootstrap/tag detectou conflito de untracked no checkout; aplicando limpeza controlada e retry.';
+                $this->forceCleanUntrackedForCheckout($context, $cwd, $env);
+                $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd, $env);
+                $this->shellRunner?->runOrFail(['git', 'checkout', '--detach', '-f', $requestedTag], $cwd, $env);
+            }
             $this->shellRunner?->runOrFail(['git', 'reset', '--hard'], $cwd, $env);
             return;
         }
@@ -462,6 +473,10 @@ class GitUpdateStep implements PipelineStepInterface
 
         $this->shellRunner->run(['git', 'remote', 'prune', 'origin'], $cwd, $env);
 
+        if ($updateType !== 'git_tag') {
+            $this->pruneLocalBranches($cwd, $env);
+        }
+
         if ($updateType === 'git_tag') {
             $this->shellRunner->run(['git', 'for-each-ref', '--format=%(refname)', 'refs/remotes/origin'], $cwd, $env);
         }
@@ -469,6 +484,24 @@ class GitUpdateStep implements PipelineStepInterface
         $this->shellRunner->run(['git', 'reflog', 'expire', '--expire=now', '--all'], $cwd, $env);
         $this->shellRunner->run(['git', 'gc', '--prune=now'], $cwd, $env);
     }
+
+    private function pruneLocalBranches(string $cwd, array $env): void
+    {
+        $current = $this->shellRunner?->run(['git', 'branch', '--show-current'], $cwd, $env);
+        $currentBranch = trim((string) ($current['stdout'] ?? ''));
+        if ($currentBranch === '') {
+            return;
+        }
+
+        $branches = $this->shellRunner?->run(['git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], $cwd, $env);
+        $list = array_values(array_filter(array_map('trim', preg_split('/\R/', (string) ($branches['stdout'] ?? '')) ?: [])));
+
+        foreach ($list as $branch) {
+            if ($branch === '' || $branch === $currentBranch) {
+                continue;
+            }
+            $this->shellRunner?->run(['git', 'branch', '-D', $branch], $cwd, $env);
+        }
 
     private function forceCleanUntrackedForCheckout(array &$context, string $cwd, array $env): void
     {

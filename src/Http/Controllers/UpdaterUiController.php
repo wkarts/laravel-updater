@@ -247,9 +247,11 @@ class UpdaterUiController extends Controller
         $dispatcher->triggerUpdate($options);
 
         return response()->json([
+            'ok' => true,
             'queued' => true,
             'run_id' => null,
             'options' => $options,
+            'requested_at' => now()->toIso8601String(),
         ]);
     }
 
