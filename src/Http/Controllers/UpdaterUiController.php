@@ -79,15 +79,6 @@ class UpdaterUiController extends Controller
         $preUpdateCommands = $this->parseCommands((string) ($activeProfile['pre_update_commands'] ?? ''));
         $postUpdateCommands = $this->parseCommands((string) ($activeProfile['post_update_commands'] ?? ''));
 
-
-        if ((bool) config('updater.backup.full_before_update', false)) {
-            try {
-                $shellRunner->runOrFail(['php', 'artisan', 'system:update:backup', '--type=full']);
-            } catch (\Throwable $e) {
-                return back()->withErrors(['backup' => 'Falha ao executar backup FULL obrigatório: ' . $e->getMessage()]);
-            }
-        }
-
         $dispatcher->triggerUpdate([
             'seed' => (bool) ($activeProfile['seed'] ?? false),
             'seeders' => $request->filled('seed') ? [$request->string('seed')->toString()] : [],
@@ -200,17 +191,35 @@ class UpdaterUiController extends Controller
      */
     public function resolveVersionBarData(UpdaterKernel $kernel, array $status = []): array
     {
+        $activeSource = $this->managerStore->activeSource();
+        $available = 'n/d';
+        $installed = 'n/d';
+
+        if (class_exists('Composer\\InstalledVersions') && \Composer\InstalledVersions::isInstalled('argws/laravel-updater')) {
+            $installed = \Composer\InstalledVersions::getPrettyVersion('argws/laravel-updater') ?: 'n/d';
+        }
+
+        try {
+            $check = $kernel->check(true);
+            $available = (string) ($check['latest_tag'] ?? $check['remote'] ?? 'n/d');
+        } catch (\Throwable $e) {
+            // Não bloqueia o dashboard se o remoto estiver indisponível.
+        }
+
         return [
-            'enabled' => false,
+            'enabled' => true,
             'position' => 'top',
             'updater' => [
-                'installed' => 'n/d',
-                'latest' => 'n/d',
+                'installed' => $installed,
+                'latest' => $available,
             ],
             'application' => [
                 'framework_version' => app()->version(),
                 'git_revision' => (string) ($status['revision'] ?? 'n/d'),
-                'git_tag' => '',
+                'git_tag' => (string) ($status['last_run']['revision_after'] ?? ''),
+                'channel' => (string) ($status['channel'] ?? config('updater.channel', 'stable')),
+                'source_name' => (string) ($activeSource['name'] ?? 'n/d'),
+                'source_type' => (string) ($activeSource['type'] ?? 'n/d'),
             ],
         ];
     }
