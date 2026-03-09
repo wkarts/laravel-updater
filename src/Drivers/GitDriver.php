@@ -163,19 +163,19 @@ class GitDriver implements CodeDriverInterface
 
     public function update(): string
     {
-        $path = $this->path;
-        $remote = $this->remote;
-        $branch = $this->branch;
+        $config = $this->runtimeConfig();
+        $path = $this->cwd();
+        $remote = (string) ($config['remote'] ?? 'origin');
+        $branch = (string) ($config['branch'] ?? 'main');
+        $updateType = strtolower((string) ($config['update_type'] ?? config('updater.git.update_type', 'git_ff_only')));
         $mode = strtolower((string) config('updater.git.default_update_mode', env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge')));
-        $tag = (string) config('updater.git.target_tag', env('UPDATER_GIT_TARGET_TAG', ''));
+        $tag = trim((string) ($config['tag'] ?? config('updater.git.tag', env('UPDATER_GIT_TARGET_TAG', ''))));
 
         $timeout = (int) env('UPDATER_STEP_TIMEOUT_GIT', 600);
         $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
 
-        // Mantém repo saudável e evita crescimento do .git
-        if ((bool) env('UPDATER_GIT_AUTO_PRUNE', true)) {
-            $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--prune-tags', $remote], $path, [], $timeout);
-        }
+        $shouldPrune = (bool) env('UPDATER_GIT_AUTO_PRUNE', true);
+        $selfPackageBackup = $this->backupSelfPackageSnapshot();
 
         // NUNCA substituir o .env atual.
         // Mesmo em tag/branch que contenha arquivos semelhantes, a aplicação SEMPRE deve reaproveitar o .env atual.
@@ -183,53 +183,72 @@ class GitDriver implements CodeDriverInterface
 
         try {
             // Nunca baixar todos os branches: fetch somente do branch/tag alvo
-            if ($mode === 'tag') {
+            if ($updateType === 'git_tag' || $mode === 'tag') {
                 if ($tag === '') {
                     throw new \RuntimeException('Modo tag ativo, mas UPDATER_GIT_TARGET_TAG não foi informado.');
                 }
 
-            // Busca somente a tag alvo (shallow)
-            $this->shellRunner->runOrFailWithTimeout(
-                ['git', 'fetch', '--prune', '--depth='.$depth, $remote, 'refs/tags/'.$tag.':refs/tags/'.$tag],
-                $path,
-                [],
-                $timeout
-            );
+                $tagFetchArgs = ['git', 'fetch', '--depth=' . $depth];
+                if ($shouldPrune) {
+                    $tagFetchArgs[] = '--prune';
+                }
+                $tagFetchArgs[] = $remote;
+                $tagFetchArgs[] = 'refs/tags/' . $tag . ':refs/tags/' . $tag;
 
-            // Se existirem arquivos untracked que conflitam com o conteúdo do tag, o checkout aborta.
-            // Ex.: "untracked working tree files would be overwritten by checkout".
-            $this->quarantineUntrackedConflicts('tags/'.$tag, $path, $timeout);
+                // Busca somente a tag alvo (shallow), evitando fetch amplo de refs.
+                $this->shellRunner->runOrFailWithTimeout($tagFetchArgs, $path, $this->gitEnv(), $timeout);
 
-                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/'.$tag], $path, [], $timeout);
+                // Se existirem arquivos untracked que conflitam com o conteúdo do tag, o checkout aborta.
+                // Ex.: "untracked working tree files would be overwritten by checkout".
+                $this->quarantineUntrackedConflicts('tags/' . $tag, $path, $timeout);
+
+                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/' . $tag], $path, $this->gitEnv(), $timeout);
+                $this->restoreSelfPackageIfMissing($selfPackageBackup);
             } else {
-                // Fetch shallow apenas do branch alvo
-                $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, [], $timeout);
+                // Fetch shallow apenas do branch alvo, sem trazer tags desnecessárias.
+                $branchFetchArgs = ['git', 'fetch', '--no-tags', '--depth=' . $depth];
+                if ($shouldPrune) {
+                    $branchFetchArgs[] = '--prune';
+                }
+                $branchFetchArgs[] = $remote;
+                $branchFetchArgs[] = $branch;
+                $this->shellRunner->runOrFailWithTimeout($branchFetchArgs, $path, $this->gitEnv(), $timeout);
 
                 // Evita aborto por untracked conflitantes com o branch remoto
-                $this->quarantineUntrackedConflicts($remote.'/'.$branch, $path, $timeout);
+                $this->quarantineUntrackedConflicts($remote . '/' . $branch, $path, $timeout);
 
-                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', $branch], $path, [], $timeout);
+                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', $branch], $path, $this->gitEnv(), $timeout);
+                $this->restoreSelfPackageIfMissing($selfPackageBackup);
 
-            if ($mode === 'ff-only' || $mode === 'ff_only') {
-                $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--ff-only', $remote.'/'.$branch], $path, [], $timeout);
-            } elseif ($mode === 'merge') {
-                $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--no-edit', $remote.'/'.$branch], $path, [], $timeout);
-            } elseif ($mode === 'full' || $mode === 'pull') {
-                // Full: força o branch local igual ao remoto
-                $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $remote.'/'.$branch], $path, [], $timeout);
-            } else {
-                throw new \RuntimeException('UPDATER_GIT_DEFAULT_UPDATE_MODE inválido: '.$mode);
+                if ($mode === 'ff-only' || $mode === 'ff_only') {
+                    $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--ff-only', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
+                } elseif ($mode === 'merge') {
+                    $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--no-edit', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
+                } elseif ($mode === 'full' || $mode === 'pull') {
+                    // Full: força o branch local igual ao remoto
+                    $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
+                } else {
+                    throw new \RuntimeException('UPDATER_GIT_DEFAULT_UPDATE_MODE inválido: ' . $mode);
+                }
             }
-        }
 
             if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
-                $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--aggressive', '--prune=now'], $path, [], $timeout);
+                // Evita operações agressivas longas durante update (pode parecer loop infinito em produção).
+                $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--prune=now'], $path, $this->gitEnv(), $timeout);
             }
 
             return $this->currentRevision();
+        } catch (\Throwable $e) {
+            // Garante que o próprio updater continue carregável para registrar falha corretamente.
+            $this->restoreSelfPackageIfMissing($selfPackageBackup);
+            throw $e;
         } finally {
             // Restaura o .env original SEMPRE (sucesso ou falha).
             $this->restoreEnvFile($path);
+            $this->cleanupSelfPackageSnapshot($selfPackageBackup);
         }
     }
 
@@ -372,22 +391,77 @@ class GitDriver implements CodeDriverInterface
         @unlink($path);
     }
 
+    private function backupSelfPackageSnapshot(): ?array
+    {
+        $packageRoot = dirname(__DIR__, 2);
+        if (!is_dir($packageRoot)) {
+            return null;
+        }
+
+        $tmpDir = rtrim(sys_get_temp_dir(), '/\\') . '/updater-self-' . uniqid('', true);
+        @mkdir($tmpDir, 0775, true);
+        $snapshotRoot = $tmpDir . '/laravel-updater';
+        $this->copyRecursive($packageRoot, $snapshotRoot);
+
+        if (!is_dir($snapshotRoot)) {
+            return null;
+        }
+
+        return [
+            'target' => $packageRoot,
+            'snapshot' => $snapshotRoot,
+            'tmp' => $tmpDir,
+        ];
+    }
+
+    private function restoreSelfPackageIfMissing(?array $snapshot): void
+    {
+        if (!is_array($snapshot)) {
+            return;
+        }
+
+        $target = (string) ($snapshot['target'] ?? '');
+        $source = (string) ($snapshot['snapshot'] ?? '');
+        if ($target === '' || $source === '' || !is_dir($source)) {
+            return;
+        }
+
+        if (is_dir($target)) {
+            return;
+        }
+
+        @mkdir(dirname($target), 0775, true);
+        $this->copyRecursive($source, $target);
+    }
+
+    private function cleanupSelfPackageSnapshot(?array $snapshot): void
+    {
+        if (!is_array($snapshot)) {
+            return;
+        }
+
+        $tmp = (string) ($snapshot['tmp'] ?? '');
+        if ($tmp !== '') {
+            $this->removeRecursive($tmp);
+        }
+    }
+
     public function rollback(string $revision): void
     {
         $timeout = (int) env('UPDATER_STEP_TIMEOUT_GIT', 600);
         $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
 
         $config = $this->runtimeConfig();
-        $path = (string) ($config['path'] ?? $this->path);
-        $remote = (string) ($config['remote'] ?? $this->remote);
-        $branch = (string) ($config['branch'] ?? $this->branch);
+        $path = $this->cwd();
+        $remote = (string) ($config['remote'] ?? 'origin');
+        $branch = (string) ($config['branch'] ?? 'main');
 
         // Atualiza apenas o branch alvo (shallow) e volta pro revision (hard)
-        $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, $this->gitEnv(), $timeout);
+        $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--no-tags', '--prune', '--depth=' . $depth, $remote, $branch], $path, $this->gitEnv(), $timeout);
         $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $revision], $path, $this->gitEnv(), $timeout);
 
         if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
-            $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--aggressive', '--prune=now'], $path, $this->gitEnv(), $timeout);
+            $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--prune=now'], $path, $this->gitEnv(), $timeout);
         }
     }
 

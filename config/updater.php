@@ -38,6 +38,9 @@ return [
         // porque é uma operação somente leitura. Se quiser bloquear também no check:
         // UPDATER_GIT_ALLOW_DIRTY_CHECK=false
         'allow_dirty_check' => (bool) env('UPDATER_GIT_ALLOW_DIRTY_CHECK', true),
+		// Se true, remove branches locais não ativas no pós-update (modo branch).
+		// Default false para comportamento conservador.
+		'prune_local_branches' => (bool) env('UPDATER_GIT_PRUNE_LOCAL_BRANCHES', false),
 		// Otimizações para update por tag (evita baixar histórico completo e explodir o tamanho do .git)
 		'shallow_tag_fetch' => (bool) env('UPDATER_GIT_SHALLOW_TAG_FETCH', true),
 		'tag_fetch_depth' => (int) env('UPDATER_GIT_TAG_FETCH_DEPTH', 1),
