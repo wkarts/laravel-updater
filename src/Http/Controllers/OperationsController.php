@@ -75,6 +75,7 @@ class OperationsController extends Controller
                     'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
+                    'backup_type' => 'full',
                 ]);
             } catch (\Throwable $e) {
                 return back()->withErrors(['update' => 'Falha ao executar dry-run: ' . $e->getMessage()])->withInput();
@@ -112,6 +113,7 @@ class OperationsController extends Controller
                     'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
+                    'backup_type' => 'full',
                 ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao aplicar atualização: ' . $e->getMessage()])->withInput();
@@ -164,6 +166,7 @@ class OperationsController extends Controller
                     'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
+                    'backup_type' => 'full',
                 ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao executar atualização aprovada: ' . $e->getMessage()]);
@@ -530,9 +533,9 @@ class OperationsController extends Controller
 
     private function requiresFullBackupBeforeUpdate(): bool
     {
-        // Evita backup duplicado: a pipeline já executa backup/snapshot pré-update.
-        // Só roda backup extra quando explicitamente habilitado para cenários legados.
-        return (bool) config('updater.backup.full_before_update', false);
+        // O fluxo automático já executa FULL backup dentro da própria pipeline.
+        // Manter false aqui evita duplicidade (run extra de backup antes do update).
+        return false;
     }
 
     private function mapUpdateType(string $mode): string

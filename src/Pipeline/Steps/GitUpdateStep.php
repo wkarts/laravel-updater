@@ -43,6 +43,11 @@ class GitUpdateStep implements PipelineStepInterface
             $context['git_update_log'][] = sprintf('tag solicitada: %s', $requestedTag);
         }
 
+        config(['updater.git.update_type' => $requestedUpdateType]);
+        if ($requestedTag !== '') {
+            config(['updater.git.tag' => $requestedTag]);
+        }
+
         $this->prepareSourceContext($context, $requestedUpdateType, $requestedTag, $cwd, $env, $isDryRun);
 
         if (!$isDryRun && $this->shellRunner !== null) {
@@ -535,6 +540,16 @@ class GitUpdateStep implements PipelineStepInterface
 
             $this->shellRunner->run(['git', 'branch', '-D', $branch], $cwd, $env);
         }
+
+        $excludes = array_values(array_unique($excludes));
+        $args = ['git', 'clean', '-fd'];
+        foreach ($excludes as $exclude) {
+            $args[] = '-e';
+            $args[] = $exclude;
+        }
+
+        $this->shellRunner->runOrFailWithTimeout($args, $cwd, $env, 600);
+        $context['git_update_log'][] = 'git clean controlado executado (preservando .env/storage/uploads).';
     }
 
     private function forceCleanUntrackedForCheckout(array &$context, string $cwd, array $env): void
