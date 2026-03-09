@@ -163,11 +163,13 @@ class GitDriver implements CodeDriverInterface
 
     public function update(): string
     {
-        $path = $this->path;
-        $remote = $this->remote;
-        $branch = $this->branch;
+        $config = $this->runtimeConfig();
+        $path = $this->cwd();
+        $remote = (string) ($config['remote'] ?? 'origin');
+        $branch = (string) ($config['branch'] ?? 'main');
+        $updateType = strtolower((string) ($config['update_type'] ?? config('updater.git.update_type', 'git_ff_only')));
         $mode = strtolower((string) config('updater.git.default_update_mode', env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge')));
-        $tag = (string) config('updater.git.target_tag', env('UPDATER_GIT_TARGET_TAG', ''));
+        $tag = trim((string) ($config['tag'] ?? config('updater.git.tag', env('UPDATER_GIT_TARGET_TAG', ''))));
 
         $timeout = (int) env('UPDATER_STEP_TIMEOUT_GIT', 600);
         $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
@@ -183,7 +185,7 @@ class GitDriver implements CodeDriverInterface
 
         try {
             // Nunca baixar todos os branches: fetch somente do branch/tag alvo
-            if ($mode === 'tag') {
+            if ($updateType === 'git_tag' || $mode === 'tag') {
                 if ($tag === '') {
                     throw new \RuntimeException('Modo tag ativo, mas UPDATER_GIT_TARGET_TAG não foi informado.');
                 }
@@ -378,9 +380,9 @@ class GitDriver implements CodeDriverInterface
         $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
 
         $config = $this->runtimeConfig();
-        $path = (string) ($config['path'] ?? $this->path);
-        $remote = (string) ($config['remote'] ?? $this->remote);
-        $branch = (string) ($config['branch'] ?? $this->branch);
+        $path = $this->cwd();
+        $remote = (string) ($config['remote'] ?? 'origin');
+        $branch = (string) ($config['branch'] ?? 'main');
 
         // Atualiza apenas o branch alvo (shallow) e volta pro revision (hard)
         $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, $this->gitEnv(), $timeout);
