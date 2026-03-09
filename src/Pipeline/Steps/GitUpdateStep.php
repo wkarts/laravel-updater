@@ -535,6 +535,7 @@ class GitUpdateStep implements PipelineStepInterface
 
             $this->shellRunner->run(['git', 'branch', '-D', $branch], $cwd, $env);
         }
+    }
 
     private function forceCleanUntrackedForCheckout(array &$context, string $cwd, array $env): void
     {
@@ -551,25 +552,8 @@ class GitUpdateStep implements PipelineStepInterface
             'bootstrap/cache/',
         ];
 
-        $extra = trim((string) env('UPDATER_GIT_CLEAN_EXCLUDES', ''));
-        if ($extra !== '') {
-            $extraLines = preg_split('/;;|\r\n|\r|\n/', $extra);
-            if (!is_array($extraLines)) {
-                $extraLines = [];
-            }
-
-            foreach ($extraLines as $line) {
-                $line = trim((string) $line);
-                if ($line === '') {
-                    continue;
-                }
-
-                if (substr($line, 0, 1) === '#') {
-                    continue;
-                }
-
-                $excludes[] = $line;
-            }
+        foreach ($this->parseExtraCleanExcludes((string) env('UPDATER_GIT_CLEAN_EXCLUDES', '')) as $exclude) {
+            $excludes[] = $exclude;
         }
 
         $excludes = array_values(array_unique($excludes));
@@ -582,4 +566,31 @@ class GitUpdateStep implements PipelineStepInterface
         $this->shellRunner->runOrFailWithTimeout($args, $cwd, $env, 600);
         $context['git_update_log'][] = 'git clean controlado executado (preservando .env/storage/uploads).';
     }
+
+
+    private function parseExtraCleanExcludes(string $raw): array
+    {
+        $extra = trim($raw);
+        if ($extra === '') {
+            return [];
+        }
+
+        $extraLines = preg_split('/;;|\r\n|\r|\n/', $extra);
+        if (!is_array($extraLines)) {
+            return [];
+        }
+
+        $output = [];
+        foreach ($extraLines as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || substr($line, 0, 1) === '#') {
+                continue;
+            }
+
+            $output[] = $line;
+        }
+
+        return $output;
+    }
+
 }
