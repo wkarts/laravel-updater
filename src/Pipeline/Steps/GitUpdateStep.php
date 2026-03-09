@@ -18,78 +18,41 @@ class GitUpdateStep implements PipelineStepInterface
     ) {
     }
 
-    public function name(): string { return 'git_update'; }
-    public function shouldRun(array $context): bool { return true; }
+    public function name(): string
+    {
+        return 'git_update';
+    }
+
+    public function shouldRun(array $context): bool
+    {
+        return true;
+    }
 
     public function handle(array &$context): void
     {
-        $activeSource = $this->managerStore?->activeSource();
         $isDryRun = (bool) ($context['options']['dry_run'] ?? false);
-        $requestedUpdateType = trim((string) ($context['options']['update_type'] ?? ''));
-        if ($requestedUpdateType === '') {
-            $requestedUpdateType = (string) config('updater.git.update_type', 'git_ff_only');
-        }
+        $requestedUpdateType = trim((string) ($context['options']['update_type'] ?? config('updater.git.update_type', 'git_ff_only')));
         $requestedTag = trim((string) ($context['options']['target_tag'] ?? config('updater.git.tag', '')));
+
+        $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+        $env = ['GIT_TERMINAL_PROMPT' => '0'];
+
+        $context['cwd'] = $cwd;
         $context['git_update_log'][] = sprintf('tipo solicitado: %s', $requestedUpdateType);
         if ($requestedTag !== '') {
             $context['git_update_log'][] = sprintf('tag solicitada: %s', $requestedTag);
         }
 
-        if (is_array($activeSource) && $this->shellRunner !== null) {
-            $sourceType = (string) ($activeSource['type'] ?? 'git_ff_only');
-            $url = (string) ($activeSource['repo_url'] ?? '');
-            $branch = (string) ($activeSource['branch'] ?? config('updater.git.branch', 'main'));
-            if ($url !== '' && !$isDryRun) {
-                $authMode = (string) ($activeSource['auth_mode'] ?? 'none');
-                $username = trim((string) ($activeSource['auth_username'] ?? ''));
-                $password = trim((string) ($activeSource['auth_password'] ?? $activeSource['token_encrypted'] ?? ''));
-
-                if ($authMode === 'token' && $password !== '' && str_starts_with($url, 'https://')) {
-                    if ($username !== '') {
-                        $url = preg_replace('#^https://#', 'https://' . rawurlencode($username) . ':' . rawurlencode($password) . '@', $url) ?: $url;
-                    } else {
-                        $url = preg_replace('#^https://#', 'https://' . rawurlencode($password) . '@', $url) ?: $url;
-                    }
-                }
-
-                config([
-                    'updater.git.remote_url' => $url,
-                    'updater.git.branch' => $branch,
-                ]);
-
-                $env = ['GIT_TERMINAL_PROMPT' => '0'];
-                $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
-
-                if (!$this->isGitRepository($cwd, $env)) {
-                    $autoInit = (bool) config('updater.git.auto_init', false);
-                    $forceBootstrap = (bool) ($context['options']['force'] ?? false);
-
-                    if (!$autoInit && !$forceBootstrap) {
-                        throw new \RuntimeException('Repositório git ausente em ' . $cwd . '. Habilite UPDATER_GIT_AUTO_INIT=true ou execute com --force para bootstrap automático.');
-                    }
-
-                    $this->bootstrapRepository($cwd, $url, $branch, $requestedUpdateType, $requestedTag, $env);
-                    $context['git_bootstrapped'] = true;
-                } else {
-                    $this->shellRunner->runOrFail(['git', 'remote', 'set-url', 'origin', $url], $cwd, $env);
-                    $this->shellRunner->runOrFail(['git', 'fetch', 'origin', $branch], $cwd, $env);
-                }
-            }
-
-            $context['source_id'] = (int) $activeSource['id'];
-            $context['source_name'] = (string) $activeSource['name'];
-            $context['source_type'] = $sourceType;
+        config(['updater.git.update_type' => $requestedUpdateType]);
+        if ($requestedTag !== '') {
+            config(['updater.git.tag' => $requestedTag]);
         }
 
+        $this->prepareSourceContext($context, $requestedUpdateType, $requestedTag, $cwd, $env, $isDryRun);
 
-// Preparação do working tree: evita falha de merge por arquivos locais (modificados ou untracked).
-// É comum existirem artefatos gerados (vendor:publish, assets, views) e ajustes locais de config.
-// Para garantir update estável, cria stash automático (incluindo untracked) antes do pull/checkout.
-if (!$isDryRun && $this->shellRunner !== null) {
-    $cwd = $cwd ?? (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
-    $env = $env ?? ['GIT_TERMINAL_PROMPT' => '0'];
-    $this->autoStashWorkingTree($context, $cwd, $env);
-}
+        if (!$isDryRun && $this->shellRunner !== null) {
+            $this->autoStashWorkingTree($context, $cwd, $env);
+        }
 
         $context['revision_before'] = $this->codeDriver->currentRevision();
         $context['git_tag_before'] = $this->resolveCurrentTag();
@@ -99,10 +62,12 @@ if (!$isDryRun && $this->shellRunner !== null) {
         }
 
         if ($isDryRun) {
+            $status = $this->codeDriver->statusUpdates();
+            $branch = (string) config('updater.git.branch', 'main');
             $context['dry_run_plan']['git'] = [
                 'atual' => $context['revision_before'],
-                'alvo' => $this->codeDriver->statusUpdates()['remote'] ?? null,
-                'comandos' => ['git fetch origin ' . config('updater.git.branch', 'main'), 'git rev-list --count HEAD..origin/' . config('updater.git.branch', 'main')],
+                'alvo' => $status['latest_tag'] ?? $status['remote'] ?? null,
+                'comandos' => ['git fetch origin ' . $branch, 'git rev-list --count HEAD..origin/' . $branch],
             ];
             $context['revision_after'] = $context['revision_before'];
             return;
@@ -111,27 +76,23 @@ if (!$isDryRun && $this->shellRunner !== null) {
         try {
             $context['revision_after'] = $this->codeDriver->update();
         } catch (\Throwable $e) {
-            // Caso clássico: arquivos untracked/ignored (ex.: vendor:publish) bloqueiam merge/checkout.
-            // Mesmo com stash -a, alguns ambientes podem recriar assets imediatamente ou manter arquivos fora do controle do git.
-            // Estratégia: detectar a assinatura do erro, mover os arquivos conflitantes para uma pasta de quarentena e tentar 1 vez.
-            if ($this->shellRunner !== null && $this->shouldRetryAfterUntrackedOverwrite($e)) {
-    // Para git_tag, preferimos limpar untracked (preservando .env/storage) e tentar novamente.
-    // Isso evita mover milhares de arquivos para quarantine em instâncias bootstrapadas por artefato.
-    if ($requestedUpdateType === 'git_tag') {
-        $this->forceCleanUntrackedForCheckout($context);
-        $this->codeDriver->update($context, $requestedUpdateType, $requestedTag, $requestedBranch);
-
-        return;
-    }
-                $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
-                $env = ['GIT_TERMINAL_PROMPT' => '0'];
-                $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd);
-                $context['git_update_log'][] = 'Arquivos untracked conflitantes foram movidos para quarentena e o update será tentado novamente.';
-                $context['revision_after'] = $this->codeDriver->update();
-            } else {
+            if ($this->shellRunner === null || !$this->shouldRetryAfterUntrackedOverwrite($e)) {
                 throw $e;
             }
+
+            if ($requestedUpdateType === 'git_tag') {
+                $this->forceCleanUntrackedForCheckout($context, $cwd, $env);
+                $context['git_update_log'][] = 'Conflitos de untracked resolvidos com clean controlado para checkout de tag.';
+            } else {
+                $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd, $env);
+                $context['git_update_log'][] = 'Arquivos untracked conflitantes movidos para quarentena antes do retry.';
+            }
+
+            $context['revision_after'] = $this->codeDriver->update();
+        } finally {
+            $this->restoreDotEnv($context);
         }
+
         $context['git_tag_after'] = $this->resolveCurrentTag();
 
         if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
@@ -150,18 +111,16 @@ if (!$isDryRun && $this->shellRunner !== null) {
                 && $requestedTag !== ''
                 && (string) ($context['git_tag_before'] ?? '') === $requestedTag
                 && (string) ($context['git_tag_after'] ?? '') === $requestedTag;
-            $nowAtRequestedTag = $requestedUpdateType === 'git_tag'
-                && $requestedTag !== ''
-                && (string) ($context['git_tag_after'] ?? '') === $requestedTag;
 
-            if (!$allowNoChange && $hadPreviousRevision && !$alreadyAtRequestedTag && !$nowAtRequestedTag) {
+            if (!$allowNoChange && $hadPreviousRevision && !$alreadyAtRequestedTag) {
                 throw new \RuntimeException('Nenhuma atualização real foi aplicada (revision_before == revision_after). Cancelando execução para evitar falso sucesso.');
             }
         }
 
         $context['git_update_log'][] = sprintf('revision_before: %s', (string) ($context['revision_before'] ?? 'N/A'));
         $context['git_update_log'][] = sprintf('revision_after: %s', (string) ($context['revision_after'] ?? 'N/A'));
-        $this->restoreDotEnv($context);
+
+        $this->pruneRepositoryAfterUpdate($cwd, $env, $requestedUpdateType);
     }
 
     public function rollback(array &$context): void
@@ -173,43 +132,100 @@ if (!$isDryRun && $this->shellRunner !== null) {
         $this->restoreDotEnv($context);
     }
 
+    private function prepareSourceContext(array &$context, string $requestedUpdateType, string $requestedTag, string $cwd, array $env, bool $isDryRun): void
+    {
+        $activeSource = $this->managerStore?->activeSource();
+        if (!is_array($activeSource) || $this->shellRunner === null) {
+            return;
+        }
 
-private function autoStashWorkingTree(array &$context, string $cwd, array $env = []): void
-{
-    $allowDirty = (bool) ($context['options']['allow_dirty'] ?? false);
-    $autoStash = (bool) ($context['options']['auto_stash'] ?? config('updater.git.auto_stash', true));
+        $sourceType = (string) ($activeSource['type'] ?? 'git_ff_only');
+        $url = (string) ($activeSource['repo_url'] ?? '');
+        $branch = (string) ($activeSource['branch'] ?? config('updater.git.branch', 'main'));
 
-    $status = $this->shellRunner?->run(['git', 'status', '--porcelain'], $cwd, $env);
-    $porcelain = trim((string) ($status['stdout'] ?? ''));
+        if ($url !== '' && !$isDryRun) {
+            $url = $this->injectSourceCredentials($activeSource, $url);
+            config(['updater.git.remote_url' => $url, 'updater.git.branch' => $branch]);
 
-    // Também considera arquivos ignorados/untracked que podem bloquear merge/checkout
-    // (ex.: assets publicados em public/vendor/*).
-    $untracked = $this->shellRunner?->run(['git', 'ls-files', '--others', '--exclude-standard'], $cwd, $env);
-    $ignored   = $this->shellRunner?->run(['git', 'ls-files', '--others', '-i', '--exclude-standard'], $cwd, $env);
+            if (!$this->isGitRepository($cwd, $env)) {
+                $autoInit = (bool) config('updater.git.auto_init', false);
+                $forceBootstrap = (bool) ($context['options']['force'] ?? false);
 
-    $hasUntracked = trim((string) ($untracked['stdout'] ?? '')) !== '';
-    $hasIgnored   = trim((string) ($ignored['stdout'] ?? '')) !== '';
+                if (!$autoInit && !$forceBootstrap) {
+                    throw new \RuntimeException('Repositório git ausente em ' . $cwd . '. Habilite UPDATER_GIT_AUTO_INIT=true ou execute com --force para bootstrap automático.');
+                }
 
-    if ($porcelain === '' && !$hasUntracked && !$hasIgnored) {
-        return;
+                $this->bootstrapRepository($context, $cwd, $url, $branch, $requestedUpdateType, $requestedTag, $env);
+                $context['git_bootstrapped'] = true;
+            } else {
+                $this->shellRunner->runOrFail(['git', 'remote', 'set-url', 'origin', $url], $cwd, $env);
+
+                if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
+                    $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
+                    $this->shellRunner->run(['git', 'fetch', '--depth=' . $depth, 'origin', 'tag', $requestedTag], $cwd, $env);
+                } else {
+                    $this->shellRunner->runOrFail(['git', 'fetch', '--prune', '--depth=1', 'origin', $branch], $cwd, $env);
+                }
+            }
+        }
+
+        $context['source_id'] = (int) ($activeSource['id'] ?? 0);
+        $context['source_name'] = (string) ($activeSource['name'] ?? '');
+        $context['source_type'] = $sourceType;
     }
 
-    if (!$allowDirty && !$autoStash) {
-        throw new \RuntimeException("Working tree sujo. Ajuste/commite ou habilite --allow-dirty / UPDATER_GIT_AUTO_STASH=true.\n" . $porcelain);
+    private function injectSourceCredentials(array $source, string $url): string
+    {
+        $authMode = (string) ($source['auth_mode'] ?? 'none');
+        $username = trim((string) ($source['auth_username'] ?? ''));
+        $password = trim((string) ($source['auth_password'] ?? $source['token_encrypted'] ?? ''));
+
+        if ($authMode !== 'token' || $password === '' || !str_starts_with($url, 'https://')) {
+            return $url;
+        }
+
+        if ($username !== '') {
+            return preg_replace('#^https://#', 'https://' . rawurlencode($username) . ':' . rawurlencode($password) . '@', $url) ?: $url;
+        }
+
+        return preg_replace('#^https://#', 'https://' . rawurlencode($password) . '@', $url) ?: $url;
     }
 
-    $runId = (string) ($context['run_id'] ?? 'manual');
-    $msg = 'laravel-updater run ' . $runId . ' ' . date('Y-m-d H:i:s');
+    private function autoStashWorkingTree(array &$context, string $cwd, array $env = []): void
+    {
+        $allowDirty = (bool) ($context['options']['allow_dirty'] ?? false);
+        $autoStash = (bool) ($context['options']['auto_stash'] ?? config('updater.git.auto_stash', true));
 
-    $res = $this->shellRunner->run(['git', 'stash', 'push', '-a', '-m', $msg], $cwd, $env);
-    if (($res['exit_code'] ?? 1) !== 0) {
-        throw new \RuntimeException('Falha ao criar stash automático antes do update: ' . (($res['stderr'] ?? '') ?: 'erro desconhecido'));
+        if ($this->shellRunner === null) {
+            return;
+        }
+
+        $status = $this->shellRunner->run(['git', 'status', '--porcelain'], $cwd, $env);
+        $porcelain = trim((string) ($status['stdout'] ?? ''));
+
+        $untracked = $this->shellRunner->run(['git', 'ls-files', '--others', '--exclude-standard'], $cwd, $env);
+        $hasUntracked = trim((string) ($untracked['stdout'] ?? '')) !== '';
+
+        if ($porcelain === '' && !$hasUntracked) {
+            return;
+        }
+
+        if (!$allowDirty && !$autoStash) {
+            throw new \RuntimeException("Working tree sujo. Ajuste/commite ou habilite --allow-dirty / UPDATER_GIT_AUTO_STASH=true.\n" . $porcelain);
+        }
+
+        $runId = (string) ($context['run_id'] ?? 'manual');
+        $msg = 'laravel-updater run ' . $runId . ' ' . date('Y-m-d H:i:s');
+
+        $res = $this->shellRunner->run(['git', 'stash', 'push', '-a', '-m', $msg], $cwd, $env);
+        if (($res['exit_code'] ?? 1) !== 0) {
+            throw new \RuntimeException('Falha ao criar stash automático antes do update: ' . (($res['stderr'] ?? '') ?: 'erro desconhecido'));
+        }
+
+        $context['git_auto_stash'] = true;
+        $context['git_auto_stash_message'] = $msg;
+        $context['git_update_log'][] = 'stash automático criado para permitir merge/checkout em working tree sujo.';
     }
-
-    $context['git_auto_stash'] = true;
-    $context['git_auto_stash_message'] = $msg;
-    $context['git_update_log'][] = 'stash automático criado para permitir merge/checkout em working tree sujo.';
-}
 
     private function backupDotEnv(array &$context): void
     {
@@ -234,6 +250,7 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
 
         if (@copy($envPath, $backupPath)) {
             $context['env_backup_file'] = $backupPath;
+            $this->cleanupOldEnvBackups($storage, 20);
         }
     }
 
@@ -249,6 +266,40 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
 
         if (@copy($backupPath, $envPath)) {
             $context['env_restored'] = true;
+            @unlink($backupPath);
+        }
+
+        // Segurança adicional: garante ENCRYPTION_KEY no runtime após restore do .env
+        // (evita inicialização quebrada da app quando o ambiente já estava em memória).
+        if (function_exists('putenv')) {
+            $content = @file_get_contents($envPath);
+            if (is_string($content) && $content !== '') {
+                foreach (preg_split('/\r\n|\r|\n/', $content) ?: [] as $line) {
+                    $line = trim((string) $line);
+                    if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
+                        continue;
+                    }
+
+                    [$k, $v] = array_map('trim', explode('=', $line, 2));
+                    if ($k === 'ENCRYPTION_KEY' && $v !== '') {
+                        putenv('ENCRYPTION_KEY=' . trim($v, "\"'"));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private function cleanupOldEnvBackups(string $storage, int $keep): void
+    {
+        $files = glob(rtrim($storage, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'env_backup_*.env') ?: [];
+        if (count($files) <= $keep) {
+            return;
+        }
+
+        usort($files, static fn (string $a, string $b): int => (int) filemtime($b) <=> (int) filemtime($a));
+        foreach (array_slice($files, $keep) as $file) {
+            @unlink($file);
         }
     }
 
@@ -260,20 +311,26 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
             return null;
         }
 
-        $result = $this->shellRunner?->run(['git', 'describe', '--tags', '--exact-match'], $cwd, $env);
+        if ($this->shellRunner === null) {
+            return null;
+        }
+
+        $result = $this->shellRunner->run(['git', 'describe', '--tags', '--exact-match'], $cwd, $env);
         if (!is_array($result) || (int) ($result['exit_code'] ?? 1) !== 0) {
             return null;
         }
 
         $tag = trim((string) ($result['stdout'] ?? ''));
-
         return $tag !== '' ? $tag : null;
     }
 
-    /** @param array<string,string> $env */
     private function isGitRepository(string $cwd, array $env): bool
     {
-        $result = $this->shellRunner?->run(['git', 'rev-parse', '--is-inside-work-tree'], $cwd, $env);
+        if ($this->shellRunner === null) {
+            return false;
+        }
+
+        $result = $this->shellRunner->run(['git', 'rev-parse', '--is-inside-work-tree'], $cwd, $env);
 
         if (!is_array($result)
             || (int) ($result['exit_code'] ?? 1) !== 0
@@ -281,80 +338,58 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
             return false;
         }
 
-        // Repositório vazio (git init sem commits) não tem HEAD.
-        $head = $this->shellRunner?->run(['git', 'rev-parse', '--verify', 'HEAD'], $cwd, $env);
+        $head = $this->shellRunner->run(['git', 'rev-parse', '--verify', 'HEAD'], $cwd, $env);
         return is_array($head) && (int) ($head['exit_code'] ?? 1) === 0;
     }
 
-    /** @param array<string,string> $env */
-    private function bootstrapRepository(string $cwd, string $url, string $branch, string $requestedUpdateType, string $requestedTag, array $env): void
+    private function bootstrapRepository(array &$context, string $cwd, string $url, string $branch, string $requestedUpdateType, string $requestedTag, array $env): void
     {
-        // Segurança: NÃO inicializa um repositório git dentro de uma aplicação já deployada
-        // (deploy por artefato sem .git). Isso cria um .git vazio, quebra rev-parse HEAD
-        // e mascara o problema real (instância não é git-aware).
-        // Só permitimos bootstrap quando o diretório está efetivamente vazio.
+        if ($this->shellRunner === null) {
+            throw new \RuntimeException('ShellRunner não disponível para bootstrap do repositório.');
+        }
+
         $hasApp = is_file($cwd . DIRECTORY_SEPARATOR . 'artisan')
             || is_file($cwd . DIRECTORY_SEPARATOR . 'composer.json')
             || is_dir($cwd . DIRECTORY_SEPARATOR . 'vendor')
             || is_dir($cwd . DIRECTORY_SEPARATOR . 'app');
 
-        // Bootstrap controlado:
-        // - Para update_type=git_tag (checkout por tag), permitimos inicializar .git dentro da aplicação
-        //   DESDE QUE exista uma source (remote_url) e uma tag alvo. Isso habilita operações "full replace" via git,
-        //   sem depender de histórico local anterior.
-        // - Para modos que dependem de merge/pull (git_ff_only/git_merge), exigir .git pré-existente com HEAD válido.
         if ($hasApp && !$this->isGitRepository($cwd, $env)) {
             if ($requestedUpdateType !== 'git_tag') {
-                throw new \Argws\LaravelUpdater\Exceptions\UpdaterException(
-                    'Diretório não é um repositório git válido (sem .git ou repositório vazio/sem HEAD). '
-                    . 'Para operar com segurança em modos de merge/pull, esta instância precisa ter sido deployada contendo o diretório .git (clone). '
-                    . 'Alternativa: utilize update_type=git_tag (checkout por tag) ou um modo/fonte por artefato (snapshot/zip).'
-                );
+                throw new \RuntimeException('Diretório não é um repositório git válido (sem .git ou sem HEAD). Para modos branch/merge é obrigatório deploy com clone git.');
             }
 
             if (trim($url) === '' || trim($requestedTag) === '') {
-                throw new \Argws\LaravelUpdater\Exceptions\UpdaterException(
-                    'Bootstrap git solicitado para update_type=git_tag, mas faltam parâmetros obrigatórios: repo_url e/ou target_tag.'
-                );
+                throw new \RuntimeException('Bootstrap git para update_type=git_tag requer repo_url e target_tag.');
             }
         }
 
-        $this->shellRunner?->runOrFail(['git', 'init'], $cwd, $env);
-        $this->shellRunner?->run(['git', 'remote', 'remove', 'origin'], $cwd, $env);
-        $this->shellRunner?->runOrFail(['git', 'remote', 'add', 'origin', $url], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'init'], $cwd, $env);
+        $this->shellRunner->run(['git', 'remote', 'remove', 'origin'], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'remote', 'add', 'origin', $url], $cwd, $env);
 
-        $this->shellRunner?->runOrFail(['git', 'fetch', '--tags', 'origin'], $cwd, $env);
+        if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
+            $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
+            $this->shellRunner->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'tag', $requestedTag], $cwd, $env);
+            try {
+                $this->shellRunner->runOrFail(['git', 'checkout', '--detach', $requestedTag], $cwd, $env);
+            } catch (\Throwable $e) {
+                if (!$this->shouldRetryAfterUntrackedOverwrite($e)) {
+                    throw $e;
+                }
 
-        if ($requestedUpdateType === 'git_tag') {
-            // Checkout direto por tag (modo "full replace" via git):
-            // - garante HEAD válido
-            // - não depende do histórico anterior do servidor (deploy por artefato)
-            // - mantém remote configurado para futuras consultas de tags
-            $tag = $requestedTag;
-
-            // Normaliza: aceita "vX.Y" ou "X.Y" conforme o remoto.
-            // Primeiro tenta buscar a ref da tag explicitamente.
-            $fetchTag = $this->shellRunner?->run(['git', 'fetch', '--depth=1', 'origin', 'tag', $tag], $cwd, $env);
-            if (!is_array($fetchTag) || (int) ($fetchTag['exit_code'] ?? 1) !== 0) {
-                // fallback: busca completa (tags já foram buscadas acima)
-                $this->shellRunner?->runOrFail(['git', 'fetch', 'origin', '--tags'], $cwd, $env);
+                $context['git_update_log'][] = 'Bootstrap/tag detectou conflito de untracked no checkout; aplicando limpeza controlada e retry.';
+                $this->forceCleanUntrackedForCheckout($context, $cwd, $env);
+                $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd, $env);
+                $this->shellRunner->runOrFail(['git', 'checkout', '--detach', '-f', $requestedTag], $cwd, $env);
             }
-
-            // Checkout em detached HEAD (mais previsível para tags)
-            $this->shellRunner?->runOrFail(['git', 'checkout', '--detach', $tag], $cwd, $env);
-            $this->shellRunner?->runOrFail(['git', 'reset', '--hard'], $cwd, $env);
+            $this->shellRunner->runOrFail(['git', 'reset', '--hard'], $cwd, $env);
             return;
         }
 
-        // Modos baseados em branch (ff_only/merge): exige histórico e upstream
-        $fetch = $this->shellRunner?->run(['git', 'fetch', '--depth=1', 'origin', $branch], $cwd, $env);
-        if (!is_array($fetch) || (int) ($fetch['exit_code'] ?? 1) !== 0) {
-            $this->shellRunner?->runOrFail(['git', 'fetch', 'origin', $branch], $cwd, $env);
-        }
-
-        $this->shellRunner?->runOrFail(['git', 'checkout', '-B', $branch], $cwd, $env);
-        $this->shellRunner?->runOrFail(['git', 'reset', '--hard', 'FETCH_HEAD'], $cwd, $env);
-        $this->shellRunner?->run(['git', 'branch', '--set-upstream-to=origin/' . $branch, $branch], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'fetch', '--prune', '--depth=1', 'origin', $branch], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'checkout', '-B', $branch], $cwd, $env);
+        $this->shellRunner->runOrFail(['git', 'reset', '--hard', 'FETCH_HEAD'], $cwd, $env);
+        $this->shellRunner->run(['git', 'branch', '--set-upstream-to=origin/' . $branch, $branch], $cwd, $env);
     }
 
     private function shouldRetryAfterUntrackedOverwrite(\Throwable $e): bool
@@ -362,34 +397,20 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
         $msg = mb_strtolower($e->getMessage());
         return str_contains($msg, 'untracked working tree files would be overwritten')
             || str_contains($msg, 'would be overwritten by merge')
-            || str_contains($msg, 'please move or remove them before you merge');
+            || str_contains($msg, 'please move or remove them before you merge')
+            || str_contains($msg, 'would be overwritten by checkout');
     }
 
-    private function quarantineUntrackedOverwriteFiles(array &$context, string $message, string $cwd): void
+    private function quarantineUntrackedOverwriteFiles(array &$context, string $message, string $cwd, array $env): void
     {
-        // Extrai lista de arquivos do erro do git (linhas com tab prefix).
         $files = [];
         foreach (preg_split('/\r?\n/', $message) as $line) {
-            $line = trim($line);
-            if ($line === '' || $line[0] !== '\t') {
+            if ($line === '' || !str_starts_with($line, "\t")) {
                 continue;
             }
             $p = trim(ltrim($line, "\t"));
-            if ($p !== '') {
+            if ($p !== '' && !$this->isProtectedPath($p)) {
                 $files[] = $p;
-            }
-        }
-
-        // Fallback: quando o git não inclui tab, tenta pegar caminhos comuns do updater.
-        if (empty($files)) {
-            $candidates = [
-                'public/vendor/laravel-updater',
-                'resources/views/vendor/laravel-updater',
-            ];
-            foreach ($candidates as $c) {
-                if (is_dir($cwd . DIRECTORY_SEPARATOR . $c) || is_file($cwd . DIRECTORY_SEPARATOR . $c)) {
-                    $files[] = $c;
-                }
             }
         }
 
@@ -399,14 +420,18 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
 
         $runId = (string) ($context['run_id'] ?? 'manual');
         $stamp = date('Ymd_His');
-        $quarantineBase = (function_exists('storage_path') ? storage_path('app/updater/quarantine') : ($cwd . DIRECTORY_SEPARATOR . 'storage/app/updater/quarantine'));
+        $quarantineBase = function_exists('storage_path')
+            ? storage_path('app/updater/quarantine')
+            : ($cwd . DIRECTORY_SEPARATOR . 'storage/app/updater/quarantine');
+
         if (!is_dir($quarantineBase)) {
             @mkdir($quarantineBase, 0775, true);
         }
+
         $destDir = rtrim($quarantineBase, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'run_' . $runId . '_' . $stamp;
         @mkdir($destDir, 0775, true);
 
-        foreach (array_unique($files) as $rel) {
+        foreach (array_values(array_unique($files)) as $rel) {
             $src = $cwd . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $rel);
             if (!file_exists($src)) {
                 continue;
@@ -418,116 +443,193 @@ private function autoStashWorkingTree(array &$context, string $cwd, array $env =
                 @mkdir($dstParent, 0775, true);
             }
 
-            // Move (rename) quando possível; caso contrário copia e remove.
             if (!@rename($src, $dst)) {
-                if (is_file($src)) {
-                    @copy($src, $dst);
-                    @unlink($src);
-                } elseif (is_dir($src)) {
-                    // Remoção recursiva simples
-                    $this->copyDir($src, $dst);
-                    $this->deleteDir($src);
-                }
+                $this->copyDir($src, $dst);
+                $this->deleteDir($src);
             }
 
             $context['git_quarantined_files'][] = $rel;
         }
 
-        // Garante que o working tree está realmente limpo para a segunda tentativa.
         if ($this->shellRunner !== null) {
-            $this->shellRunner->run(['git', 'clean', '-fd'], $cwd, ['GIT_TERMINAL_PROMPT' => '0']);
+            $this->shellRunner->run([
+                'git',
+                'clean',
+                '-fd',
+                '-e', '.env',
+                '-e', '.env.*',
+                '-e', 'storage/',
+                '-e', 'public/storage/',
+                '-e', 'public/uploads/',
+                '-e', 'bootstrap/cache/',
+                '-e', 'vendor/',
+            ], $cwd, $env);
         }
+    }
+
+    private function isProtectedPath(string $path): bool
+    {
+        $normalized = str_replace('\\', '/', ltrim($path, '/'));
+        return $normalized === '.env'
+            || str_starts_with($normalized, '.env.')
+            || str_starts_with($normalized, 'storage/')
+            || str_starts_with($normalized, 'public/storage/')
+            || str_starts_with($normalized, 'public/uploads/')
+            || str_starts_with($normalized, 'bootstrap/cache/')
+            || str_starts_with($normalized, 'vendor/');
     }
 
     private function copyDir(string $src, string $dst): void
     {
-        @mkdir($dst, 0775, true);
-        $items = @scandir($src);
-        if (!is_array($items)) {
+        if (is_dir($src) && !is_link($src)) {
+            @mkdir($dst, 0775, true);
+            $items = @scandir($src);
+            if (!is_array($items)) {
+                return;
+            }
+            foreach ($items as $item) {
+                if ($item === '.' || $item === '..') {
+                    continue;
+                }
+                $this->copyDir($src . DIRECTORY_SEPARATOR . $item, $dst . DIRECTORY_SEPARATOR . $item);
+            }
             return;
         }
-        foreach ($items as $item) {
-            if ($item === '.' || $item === '..') {
-                continue;
-            }
-            $from = $src . DIRECTORY_SEPARATOR . $item;
-            $to = $dst . DIRECTORY_SEPARATOR . $item;
-            if (is_dir($from)) {
-                $this->copyDir($from, $to);
-            } else {
-                @copy($from, $to);
-            }
-        }
+
+        @copy($src, $dst);
     }
 
     private function deleteDir(string $dir): void
     {
+        if (is_file($dir) || is_link($dir)) {
+            @unlink($dir);
+            return;
+        }
+
         $items = @scandir($dir);
         if (!is_array($items)) {
             return;
         }
+
         foreach ($items as $item) {
             if ($item === '.' || $item === '..') {
                 continue;
             }
-            $path = $dir . DIRECTORY_SEPARATOR . $item;
-            if (is_dir($path)) {
-                $this->deleteDir($path);
-            } else {
-                @unlink($path);
-            }
+            $this->deleteDir($dir . DIRECTORY_SEPARATOR . $item);
         }
+
         @rmdir($dir);
     }
 
-/**
- * Força limpeza de arquivos/diretórios NÃO rastreados (untracked) antes de um checkout de tag.
- *
- * Motivo:
- * - Em instâncias onde o repositório foi "bootstrapado" no servidor, o working tree pode estar cheio
- *   de arquivos não rastreados pelo git local (porque o deploy anterior foi por artefato/zip).
- * - Ao tentar `git checkout <tag>`, o git aborta com:
- *     "untracked working tree files would be overwritten by checkout"
- * - Como o Updater já gera snapshot + full backup antes do update, é seguro mover/limpar esses untracked,
- *   preservando itens críticos (.env, storage, caches) para não quebrar a instância.
- *
- * Regras:
- * - NUNCA remove `.env` e `storage/`.
- * - Permite customização por env `UPDATER_GIT_CLEAN_EXCLUDES` (separado por ;;).
- *
- * @param array<string,mixed> $context
- */
-private function forceCleanUntrackedForCheckout(array $context): void
-{
-    $cwd = (string) ($context['cwd'] ?? base_path());
+    private function pruneRepositoryAfterUpdate(string $cwd, array $env, string $updateType): void
+    {
+        if ($this->shellRunner === null) {
+            return;
+        }
 
-    // Exclusões padrão (preserva ambiente e dados).
-    $excludes = [
-        '.env',
-        '.env.*',
-        'storage/',
-        'bootstrap/cache/',
-        'public/storage/',
-    ];
+        if (!(bool) config('updater.git_maintenance.enabled', true)) {
+            return;
+        }
 
-    $extra = trim((string) env('UPDATER_GIT_CLEAN_EXCLUDES', ''));
-    if ($extra !== '') {
-        foreach (preg_split('/;;|\r\n|\r|\n/', $extra) ?: [] as $line) {
-            $line = trim((string) $line);
-            if ($line === '' || str_starts_with($line, '#')) {
+        $this->shellRunner->run(['git', 'remote', 'prune', 'origin'], $cwd, $env);
+
+        $pruneLocalBranches = (bool) config('updater.git.prune_local_branches', false);
+        if ($pruneLocalBranches && $updateType !== 'git_tag') {
+            $this->pruneLocalBranches($cwd, $env);
+        }
+
+        if ($updateType === 'git_tag') {
+            $this->shellRunner->run(['git', 'for-each-ref', '--format=%(refname)', 'refs/remotes/origin'], $cwd, $env);
+        }
+
+        $this->shellRunner->run(['git', 'reflog', 'expire', '--expire=now', '--all'], $cwd, $env);
+        $this->shellRunner->run(['git', 'gc', '--prune=now'], $cwd, $env);
+    }
+
+    private function pruneLocalBranches(string $cwd, array $env): void
+    {
+        if ($this->shellRunner === null) {
+            return;
+        }
+
+        $current = $this->shellRunner->run(['git', 'branch', '--show-current'], $cwd, $env);
+        $currentBranch = trim((string) ($current['stdout'] ?? ''));
+        if ($currentBranch === '') {
+            return;
+        }
+
+        $branches = $this->shellRunner->run(['git', 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], $cwd, $env);
+        $stdout = (string) ($branches['stdout'] ?? '');
+        $parts = preg_split('/\r\n|\r|\n/', $stdout);
+        if (!is_array($parts)) {
+            return;
+        }
+
+        foreach ($parts as $part) {
+            $branch = trim((string) $part);
+            if ($branch === '' || $branch === $currentBranch) {
                 continue;
             }
-            $excludes[] = $line;
+
+            $this->shellRunner->run(['git', 'branch', '-D', $branch], $cwd, $env);
         }
     }
 
-    $args = ['git', 'clean', '-fd'];
-    foreach (array_values(array_unique($excludes)) as $ex) {
-        $args[] = '-e';
-        $args[] = $ex;
+    private function forceCleanUntrackedForCheckout(array &$context, string $cwd, array $env): void
+    {
+        if ($this->shellRunner === null) {
+            return;
+        }
+
+        $excludes = [
+            '.env',
+            '.env.*',
+            'storage/',
+            'public/storage/',
+            'public/uploads/',
+            'bootstrap/cache/',
+            'vendor/',
+        ];
+
+        foreach ($this->parseExtraCleanExcludes((string) env('UPDATER_GIT_CLEAN_EXCLUDES', '')) as $exclude) {
+            $excludes[] = $exclude;
+        }
+
+        $excludes = array_values(array_unique($excludes));
+        $args = ['git', 'clean', '-fd'];
+        foreach ($excludes as $exclude) {
+            $args[] = '-e';
+            $args[] = $exclude;
+        }
+
+        $this->shellRunner->runOrFailWithTimeout($args, $cwd, $env, 600);
+        $context['git_update_log'][] = 'git clean controlado executado (preservando .env/storage/uploads).';
     }
 
-    // Não explode se falhar: se não for repo, o fluxo superior já aborta de forma clara.
-    $this->shellRunner->runOrFailWithTimeout($args, $cwd, [], 600);
-}
+
+    private function parseExtraCleanExcludes(string $raw): array
+    {
+        $extra = trim($raw);
+        if ($extra === '') {
+            return [];
+        }
+
+        $extraLines = preg_split('/;;|\r\n|\r|\n/', $extra);
+        if (!is_array($extraLines)) {
+            return [];
+        }
+
+        $output = [];
+        foreach ($extraLines as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || substr($line, 0, 1) === '#') {
+                continue;
+            }
+
+            $output[] = $line;
+        }
+
+        return $output;
+    }
+
 }
