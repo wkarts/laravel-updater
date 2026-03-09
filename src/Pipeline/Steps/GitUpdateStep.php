@@ -268,6 +268,26 @@ class GitUpdateStep implements PipelineStepInterface
             $context['env_restored'] = true;
             @unlink($backupPath);
         }
+
+        // Segurança adicional: garante ENCRYPTION_KEY no runtime após restore do .env
+        // (evita inicialização quebrada da app quando o ambiente já estava em memória).
+        if (function_exists('putenv')) {
+            $content = @file_get_contents($envPath);
+            if (is_string($content) && $content !== '') {
+                foreach (preg_split('/\r\n|\r|\n/', $content) ?: [] as $line) {
+                    $line = trim((string) $line);
+                    if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) {
+                        continue;
+                    }
+
+                    [$k, $v] = array_map('trim', explode('=', $line, 2));
+                    if ($k === 'ENCRYPTION_KEY' && $v !== '') {
+                        putenv('ENCRYPTION_KEY=' . trim($v, "\"'"));
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     private function cleanupOldEnvBackups(string $storage, int $keep): void
@@ -432,7 +452,18 @@ class GitUpdateStep implements PipelineStepInterface
         }
 
         if ($this->shellRunner !== null) {
-            $this->shellRunner->run(['git', 'clean', '-fd', '-e', '.env', '-e', '.env.*', '-e', 'storage/', '-e', 'public/storage/'], $cwd, $env);
+            $this->shellRunner->run([
+                'git',
+                'clean',
+                '-fd',
+                '-e', '.env',
+                '-e', '.env.*',
+                '-e', 'storage/',
+                '-e', 'public/storage/',
+                '-e', 'public/uploads/',
+                '-e', 'bootstrap/cache/',
+                '-e', 'vendor/',
+            ], $cwd, $env);
         }
     }
 
@@ -443,7 +474,9 @@ class GitUpdateStep implements PipelineStepInterface
             || str_starts_with($normalized, '.env.')
             || str_starts_with($normalized, 'storage/')
             || str_starts_with($normalized, 'public/storage/')
-            || str_starts_with($normalized, 'public/uploads/');
+            || str_starts_with($normalized, 'public/uploads/')
+            || str_starts_with($normalized, 'bootstrap/cache/')
+            || str_starts_with($normalized, 'vendor/');
     }
 
     private function copyDir(string $src, string $dst): void
@@ -541,13 +574,6 @@ class GitUpdateStep implements PipelineStepInterface
             $this->shellRunner->run(['git', 'branch', '-D', $branch], $cwd, $env);
         }
 
-        $excludes = array_values(array_unique($excludes));
-        $args = ['git', 'clean', '-fd'];
-        foreach ($excludes as $exclude) {
-            $args[] = '-e';
-            $args[] = $exclude;
-        }
-
         $this->shellRunner->runOrFailWithTimeout($args, $cwd, $env, 600);
         $context['git_update_log'][] = 'git clean controlado executado (preservando .env/storage/uploads).';
     }
@@ -565,6 +591,7 @@ class GitUpdateStep implements PipelineStepInterface
             'public/storage/',
             'public/uploads/',
             'bootstrap/cache/',
+            'vendor/',
         ];
 
         foreach ($this->parseExtraCleanExcludes((string) env('UPDATER_GIT_CLEAN_EXCLUDES', '')) as $exclude) {
