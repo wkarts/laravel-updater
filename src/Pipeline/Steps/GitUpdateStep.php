@@ -554,9 +554,14 @@ class GitUpdateStep implements PipelineStepInterface
 
         $extra = trim((string) env('UPDATER_GIT_CLEAN_EXCLUDES', ''));
         if ($extra !== '') {
-            foreach (preg_split('/;;|\r\n|\r|\n/', $extra) ?: [] as $line) {
+            $extraLines = preg_split('/;;|\r\n|\r|\n/', $extra);
+            if (!is_array($extraLines)) {
+                $extraLines = [];
+            }
+
+            foreach ($extraLines as $line) {
                 $line = trim((string) $line);
-                if ($line === '' || str_starts_with($line, '#')) {
+                if ($line === '' || substr($line, 0, 1) === '#') {
                     continue;
                 }
                 $excludes[] = $line;
