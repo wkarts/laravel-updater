@@ -97,8 +97,13 @@ class GitUpdateStep implements PipelineStepInterface
 
         if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
             $afterTag = (string) ($context['git_tag_after'] ?? '');
-            if ($afterTag === '' || $afterTag !== $requestedTag) {
+            $tagCommitApplied = $this->isTargetTagCommitApplied($cwd, $env, $requestedTag);
+            if (($afterTag === '' || $afterTag !== $requestedTag) && !$tagCommitApplied) {
                 throw new \RuntimeException('A tag alvo não foi aplicada corretamente. Esperado: ' . $requestedTag . '; atual: ' . ($afterTag !== '' ? $afterTag : 'sem tag exata'));
+            }
+
+            if ($afterTag !== '' && $afterTag !== $requestedTag && $tagCommitApplied) {
+                $context['git_update_log'][] = 'Tag alvo aponta para o commit atual, porém git describe retornou alias/tag diferente: ' . $afterTag;
             }
         }
 
@@ -573,9 +578,6 @@ class GitUpdateStep implements PipelineStepInterface
 
             $this->shellRunner->run(['git', 'branch', '-D', $branch], $cwd, $env);
         }
-
-        $this->shellRunner->runOrFailWithTimeout($args, $cwd, $env, 600);
-        $context['git_update_log'][] = 'git clean controlado executado (preservando .env/storage/uploads).';
     }
 
     private function forceCleanUntrackedForCheckout(array &$context, string $cwd, array $env): void
@@ -633,6 +635,25 @@ class GitUpdateStep implements PipelineStepInterface
         }
 
         return $output;
+    }
+
+    private function isTargetTagCommitApplied(string $cwd, array $env, string $tag): bool
+    {
+        if ($this->shellRunner === null || $tag === '') {
+            return false;
+        }
+
+        $head = $this->shellRunner->run(['git', 'rev-parse', 'HEAD'], $cwd, $env);
+        $tagCommit = $this->shellRunner->run(['git', 'rev-parse', 'refs/tags/' . $tag . '^{commit}'], $cwd, $env);
+
+        if ((int) ($head['exit_code'] ?? 1) !== 0 || (int) ($tagCommit['exit_code'] ?? 1) !== 0) {
+            return false;
+        }
+
+        $headSha = trim((string) ($head['stdout'] ?? ''));
+        $tagSha = trim((string) ($tagCommit['stdout'] ?? ''));
+
+        return $headSha !== '' && $headSha === $tagSha;
     }
 
 }
