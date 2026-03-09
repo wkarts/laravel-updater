@@ -94,6 +94,7 @@ class GitUpdateStep implements PipelineStepInterface
         }
 
         $context['git_tag_after'] = $this->resolveCurrentTag();
+        $tagCommitApplied = false;
 
         if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
             $afterTag = (string) ($context['git_tag_after'] ?? '');
@@ -114,8 +115,13 @@ class GitUpdateStep implements PipelineStepInterface
             $hadPreviousRevision = !empty($context['revision_before']) && (string) $context['revision_before'] !== 'N/A';
             $alreadyAtRequestedTag = $requestedUpdateType === 'git_tag'
                 && $requestedTag !== ''
-                && (string) ($context['git_tag_before'] ?? '') === $requestedTag
-                && (string) ($context['git_tag_after'] ?? '') === $requestedTag;
+                && (
+                    (
+                        (string) ($context['git_tag_before'] ?? '') === $requestedTag
+                        && (string) ($context['git_tag_after'] ?? '') === $requestedTag
+                    )
+                    || $tagCommitApplied
+                );
 
             if (!$allowNoChange && $hadPreviousRevision && !$alreadyAtRequestedTag) {
                 throw new \RuntimeException('Nenhuma atualização real foi aplicada (revision_before == revision_after). Cancelando execução para evitar falso sucesso.');
