@@ -319,10 +319,7 @@ class GitDriver implements CodeDriverInterface
 
         $conflicts = [];
         foreach ($untrackedList as $path) {
-            if ($path === '.env') {
-                continue;
-            }
-            if (str_starts_with($path, 'storage/') || str_starts_with($path, 'vendor/') || str_starts_with($path, 'node_modules/')) {
+            if ($this->isProtectedRuntimePath($path)) {
                 continue;
             }
             if (isset($trackedSet[$path])) {
@@ -357,6 +354,44 @@ class GitDriver implements CodeDriverInterface
                 $this->removeRecursive($src);
             }
         }
+    }
+
+    private function isProtectedRuntimePath(string $path): bool
+    {
+        $normalized = str_replace('\\', '/', ltrim(trim($path), '/'));
+        if ($normalized === '') {
+            return true;
+        }
+
+        if ($normalized === '.env' || str_starts_with($normalized, '.env.')) {
+            return true;
+        }
+
+        if ($normalized === 'vendor' || str_starts_with($normalized, 'vendor/')) {
+            return true;
+        }
+
+        if ($normalized === 'storage' || str_starts_with($normalized, 'storage/')) {
+            return true;
+        }
+
+        if ($normalized === 'public/storage' || str_starts_with($normalized, 'public/storage/')) {
+            return true;
+        }
+
+        if ($normalized === 'public/uploads' || str_starts_with($normalized, 'public/uploads/')) {
+            return true;
+        }
+
+        if ($normalized === 'bootstrap/cache' || str_starts_with($normalized, 'bootstrap/cache/')) {
+            return true;
+        }
+
+        if ($normalized === 'node_modules' || str_starts_with($normalized, 'node_modules/')) {
+            return true;
+        }
+
+        return false;
     }
 
     private function copyRecursive(string $src, string $dst): void
