@@ -485,7 +485,11 @@ class GitUpdateStep implements PipelineStepInterface
 
     private function pruneRepositoryAfterUpdate(string $cwd, array $env, string $updateType): void
     {
-        if ($this->shellRunner === null || !(bool) config('updater.git_maintenance.enabled', true)) {
+        if ($this->shellRunner === null) {
+            return;
+        }
+
+        if (!(bool) config('updater.git_maintenance.enabled', true)) {
             return;
         }
 
@@ -522,18 +526,13 @@ class GitUpdateStep implements PipelineStepInterface
         if (!is_array($parts)) {
             return;
         }
-        $list = [];
-        foreach ($parts as $part) {
-            $value = trim((string) $part);
-            if ($value !== '') {
-                $list[] = $value;
-            }
-        }
 
-        foreach ($list as $branch) {
+        foreach ($parts as $part) {
+            $branch = trim((string) $part);
             if ($branch === '' || $branch === $currentBranch) {
                 continue;
             }
+
             $this->shellRunner->run(['git', 'branch', '-D', $branch], $cwd, $env);
         }
 
@@ -561,15 +560,21 @@ class GitUpdateStep implements PipelineStepInterface
 
             foreach ($extraLines as $line) {
                 $line = trim((string) $line);
-                if ($line === '' || substr($line, 0, 1) === '#') {
+                if ($line === '') {
                     continue;
                 }
+
+                if (substr($line, 0, 1) === '#') {
+                    continue;
+                }
+
                 $excludes[] = $line;
             }
         }
 
+        $excludes = array_values(array_unique($excludes));
         $args = ['git', 'clean', '-fd'];
-        foreach (array_values(array_unique($excludes)) as $exclude) {
+        foreach ($excludes as $exclude) {
             $args[] = '-e';
             $args[] = $exclude;
         }
