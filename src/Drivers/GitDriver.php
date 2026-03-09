@@ -446,6 +446,7 @@ class GitDriver implements CodeDriverInterface
             'target' => $packageRoot,
             'snapshot' => $snapshotRoot,
             'tmp' => $tmpDir,
+            'sentinel' => 'src/Exceptions/UpdaterException.php',
         ];
     }
 
@@ -457,16 +458,31 @@ class GitDriver implements CodeDriverInterface
 
         $target = (string) ($snapshot['target'] ?? '');
         $source = (string) ($snapshot['snapshot'] ?? '');
+        $sentinel = trim((string) ($snapshot['sentinel'] ?? ''));
         if ($target === '' || $source === '' || !is_dir($source)) {
             return;
         }
 
-        if (is_dir($target)) {
+        $targetExists = is_dir($target);
+        $sentinelHealthy = $sentinel !== ''
+            ? is_file(rtrim($target, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $sentinel))
+            : $targetExists;
+
+        // Restaura tanto ausência total quanto deleção parcial do pacote.
+        if ($targetExists && $sentinelHealthy) {
             return;
         }
 
         @mkdir(dirname($target), 0775, true);
         $this->copyRecursive($source, $target);
+
+        // Segunda tentativa defensiva para casos de IO intermitente.
+        if ($sentinel !== '') {
+            $sentinelPath = rtrim($target, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $sentinel);
+            if (!is_file($sentinelPath)) {
+                $this->copyRecursive($source, $target);
+            }
+        }
     }
 
     private function cleanupSelfPackageSnapshot(?array $snapshot): void
