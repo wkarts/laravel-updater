@@ -175,6 +175,7 @@ class GitDriver implements CodeDriverInterface
         $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
 
         $shouldPrune = (bool) env('UPDATER_GIT_AUTO_PRUNE', true);
+        $selfPackageBackup = $this->backupSelfPackageSnapshot();
 
         // NUNCA substituir o .env atual.
         // Mesmo em tag/branch que contenha arquivos semelhantes, a aplicação SEMPRE deve reaproveitar o .env atual.
@@ -202,6 +203,7 @@ class GitDriver implements CodeDriverInterface
                 $this->quarantineUntrackedConflicts('tags/' . $tag, $path, $timeout);
 
                 $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/' . $tag], $path, $this->gitEnv(), $timeout);
+                $this->restoreSelfPackageIfMissing($selfPackageBackup);
             } else {
                 // Fetch shallow apenas do branch alvo, sem trazer tags desnecessárias.
                 $branchFetchArgs = ['git', 'fetch', '--no-tags', '--depth=' . $depth];
@@ -216,14 +218,18 @@ class GitDriver implements CodeDriverInterface
                 $this->quarantineUntrackedConflicts($remote . '/' . $branch, $path, $timeout);
 
                 $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', $branch], $path, $this->gitEnv(), $timeout);
+                $this->restoreSelfPackageIfMissing($selfPackageBackup);
 
                 if ($mode === 'ff-only' || $mode === 'ff_only') {
                     $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--ff-only', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
                 } elseif ($mode === 'merge') {
                     $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--no-edit', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
                 } elseif ($mode === 'full' || $mode === 'pull') {
                     // Full: força o branch local igual ao remoto
                     $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
                 } else {
                     throw new \RuntimeException('UPDATER_GIT_DEFAULT_UPDATE_MODE inválido: ' . $mode);
                 }
@@ -235,9 +241,14 @@ class GitDriver implements CodeDriverInterface
             }
 
             return $this->currentRevision();
+        } catch (\Throwable $e) {
+            // Garante que o próprio updater continue carregável para registrar falha corretamente.
+            $this->restoreSelfPackageIfMissing($selfPackageBackup);
+            throw $e;
         } finally {
             // Restaura o .env original SEMPRE (sucesso ou falha).
             $this->restoreEnvFile($path);
+            $this->cleanupSelfPackageSnapshot($selfPackageBackup);
         }
     }
 
@@ -378,6 +389,61 @@ class GitDriver implements CodeDriverInterface
             return;
         }
         @unlink($path);
+    }
+
+    private function backupSelfPackageSnapshot(): ?array
+    {
+        $packageRoot = dirname(__DIR__, 2);
+        if (!is_dir($packageRoot)) {
+            return null;
+        }
+
+        $tmpDir = rtrim(sys_get_temp_dir(), '/\\') . '/updater-self-' . uniqid('', true);
+        @mkdir($tmpDir, 0775, true);
+        $snapshotRoot = $tmpDir . '/laravel-updater';
+        $this->copyRecursive($packageRoot, $snapshotRoot);
+
+        if (!is_dir($snapshotRoot)) {
+            return null;
+        }
+
+        return [
+            'target' => $packageRoot,
+            'snapshot' => $snapshotRoot,
+            'tmp' => $tmpDir,
+        ];
+    }
+
+    private function restoreSelfPackageIfMissing(?array $snapshot): void
+    {
+        if (!is_array($snapshot)) {
+            return;
+        }
+
+        $target = (string) ($snapshot['target'] ?? '');
+        $source = (string) ($snapshot['snapshot'] ?? '');
+        if ($target === '' || $source === '' || !is_dir($source)) {
+            return;
+        }
+
+        if (is_dir($target)) {
+            return;
+        }
+
+        @mkdir(dirname($target), 0775, true);
+        $this->copyRecursive($source, $target);
+    }
+
+    private function cleanupSelfPackageSnapshot(?array $snapshot): void
+    {
+        if (!is_array($snapshot)) {
+            return;
+        }
+
+        $tmp = (string) ($snapshot['tmp'] ?? '');
+        if ($tmp !== '') {
+            $this->removeRecursive($tmp);
+        }
     }
 
     public function rollback(string $revision): void
