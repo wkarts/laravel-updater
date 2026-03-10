@@ -17,7 +17,8 @@ class UpdateNotifyCommand extends Command
 
     public function handle(UpdaterKernel $kernel, ManagerStore $managerStore, StateStore $store): int
     {
-        if (!(bool) env('UPDATER_NOTIFY_ENABLED', false)) {
+        $notifySettings = $this->resolveNotificationSettings($managerStore);
+        if (!(bool) ($notifySettings['enabled'] ?? false)) {
             $this->warn('Notificação desabilitada (UPDATER_NOTIFY_ENABLED=false).');
 
             return self::SUCCESS;
@@ -52,8 +53,7 @@ class UpdateNotifyCommand extends Command
             return self::SUCCESS;
         }
 
-        $rawRecipients = (string) (config('updater.notify.to', '') ?: env('UPDATER_NOTIFY_TO') ?: env('UPDATER_REPORT_TO', ''));
-        $recipients = array_values(array_filter(array_map(static fn (string $mail): string => trim($mail), preg_split('/[,;]+/', $rawRecipients) ?: [])));
+        $recipients = (array) ($notifySettings['recipients'] ?? []);
 
         if ($recipients === []) {
             $this->error('Defina UPDATER_NOTIFY_TO (aceita múltiplos e-mails separados por vírgula) ou UPDATER_REPORT_TO.');
@@ -83,4 +83,31 @@ class UpdateNotifyCommand extends Command
 
         return self::SUCCESS;
     }
+
+    /** @return array{enabled:bool,recipients:array<int,string>} */
+    private function resolveNotificationSettings(ManagerStore $managerStore): array
+    {
+        $runtime = $managerStore->getRuntimeOption('notify', []);
+        $wave = $managerStore->getRuntimeOption('wave', []);
+
+        $enabled = (bool) ($runtime['enabled']
+            ?? $wave['updater_notify_enabled']
+            ?? $wave['notify_enabled']
+            ?? config('updater.notify.enabled', false));
+
+        $rawRecipients = (string) ($runtime['to']
+            ?? $wave['updater_notify_to']
+            ?? $wave['notify_to']
+            ?? config('updater.notify.to', '')
+            ?? env('UPDATER_NOTIFY_TO')
+            ?? env('UPDATER_REPORT_TO', ''));
+
+        $recipients = array_values(array_filter(array_map(static fn (string $mail): string => trim($mail), preg_split('/[,;]+/', $rawRecipients) ?: [])));
+
+        return [
+            'enabled' => $enabled,
+            'recipients' => $recipients,
+        ];
+    }
+
 }

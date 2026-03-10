@@ -30,6 +30,8 @@ class PreUpdateCommandsStep implements PipelineStepInterface
                 continue;
             }
 
+            $this->guardHostAppCommand($line);
+
             if ((bool) ($context['options']['dry_run'] ?? false)) {
                 $context['dry_run_plan']['pre_update_commands'][] = $line;
                 continue;
@@ -37,6 +39,17 @@ class PreUpdateCommandsStep implements PipelineStepInterface
 
             $this->shellRunner->runOrFail(['bash', '-lc', $line]);
             $context['pre_update_commands_log'][] = $line . ': executado';
+        }
+    }
+
+    private function guardHostAppCommand(string $line): void
+    {
+        $normalized = strtolower(trim($line));
+
+        // Evita erro recorrente da aplicação host executando namespace inválido.
+        // O updater usa system:update:* (run/check/status/rollback), não "updater" genérico.
+        if (preg_match('/\bphp\s+artisan\s+updater(\s|$)/', $normalized) === 1) {
+            throw new \RuntimeException('Comando inválido no pre_update_commands: "' . $line . '". Use "php artisan system:update:run" (ou system:update:check/status/rollback).');
         }
     }
 

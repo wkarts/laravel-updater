@@ -17,6 +17,9 @@
             <span style="color:#64748b;font-weight:700;">NÃO</span>
         @endif
     </p>
+    @if(!empty($statusCheck['latest_tag_release_notes_url']))
+        <p><a href="{{ $statusCheck['latest_tag_release_notes_url'] }}" target="_blank" rel="noopener noreferrer">Ver release notes da tag</a></p>
+    @endif
     @if(!empty($statusCheck['warning']))
         <p class="muted">{{ $statusCheck['warning'] }}</p>
     @endif
