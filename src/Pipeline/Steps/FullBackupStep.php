@@ -9,6 +9,7 @@ use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
 use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\StateStore;
+use Argws\LaravelUpdater\Support\BackupExcludes;
 
 /**
  * Backup FULL oficial do fluxo automático de update.
@@ -94,22 +95,13 @@ class FullBackupStep implements PipelineStepInterface
         $this->fileManager->ensureDirectory($path);
 
         $base = $path . '/snapshot_full_' . date('Ymd_His');
-        $excludes = (array) config('updater.paths.exclude_snapshot', []);
-        $excludes[] = '.git';
-        $excludes[] = '.git/';
-        $excludes[] = 'storage/app/updater';
-        $excludes[] = 'storage/framework/down';
+        $excludes = BackupExcludes::snapshot(
+            includeVendor: $includeVendor,
+            excludeStorage: (bool) config('updater.snapshot.exclude_storage', false),
+            excludeUploads: false,
+        );
 
-        if ((bool) config('updater.snapshot.exclude_storage', true)) {
-            $excludes[] = 'storage';
-            $excludes[] = 'storage/';
-        }
-
-        if (!$includeVendor) {
-            $excludes[] = 'vendor';
-        }
-
-        return $this->archiveManager->createArchiveFromDirectory(base_path(), $base, $compression, array_values(array_unique($excludes)));
+        return $this->archiveManager->createArchiveFromDirectory(base_path(), $base, $compression, $excludes);
     }
 
     private function registerFullBackupRow(string $fullPath, ?int $profileId, ?int $runId, array &$context): void

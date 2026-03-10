@@ -108,11 +108,11 @@ return [
             '.git',
             'bootstrap/cache',
             'node_modules',
-            'public/uploads',
             'storage/app/updater',
             'storage/app/updater/backups',
             'storage/app/updater/snapshots',
         ],
+        // Caminhos de uploads/dados do cliente que DEVEM entrar no snapshot/full por padrão.
         'uploads_paths' => ['public/uploads'],
     ],
 
