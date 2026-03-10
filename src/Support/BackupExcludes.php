@@ -6,6 +6,13 @@ namespace Argws\LaravelUpdater\Support;
 
 class BackupExcludes
 {
+    /** @var array<int,string> */
+    private const IMMUTABLE_EXCLUDES = [
+        '.git',
+        'storage/app/updater',
+        'storage/framework/down',
+    ];
+
     /** @return array<int,string> */
     public static function snapshot(
         bool $includeVendor,
@@ -53,6 +60,10 @@ class BackupExcludes
             $candidate = trim((string) $item, '/');
             if ($candidate === '') {
                 return false;
+            }
+
+            if (in_array($candidate, self::IMMUTABLE_EXCLUDES, true)) {
+                return true;
             }
 
             return !in_array($candidate, $normalizedUploads, true);

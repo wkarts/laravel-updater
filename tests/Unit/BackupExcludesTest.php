@@ -37,4 +37,19 @@ class BackupExcludesTest extends TestCase
         $this->assertContains('public/uploads', $excludes);
         $this->assertNotContains('vendor', $excludes);
     }
+    public function testSnapshotNeverRemovesImmutableExcludesEvenIfConfiguredAsUploads(): void
+    {
+        $excludes = BackupExcludes::snapshot(
+            includeVendor: true,
+            excludeStorage: false,
+            excludeUploads: false,
+            baseExcludes: ['.git', '.git/', 'storage/app/updater', 'storage/framework/down'],
+            uploadsPaths: ['.git', 'storage/app/updater', 'storage/framework/down'],
+        );
+
+        $this->assertContains('.git', $excludes);
+        $this->assertContains('storage/app/updater', $excludes);
+        $this->assertContains('storage/framework/down', $excludes);
+    }
+
 }
