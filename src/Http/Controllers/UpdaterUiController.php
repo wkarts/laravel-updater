@@ -11,6 +11,7 @@ use Argws\LaravelUpdater\Support\AuthStore;
 use Argws\LaravelUpdater\Support\Totp;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
+use Argws\LaravelUpdater\Support\ReleaseNotesResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,7 +26,8 @@ class UpdaterUiController extends Controller
         private readonly ManagerStore $managerStore,
         private readonly MaintenanceMode $maintenanceMode,
         private readonly Totp $totp,
-        private readonly AuthStore $authStore
+        private readonly AuthStore $authStore,
+        private readonly ReleaseNotesResolver $releaseNotesResolver
     ) {
     }
 
@@ -62,7 +64,10 @@ class UpdaterUiController extends Controller
 
     public function check(UpdaterKernel $kernel, Request $request): JsonResponse
     {
-        return response()->json($kernel->check((bool) $request->boolean('allow_dirty')));
+        $status = $kernel->check((bool) $request->boolean('allow_dirty'));
+        $status['latest_tag_release_notes_url'] = $this->releaseNotesResolver->resolve((string) ($this->managerStore->activeSource()['repo_url'] ?? ''), (string) ($status['latest_tag'] ?? ''));
+
+        return response()->json($status);
     }
 
     public function status(UpdaterKernel $kernel): JsonResponse
@@ -274,9 +279,12 @@ class UpdaterUiController extends Controller
             return $authError;
         }
 
+        $status = $kernel->check((bool) $request->boolean('allow_dirty', true));
+        $status['latest_tag_release_notes_url'] = $this->releaseNotesResolver->resolve((string) ($this->managerStore->activeSource()['repo_url'] ?? ''), (string) ($status['latest_tag'] ?? ''));
+
         return response()->json([
             'ok' => true,
-            'data' => $kernel->check((bool) $request->boolean('allow_dirty', true)),
+            'data' => $status,
             'requested_at' => now()->toIso8601String(),
         ]);
     }

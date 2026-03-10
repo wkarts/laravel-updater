@@ -12,6 +12,7 @@ use Argws\LaravelUpdater\Support\GitMaintenance;
 use Argws\LaravelUpdater\Support\UpdaterLockTools;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\UiPermission;
+use Argws\LaravelUpdater\Support\ReleaseNotesResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\Storage;
 
 class ManagerController extends Controller
 {
-    public function __construct(private readonly ManagerStore $managerStore, private readonly UiPermission $permission)
+    public function __construct(private readonly ManagerStore $managerStore, private readonly UiPermission $permission, private readonly ReleaseNotesResolver $releaseNotesResolver)
     {
     }
 
@@ -725,6 +726,8 @@ class ManagerController extends Controller
                 }
             }
 
+            $status['latest_tag_release_notes_url'] = $this->releaseNotesResolver->resolve((string) ($this->managerStore->activeSource()['repo_url'] ?? ''), (string) ($status['latest_tag'] ?? ''));
+
             return $status;
         } catch (\Throwable $e) {
             return [
@@ -734,6 +737,7 @@ class ManagerController extends Controller
                 'has_updates' => false,
                 'latest_tag' => null,
                 'has_update_by_tag' => false,
+                'latest_tag_release_notes_url' => null,
                 'warning' => 'Falha ao consultar atualizações: ' . $e->getMessage(),
             ];
         }
