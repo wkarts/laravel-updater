@@ -10,6 +10,7 @@ use Argws\LaravelUpdater\Support\BackupCloudUploader;
 use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\StateStore;
+use Argws\LaravelUpdater\Support\BackupExcludes;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -112,11 +113,12 @@ class UpdateBackupCommand extends Command
         $fileManager->ensureDirectory($snapshotPath);
 
         $basePath = $snapshotPath . '/manual-snapshot-' . date('Ymd-His');
-        $excludes = config('updater.paths.exclude_snapshot', []);
-        if (!$includeVendor) {
-            $excludes[] = 'vendor';
-        }
-        $filePath = $archiveManager->createArchiveFromDirectory(base_path(), $basePath, $compression, array_values(array_unique($excludes)));
+        $excludes = BackupExcludes::snapshot(
+            includeVendor: $includeVendor,
+            excludeStorage: (bool) config('updater.snapshot.exclude_storage', false),
+            excludeUploads: false,
+        );
+        $filePath = $archiveManager->createArchiveFromDirectory(base_path(), $basePath, $compression, $excludes);
 
         return $this->insertBackupRow('snapshot', $filePath, $runId, $stateStore, $managerStore, $cloudUploader);
     }

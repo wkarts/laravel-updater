@@ -57,11 +57,10 @@ class OperationsController extends Controller
 
         $action = (string) $request->input('action', 'apply');
         $shouldDryRunFirst = $action === 'simulate' || ($action === '' && (bool) $request->boolean('dry_run_before', true));
+        $profile = $this->managerStore->activeProfile();
+        $profileOptions = $this->resolveActiveBackupOptions();
 
         if ($shouldDryRunFirst) {
-            $profile = $this->managerStore->activeProfile();
-        $profileOptions = is_array($profile) ? ($profile['options'] ?? []) : [];
-            $profileOptions = $this->resolveActiveBackupOptions();
 
             try {
                 $runId = $dispatcher->triggerUpdate([
@@ -76,12 +75,9 @@ class OperationsController extends Controller
                     'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
+                    'backup_type' => 'full',
                 ]);
-                return [
-                'provider' => $provider,
-                'remote_path' => (string) ($result['remote_path'] ?? ''),
-            ];
-        } catch (\Throwable $e) {
+            } catch (\Throwable $e) {
                 return back()->withErrors(['update' => 'Falha ao executar dry-run: ' . $e->getMessage()])->withInput();
             }
 
@@ -117,6 +113,7 @@ class OperationsController extends Controller
                     'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
+                    'backup_type' => 'full',
                 ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao aplicar atualização: ' . $e->getMessage()])->withInput();
@@ -124,10 +121,10 @@ class OperationsController extends Controller
 
         if ($runId !== null) {
             return redirect()->route('updater.runs.show', ['id' => $runId])
-                ->with('status', 'Atualização iniciada com backup FULL obrigatório concluído.');
+                ->with('status', 'Atualização iniciada com sucesso.');
         }
 
-        return back()->with('status', 'Atualização disparada com backup FULL obrigatório concluído.');
+        return back()->with('status', 'Atualização disparada com sucesso.');
     }
 
     public function approveAndExecute(int $id, Request $request, TriggerDispatcher $dispatcher): RedirectResponse
@@ -153,6 +150,9 @@ class OperationsController extends Controller
             $this->performMandatoryFullBackup($request);
         }
 
+        $profile = $this->managerStore->activeProfile();
+        $profileOptions = $this->resolveActiveBackupOptions();
+
         try {
             $runId = $dispatcher->triggerUpdate([
                 'allow_dirty' => false,
@@ -166,6 +166,7 @@ class OperationsController extends Controller
                     'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
+                    'backup_type' => 'full',
                 ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao executar atualização aprovada: ' . $e->getMessage()]);
@@ -175,11 +176,11 @@ class OperationsController extends Controller
 
         if ($runId !== null) {
             return redirect()->route('updater.runs.show', ['id' => $runId])
-                ->with('status', 'Atualização aprovada e iniciada com backup FULL obrigatório.');
+                ->with('status', 'Atualização aprovada e iniciada com sucesso.');
         }
 
         return redirect()->route('updater.section', ['section' => 'runs'])
-            ->with('status', 'Atualização aprovada e disparada com backup FULL obrigatório.');
+            ->with('status', 'Atualização aprovada e disparada com sucesso.');
     }
 
     public function runDetails(int $id)
@@ -532,17 +533,9 @@ class OperationsController extends Controller
 
     private function requiresFullBackupBeforeUpdate(): bool
     {
-        if ((bool) config('updater.backup.full_before_update', false)) {
-            return true;
-        }
-
-        if (!(bool) config('updater.backup.pre_update', true)) {
-            return false;
-        }
-
-        $type = strtolower(str_replace(' ', '', (string) config('updater.backup.pre_update_type', 'full')));
-
-        return in_array($type, ['full', 'full+snapshot', 'full+database'], true);
+        // O fluxo automático já executa FULL backup dentro da própria pipeline.
+        // Manter false aqui evita duplicidade (run extra de backup antes do update).
+        return false;
     }
 
     private function mapUpdateType(string $mode): string
