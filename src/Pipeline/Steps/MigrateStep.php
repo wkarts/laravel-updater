@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Pipeline\Steps;
 
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
+use Argws\LaravelUpdater\Migration\IdempotentMigrationService;
+use Argws\LaravelUpdater\Migration\MigrationRunReporter;
+use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
+use Illuminate\Container\Container;
 
 class MigrateStep implements PipelineStepInterface
 {
@@ -44,12 +48,41 @@ class MigrateStep implements PipelineStepInterface
                 throw $e;
             }
 
-            $fallback = ['php', 'artisan', 'migrate', '--force'];
-            if ((bool) ($options['dry_run'] ?? false)) {
-                $fallback[] = '--pretend';
+            // Fallback resiliente: executa o mesmo fluxo idempotente em-process,
+            // evitando regressão para `artisan migrate --force` puro.
+            $container = Container::getInstance();
+            if ($container === null) {
+                throw $e;
             }
-            $this->shellRunner->runOrFail($fallback);
-            $context['migrate_fallback'] = 'artisan migrate --force';
+
+            $service = $container->make(IdempotentMigrationService::class);
+
+            $runId = is_numeric($context['run_id'] ?? null) ? (int) $context['run_id'] : null;
+            $logFile = (string) config('updater.migrate.report_path', storage_path('logs/updater-migrate.log'));
+            if (str_contains($logFile, '{timestamp}')) {
+                $logFile = str_replace('{timestamp}', date('Ymd-His'), $logFile);
+            }
+
+            $reporter = new MigrationRunReporter(
+                $container->bound(StateStore::class) ? $container->make(StateStore::class) : null,
+                $logFile,
+                $runId,
+                (string) config('updater.migrate.log_channel', 'stack')
+            );
+
+            $mode = (bool) ($options['strict_migrate'] ?? false) ? 'strict' : (string) config('updater.migrate.mode', 'tolerant');
+            $service->run([
+                'idempotent' => (bool) config('updater.migrate.idempotent', true),
+                'database' => config('database.default'),
+                'mode' => $mode,
+                'strict' => $mode === 'strict',
+                'dry_run' => (bool) ($options['dry_run'] ?? false),
+                'retry_locks' => (int) config('updater.migrate.retry_locks', 2),
+                'retry_sleep_base' => (int) config('updater.migrate.retry_sleep_base', 3),
+                'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', true),
+            ], $reporter);
+
+            $context['migrate_fallback'] = 'in_process_idempotent_migrate';
         }
     }
 
