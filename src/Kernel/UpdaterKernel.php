@@ -7,7 +7,6 @@ namespace Argws\LaravelUpdater\Kernel;
 use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
 use Argws\LaravelUpdater\Exceptions\RollbackException;
 use Argws\LaravelUpdater\Pipeline\UpdatePipeline;
-use Argws\LaravelUpdater\Pipeline\Steps\BackupDatabaseStep;
 use Argws\LaravelUpdater\Pipeline\Steps\BuildAssetsStep;
 use Argws\LaravelUpdater\Pipeline\Steps\CacheClearStep;
 use Argws\LaravelUpdater\Pipeline\Steps\FullBackupStep;
@@ -22,7 +21,6 @@ use Argws\LaravelUpdater\Pipeline\Steps\PostUpdateCommandsStep;
 use Argws\LaravelUpdater\Pipeline\Steps\PreUpdateCommandsStep;
 use Argws\LaravelUpdater\Pipeline\Steps\MigrateStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SeedStep;
-use Argws\LaravelUpdater\Pipeline\Steps\SnapshotCodeStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SqlPatchStep;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\PreflightChecker;
@@ -46,17 +44,9 @@ class UpdaterKernel
 
     public static function makePipeline(array $services): UpdatePipeline
     {
-        $maintenanceEarly = (bool) config('updater.maintenance.enter_on_update_start', true);
-        if (isset($services['manager_store'])) {
-            try {
-                $runtime = $services['manager_store']->runtimeSettings();
-                if (isset($runtime['maintenance']['enter_on_update_start'])) {
-                    $maintenanceEarly = (bool) $runtime['maintenance']['enter_on_update_start'];
-                }
-            } catch (\Throwable $e) {
-                // mantém fallback de configuração padrão.
-            }
-        }
+        // Regra operacional: update real sempre entra em manutenção desde o início da pipeline.
+        // A exceção para manter o painel acessível segue no MaintenanceMode via --except (quando suportado).
+        $maintenanceEarly = true;
 
         $steps = [
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
@@ -67,9 +57,14 @@ class UpdaterKernel
         }
 
         $steps = array_merge($steps, [
-            new BackupDatabaseStep($services['backup'], $services['store'], (bool) config('updater.backup.enabled', true)),
-            new SnapshotCodeStep($services['shell'], $services['files'], $services['store'], config('updater.snapshot'), $services['archive'] ?? null),
-            new FullBackupStep($services['files'], $services['archive'], $services['store'], (bool) config('updater.backup.create_full_archive', false)),
+            new FullBackupStep(
+                $services['backup'],
+                $services['files'],
+                $services['archive'],
+                $services['store'],
+                (array) config('updater.snapshot', []),
+                (bool) config('updater.backup.enabled', true)
+            ),
             new PreUpdateCommandsStep($services['shell']),
         ]);
 
@@ -140,7 +135,7 @@ class UpdaterKernel
                     'versao_atual' => $this->codeDriver->currentRevision(),
                     'versao_alvo' => $status['remote'] ?? null,
                     'diff_commits' => $status['behind_by_commits'] ?? 0,
-                    'steps' => ['lock','backup_database','snapshot_code','pre_update_commands','maintenance_on','git_update','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','post_update_commands','health_check','maintenance_off'],
+                    'steps' => ['lock','backup_full','pre_update_commands','maintenance_on','git_update','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','post_update_commands','health_check','maintenance_off'],
                     'comandos_simulados' => [
                         'git fetch origin <branch>',
                         'git rev-list --count HEAD..origin/<branch>',
