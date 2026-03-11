@@ -36,6 +36,7 @@ class MigrationFailureClassifier
 
         $patterns = [
             ['type' => 'table', 'pattern' => "/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i", 'expects_absent' => false],
+            ['type' => 'table', 'pattern' => "/create table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
             ['type' => 'view', 'pattern' => "/view ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? already exists/i", 'expects_absent' => false],
             ['type' => 'column', 'pattern' => "/duplicate column name:? ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
             ['type' => 'index', 'pattern' => "/duplicate key name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
@@ -89,6 +90,7 @@ class MigrationFailureClassifier
     {
         $phrases = [
             'already exists',
+            'já existe',
             'base table or view already exists',
             'duplicate column name',
             'duplicate key name',

@@ -66,11 +66,46 @@ class IdempotentMigrationService
         ]);
 
         foreach ($pending as $name => $path) {
+            $drift = $this->driftDetector->inspect($path, is_string($connection) ? $connection : null);
+
             if ($dryRun) {
-                $simulated = $this->driftDetector->inspect($path, is_string($connection) ? $connection : null);
                 $stats['skipped_dry_run']++;
-                $reporter->log('info', 'Dry-run de migration.', ['migration' => $name, 'path' => $path, 'simulation' => $simulated]);
+                $reporter->log('info', 'Dry-run de migration.', ['migration' => $name, 'path' => $path, 'simulation' => $drift]);
                 continue;
+            }
+
+            if ($isEnabled && $reconcileAlreadyExists && !$strict && ($drift['action'] ?? null) === 'reconcile') {
+                $preflightObject = (array) ($drift['object'] ?? []);
+                $preflightObject['expects_absent'] = (bool) ($preflightObject['expects_absent'] ?? false);
+
+                $reconciled = $this->reconciler->reconcile(
+                    $repository,
+                    $name,
+                    $preflightObject,
+                    ['sqlstate' => null, 'errno' => null, 'message' => (string) ($drift['reason'] ?? 'preflight_reconcile')],
+                    is_string($connection) ? $connection : null,
+                    false
+                );
+
+                if (($reconciled['reconciled'] ?? false) === true) {
+                    $stats['reconciled']++;
+                    if (($reconciled['warning'] ?? false) === true) {
+                        $stats['warnings']++;
+                    }
+                    $stats['divergences'][] = [
+                        'migration' => $name,
+                        'type' => 'PRECHECK_RECONCILED',
+                        'object' => $preflightObject,
+                        'note' => (string) ($drift['reason'] ?? 'preflight_reconcile'),
+                    ];
+                    $reporter->log('warning', 'Migration reconciliada por pré-checagem de drift (sem executar SQL).', [
+                        'migration' => $name,
+                        'path' => $path,
+                        'drift' => $drift,
+                        'result' => $reconciled,
+                    ]);
+                    continue;
+                }
             }
 
             $attempt = 0;
