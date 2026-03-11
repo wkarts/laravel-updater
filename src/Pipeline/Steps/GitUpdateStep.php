@@ -228,14 +228,19 @@ class GitUpdateStep implements PipelineStepInterface
         $runId = (string) ($context['run_id'] ?? 'manual');
         $msg = 'laravel-updater run ' . $runId . ' ' . date('Y-m-d H:i:s');
 
-        $res = $this->shellRunner->run(['git', 'stash', 'push', '-a', '-m', $msg], $cwd, $env);
+        // Importante: NÃO usar -a/-u aqui.
+        // -a remove arquivos ignored/untracked do working tree, incluindo .env e vendor/,
+        // podendo derrubar a aplicação durante a atualização.
+        // Mantemos stash somente de arquivos rastreados; conflitos de untracked
+        // continuam sendo tratados por quarentena/clean controlado nos retries.
+        $res = $this->shellRunner->run(['git', 'stash', 'push', '-m', $msg], $cwd, $env);
         if (($res['exit_code'] ?? 1) !== 0) {
             throw new \RuntimeException('Falha ao criar stash automático antes do update: ' . (($res['stderr'] ?? '') ?: 'erro desconhecido'));
         }
 
         $context['git_auto_stash'] = true;
         $context['git_auto_stash_message'] = $msg;
-        $context['git_update_log'][] = 'stash automático criado para permitir merge/checkout em working tree sujo.';
+        $context['git_update_log'][] = 'stash automático (somente arquivos rastreados) criado para permitir merge/checkout em working tree sujo sem remover .env/vendor.';
     }
 
     private function backupDotEnv(array &$context): void
@@ -470,8 +475,7 @@ class GitUpdateStep implements PipelineStepInterface
                 '-e', '.env',
                 '-e', '.env.*',
                 '-e', 'storage/',
-                '-e', 'public/storage/',
-                '-e', 'public/uploads/',
+                '-e', 'public/',
                 '-e', 'bootstrap/cache/',
                 '-e', 'vendor/',
             ], $cwd, $env);
@@ -484,8 +488,8 @@ class GitUpdateStep implements PipelineStepInterface
         return $normalized === '.env'
             || str_starts_with($normalized, '.env.')
             || str_starts_with($normalized, 'storage/')
-            || str_starts_with($normalized, 'public/storage/')
-            || str_starts_with($normalized, 'public/uploads/')
+            || $normalized === 'public'
+            || str_starts_with($normalized, 'public/')
             || str_starts_with($normalized, 'bootstrap/cache/')
             || str_starts_with($normalized, 'vendor/');
     }
@@ -596,8 +600,7 @@ class GitUpdateStep implements PipelineStepInterface
             '.env',
             '.env.*',
             'storage/',
-            'public/storage/',
-            'public/uploads/',
+            'public/',
             'bootstrap/cache/',
             'vendor/',
         ];
@@ -614,7 +617,7 @@ class GitUpdateStep implements PipelineStepInterface
         }
 
         $this->shellRunner->runOrFailWithTimeout($args, $cwd, $env, 600);
-        $context['git_update_log'][] = 'git clean controlado executado (preservando .env/storage/uploads).';
+        $context['git_update_log'][] = 'git clean controlado executado (preservando .env/vendor/storage/public).';
     }
 
 

@@ -386,11 +386,7 @@ class GitDriver implements CodeDriverInterface
             return true;
         }
 
-        if ($normalized === 'public/storage' || str_starts_with($normalized, 'public/storage/')) {
-            return true;
-        }
-
-        if ($normalized === 'public/uploads' || str_starts_with($normalized, 'public/uploads/')) {
+        if ($normalized === 'public' || str_starts_with($normalized, 'public/')) {
             return true;
         }
 
