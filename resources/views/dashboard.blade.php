@@ -5,6 +5,13 @@
 @section('breadcrumbs', 'Dashboard')
 
 @section('content')
+@php
+    $user = request()->attributes->get('updater_user');
+    $perm = app(\Argws\LaravelUpdater\Support\UiPermission::class);
+    $canRollback = !is_array($user) || $perm->has($user, 'updates.rollback');
+    $canManageMaintenance = !is_array($user) || $perm->has($user, 'maintenance.manage');
+@endphp
+
 <div class="grid">
     <div class="card dashboard-summary-card">
         <h3>Resumo rápido</h3>
@@ -12,19 +19,23 @@
         <p><span class="badge">Fonte ativa: {{ $activeSource['name'] ?? 'repositório local' }}</span></p>
         <div class="form-inline dashboard-actions" style="margin-top:10px;">
             <form method="POST" action="{{ route('updater.trigger.update') }}">@csrf <button class="btn btn-primary" data-update-action="1" type="submit">Executar atualização</button></form>
-            <form method="POST" action="{{ route('updater.trigger.rollback') }}">@csrf <button class="btn btn-danger" type="submit">Executar rollback</button></form>
-            <form method="POST" action="{{ route('updater.maintenance.on') }}" data-maintenance-form="on">
-                @csrf
-                <input type="hidden" name="maintenance_confirmation" value="">
-                <input type="hidden" name="maintenance_2fa_code" value="">
-                <button class="btn btn-secondary" type="submit">Entrar em manutenção agora</button>
-            </form>
-            <form method="POST" action="{{ route('updater.maintenance.off') }}" data-maintenance-form="off">
-                @csrf
-                <input type="hidden" name="maintenance_confirmation" value="">
-                <input type="hidden" name="maintenance_2fa_code" value="">
-                <button class="btn btn-ghost" type="submit">Sair da manutenção agora</button>
-            </form>
+            @if($canRollback)
+                <form method="POST" action="{{ route('updater.trigger.rollback') }}">@csrf <button class="btn btn-danger" type="submit">Executar rollback</button></form>
+            @endif
+            @if($canManageMaintenance)
+                <form method="POST" action="{{ route('updater.maintenance.on') }}" data-maintenance-form="on">
+                    @csrf
+                    <input type="hidden" name="maintenance_confirmation" value="">
+                    <input type="hidden" name="maintenance_2fa_code" value="">
+                    <button class="btn btn-secondary" type="submit">Entrar em manutenção agora</button>
+                </form>
+                <form method="POST" action="{{ route('updater.maintenance.off') }}" data-maintenance-form="off">
+                    @csrf
+                    <input type="hidden" name="maintenance_confirmation" value="">
+                    <input type="hidden" name="maintenance_2fa_code" value="">
+                    <button class="btn btn-ghost" type="submit">Sair da manutenção agora</button>
+                </form>
+            @endif
         </div>
     </div>
     <div class="card dashboard-status-card">
