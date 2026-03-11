@@ -19,7 +19,8 @@ class BackupExcludes
         bool $excludeStorage,
         bool $excludeUploads = false,
         ?array $baseExcludes = null,
-        ?array $uploadsPaths = null
+        ?array $uploadsPaths = null,
+        bool $preservePublic = true
     ): array
     {
         $excludes = $baseExcludes ?? (array) config('updater.paths.exclude_snapshot', []);
@@ -40,6 +41,10 @@ class BackupExcludes
         if (!$excludeUploads) {
             $uploads = $uploadsPaths ?? (array) config('updater.paths.uploads_paths', ['public/uploads']);
             $excludes = self::removeUploadPaths($excludes, $uploads);
+        }
+
+        if ($preservePublic && !$excludeUploads) {
+            $excludes = self::removePublicPaths($excludes);
         }
 
         return array_values(array_unique(array_filter(array_map(
@@ -69,4 +74,25 @@ class BackupExcludes
             return !in_array($candidate, $normalizedUploads, true);
         }));
     }
+    /** @param array<int,string> $excludes @return array<int,string> */
+    private static function removePublicPaths(array $excludes): array
+    {
+        return array_values(array_filter($excludes, static function (mixed $item): bool {
+            $candidate = trim((string) $item, '/');
+            if ($candidate === '') {
+                return false;
+            }
+
+            if (in_array($candidate, self::IMMUTABLE_EXCLUDES, true)) {
+                return true;
+            }
+
+            if ($candidate === 'public' || str_starts_with($candidate, 'public/')) {
+                return false;
+            }
+
+            return true;
+        }));
+    }
+
 }

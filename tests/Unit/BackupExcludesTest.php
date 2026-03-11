@@ -52,4 +52,20 @@ class BackupExcludesTest extends TestCase
         $this->assertContains('storage/framework/down', $excludes);
     }
 
+    public function testSnapshotAlwaysKeepsFullPublicTreeByDefault(): void
+    {
+        $excludes = BackupExcludes::snapshot(
+            includeVendor: true,
+            excludeStorage: false,
+            excludeUploads: false,
+            baseExcludes: ['public', 'public/uploads', 'public/build', 'bootstrap/cache'],
+            uploadsPaths: ['public/uploads'],
+        );
+
+        $this->assertNotContains('public', $excludes);
+        $this->assertNotContains('public/uploads', $excludes);
+        $this->assertNotContains('public/build', $excludes);
+        $this->assertContains('bootstrap/cache', $excludes);
+    }
+
 }

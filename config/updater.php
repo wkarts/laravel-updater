@@ -113,6 +113,7 @@ return [
             'storage/app/updater/snapshots',
         ],
         // Caminhos de uploads/dados do cliente que DEVEM entrar no snapshot/full por padrão.
+        // Observação: a pasta public inteira é preservada por padrão no snapshot/full.
         'uploads_paths' => ['public/uploads'],
     ],
 
