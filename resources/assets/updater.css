@@ -122,7 +122,7 @@ body {
     justify-content: space-between;
     align-items: center;
     gap: 6px;
-    font-size: 10.5px;
+    font-size: 11.5px;
     border-bottom: 1px dashed var(--line);
     padding-bottom: 3px;
 }
@@ -135,6 +135,7 @@ body {
 .sidebar-meta-card li span {
     color: var(--muted);
     line-height: 1.2;
+    min-width: 0;
 }
 
 .sidebar-meta-card li strong {
@@ -145,6 +146,13 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 5px;
+    max-width: 60%;
+}
+
+.sidebar-meta-card li strong[title] {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
 }
 
 .status-led {
@@ -316,6 +324,8 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     .topbar-left p { display: none; }
     .btn, input, select, textarea { font-size: 14px; }
     .form-inline > * { min-width: 100%; }
+    .sidebar-meta-card li { font-size: 12px; }
+    .sidebar-meta-card li strong { max-width: 62%; }
 }
 
 
