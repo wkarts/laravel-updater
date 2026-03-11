@@ -163,19 +163,20 @@ class GitDriver implements CodeDriverInterface
 
     public function update(): string
     {
-        $path = $this->path;
-        $remote = $this->remote;
-        $branch = $this->branch;
+        $config = $this->runtimeConfig();
+        $path = $this->cwd();
+        $remote = (string) ($config['remote'] ?? 'origin');
+        $branch = (string) ($config['branch'] ?? 'main');
+        $updateType = strtolower((string) ($config['update_type'] ?? config('updater.git.update_type', 'git_ff_only')));
         $mode = strtolower((string) config('updater.git.default_update_mode', env('UPDATER_GIT_DEFAULT_UPDATE_MODE', 'merge')));
-        $tag = (string) config('updater.git.target_tag', env('UPDATER_GIT_TARGET_TAG', ''));
+        $tag = trim((string) ($config['tag'] ?? config('updater.git.tag', env('UPDATER_GIT_TARGET_TAG', ''))));
 
         $timeout = (int) env('UPDATER_STEP_TIMEOUT_GIT', 600);
         $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
 
-        // Mantém repo saudável e evita crescimento do .git
-        if ((bool) env('UPDATER_GIT_AUTO_PRUNE', true)) {
-            $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--prune-tags', $remote], $path, [], $timeout);
-        }
+        $shouldPrune = (bool) env('UPDATER_GIT_AUTO_PRUNE', true);
+        $selfPackageBackup = $this->backupSelfPackageSnapshot();
+        $vendorBackup = $this->backupVendorSnapshot($path);
 
         // NUNCA substituir o .env atual.
         // Mesmo em tag/branch que contenha arquivos semelhantes, a aplicação SEMPRE deve reaproveitar o .env atual.
@@ -183,53 +184,79 @@ class GitDriver implements CodeDriverInterface
 
         try {
             // Nunca baixar todos os branches: fetch somente do branch/tag alvo
-            if ($mode === 'tag') {
+            if ($updateType === 'git_tag' || $mode === 'tag') {
                 if ($tag === '') {
                     throw new \RuntimeException('Modo tag ativo, mas UPDATER_GIT_TARGET_TAG não foi informado.');
                 }
 
-            // Busca somente a tag alvo (shallow)
-            $this->shellRunner->runOrFailWithTimeout(
-                ['git', 'fetch', '--prune', '--depth='.$depth, $remote, 'refs/tags/'.$tag.':refs/tags/'.$tag],
-                $path,
-                [],
-                $timeout
-            );
+                $tagFetchArgs = ['git', 'fetch', '--depth=' . $depth];
+                if ($shouldPrune) {
+                    $tagFetchArgs[] = '--prune';
+                }
+                $tagFetchArgs[] = $remote;
+                $tagFetchArgs[] = 'refs/tags/' . $tag . ':refs/tags/' . $tag;
 
-            // Se existirem arquivos untracked que conflitam com o conteúdo do tag, o checkout aborta.
-            // Ex.: "untracked working tree files would be overwritten by checkout".
-            $this->quarantineUntrackedConflicts('tags/'.$tag, $path, $timeout);
+                // Busca somente a tag alvo (shallow), evitando fetch amplo de refs.
+                $this->shellRunner->runOrFailWithTimeout($tagFetchArgs, $path, $this->gitEnv(), $timeout);
 
-                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/'.$tag], $path, [], $timeout);
+                // Se existirem arquivos untracked que conflitam com o conteúdo do tag, o checkout aborta.
+                // Ex.: "untracked working tree files would be overwritten by checkout".
+                $this->quarantineUntrackedConflicts('tags/' . $tag, $path, $timeout);
+
+                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/' . $tag], $path, $this->gitEnv(), $timeout);
+                $this->restoreSelfPackageIfMissing($selfPackageBackup);
+                $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
             } else {
-                // Fetch shallow apenas do branch alvo
-                $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, [], $timeout);
+                // Fetch shallow apenas do branch alvo, sem trazer tags desnecessárias.
+                $branchFetchArgs = ['git', 'fetch', '--no-tags', '--depth=' . $depth];
+                if ($shouldPrune) {
+                    $branchFetchArgs[] = '--prune';
+                }
+                $branchFetchArgs[] = $remote;
+                $branchFetchArgs[] = $branch;
+                $this->shellRunner->runOrFailWithTimeout($branchFetchArgs, $path, $this->gitEnv(), $timeout);
 
                 // Evita aborto por untracked conflitantes com o branch remoto
-                $this->quarantineUntrackedConflicts($remote.'/'.$branch, $path, $timeout);
+                $this->quarantineUntrackedConflicts($remote . '/' . $branch, $path, $timeout);
 
-                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', $branch], $path, [], $timeout);
+                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', $branch], $path, $this->gitEnv(), $timeout);
+                $this->restoreSelfPackageIfMissing($selfPackageBackup);
+                $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
 
-            if ($mode === 'ff-only' || $mode === 'ff_only') {
-                $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--ff-only', $remote.'/'.$branch], $path, [], $timeout);
-            } elseif ($mode === 'merge') {
-                $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--no-edit', $remote.'/'.$branch], $path, [], $timeout);
-            } elseif ($mode === 'full' || $mode === 'pull') {
-                // Full: força o branch local igual ao remoto
-                $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $remote.'/'.$branch], $path, [], $timeout);
-            } else {
-                throw new \RuntimeException('UPDATER_GIT_DEFAULT_UPDATE_MODE inválido: '.$mode);
+                if ($mode === 'ff-only' || $mode === 'ff_only') {
+                    $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--ff-only', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
+                    $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
+                } elseif ($mode === 'merge') {
+                    $this->shellRunner->runOrFailWithTimeout(['git', 'merge', '--no-edit', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
+                    $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
+                } elseif ($mode === 'full' || $mode === 'pull') {
+                    // Full: força o branch local igual ao remoto
+                    $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
+                    $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
+                } else {
+                    throw new \RuntimeException('UPDATER_GIT_DEFAULT_UPDATE_MODE inválido: ' . $mode);
+                }
             }
-        }
 
             if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
-                $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--aggressive', '--prune=now'], $path, [], $timeout);
+                // Evita operações agressivas longas durante update (pode parecer loop infinito em produção).
+                $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--prune=now'], $path, $this->gitEnv(), $timeout);
             }
 
             return $this->currentRevision();
+        } catch (\Throwable $e) {
+            // Garante que o próprio updater continue carregável para registrar falha corretamente.
+            $this->restoreSelfPackageIfMissing($selfPackageBackup);
+            $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
+            throw $e;
         } finally {
             // Restaura o .env original SEMPRE (sucesso ou falha).
             $this->restoreEnvFile($path);
+            $this->cleanupSelfPackageSnapshot($selfPackageBackup);
+            $this->cleanupVendorSnapshot($vendorBackup);
         }
     }
 
@@ -300,10 +327,7 @@ class GitDriver implements CodeDriverInterface
 
         $conflicts = [];
         foreach ($untrackedList as $path) {
-            if ($path === '.env') {
-                continue;
-            }
-            if (str_starts_with($path, 'storage/') || str_starts_with($path, 'vendor/') || str_starts_with($path, 'node_modules/')) {
+            if ($this->isProtectedRuntimePath($path)) {
                 continue;
             }
             if (isset($trackedSet[$path])) {
@@ -340,6 +364,44 @@ class GitDriver implements CodeDriverInterface
         }
     }
 
+    private function isProtectedRuntimePath(string $path): bool
+    {
+        $normalized = str_replace('\\', '/', ltrim(trim($path), '/'));
+        if ($normalized === '') {
+            return true;
+        }
+
+        if ($normalized === '.env' || str_starts_with($normalized, '.env.')) {
+            return true;
+        }
+
+        if ($normalized === 'vendor' || str_starts_with($normalized, 'vendor/')) {
+            return true;
+        }
+
+        if ($normalized === 'storage' || str_starts_with($normalized, 'storage/')) {
+            return true;
+        }
+
+        if ($normalized === 'public/storage' || str_starts_with($normalized, 'public/storage/')) {
+            return true;
+        }
+
+        if ($normalized === 'public/uploads' || str_starts_with($normalized, 'public/uploads/')) {
+            return true;
+        }
+
+        if ($normalized === 'bootstrap/cache' || str_starts_with($normalized, 'bootstrap/cache/')) {
+            return true;
+        }
+
+        if ($normalized === 'node_modules' || str_starts_with($normalized, 'node_modules/')) {
+            return true;
+        }
+
+        return false;
+    }
+
     private function copyRecursive(string $src, string $dst): void
     {
         if (is_dir($src) && !is_link($src)) {
@@ -372,22 +434,153 @@ class GitDriver implements CodeDriverInterface
         @unlink($path);
     }
 
+    private function backupSelfPackageSnapshot(): ?array
+    {
+        $packageRoot = dirname(__DIR__, 2);
+        if (!is_dir($packageRoot)) {
+            return null;
+        }
+
+        $tmpDir = rtrim(sys_get_temp_dir(), '/\\') . '/updater-self-' . uniqid('', true);
+        @mkdir($tmpDir, 0775, true);
+        $snapshotRoot = $tmpDir . '/laravel-updater';
+        $this->copyRecursive($packageRoot, $snapshotRoot);
+
+        if (!is_dir($snapshotRoot)) {
+            return null;
+        }
+
+        return [
+            'target' => $packageRoot,
+            'snapshot' => $snapshotRoot,
+            'tmp' => $tmpDir,
+            'sentinel' => 'src/Exceptions/UpdaterException.php',
+        ];
+    }
+
+    private function restoreSelfPackageIfMissing(?array $snapshot): void
+    {
+        if (!is_array($snapshot)) {
+            return;
+        }
+
+        $target = (string) ($snapshot['target'] ?? '');
+        $source = (string) ($snapshot['snapshot'] ?? '');
+        $sentinel = trim((string) ($snapshot['sentinel'] ?? ''));
+        if ($target === '' || $source === '' || !is_dir($source)) {
+            return;
+        }
+
+        $targetExists = is_dir($target);
+        $sentinelHealthy = $sentinel !== ''
+            ? is_file(rtrim($target, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $sentinel))
+            : $targetExists;
+
+        // Restaura tanto ausência total quanto deleção parcial do pacote.
+        if ($targetExists && $sentinelHealthy) {
+            return;
+        }
+
+        @mkdir(dirname($target), 0775, true);
+        $this->copyRecursive($source, $target);
+
+        // Segunda tentativa defensiva para casos de IO intermitente.
+        if ($sentinel !== '') {
+            $sentinelPath = rtrim($target, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $sentinel);
+            if (!is_file($sentinelPath)) {
+                $this->copyRecursive($source, $target);
+            }
+        }
+    }
+
+    private function cleanupSelfPackageSnapshot(?array $snapshot): void
+    {
+        if (!is_array($snapshot)) {
+            return;
+        }
+
+        $tmp = (string) ($snapshot['tmp'] ?? '');
+        if ($tmp !== '') {
+            $this->removeRecursive($tmp);
+        }
+    }
+
+    private function backupVendorSnapshot(string $cwd): ?array
+    {
+        $vendorPath = rtrim($cwd, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'vendor';
+        if (!is_dir($vendorPath)) {
+            return null;
+        }
+
+        $tmpDir = rtrim(sys_get_temp_dir(), '/\\') . '/updater-vendor-' . uniqid('', true);
+        @mkdir($tmpDir, 0775, true);
+        $snapshot = $tmpDir . '/vendor';
+        $this->copyRecursive($vendorPath, $snapshot);
+
+        if (!is_dir($snapshot)) {
+            return null;
+        }
+
+        return [
+            'target' => $vendorPath,
+            'snapshot' => $snapshot,
+            'tmp' => $tmpDir,
+            'sentinel' => 'autoload.php',
+            'updater_sentinel' => 'argws/laravel-updater/src/Exceptions/UpdaterException.php',
+        ];
+    }
+
+    private function restoreVendorIfCriticalMissing(string $cwd, ?array $vendorSnapshot): void
+    {
+        if (!is_array($vendorSnapshot)) {
+            return;
+        }
+
+        $target = (string) ($vendorSnapshot['target'] ?? '');
+        $source = (string) ($vendorSnapshot['snapshot'] ?? '');
+        if ($target === '' || $source === '' || !is_dir($source)) {
+            return;
+        }
+
+        $autoload = rtrim($target, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string) ($vendorSnapshot['sentinel'] ?? 'autoload.php'));
+        $updaterSentinel = rtrim($target, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string) ($vendorSnapshot['updater_sentinel'] ?? 'argws/laravel-updater/src/Exceptions/UpdaterException.php'));
+
+        if (is_dir($target) && is_file($autoload) && is_file($updaterSentinel)) {
+            return;
+        }
+
+        @mkdir(dirname($target), 0775, true);
+        $this->copyRecursive($source, $target);
+    }
+
+    private function cleanupVendorSnapshot(?array $vendorSnapshot): void
+    {
+        if (!is_array($vendorSnapshot)) {
+            return;
+        }
+
+        $tmp = (string) ($vendorSnapshot['tmp'] ?? '');
+        if ($tmp !== '') {
+            $this->removeRecursive($tmp);
+        }
+    }
+
     public function rollback(string $revision): void
     {
         $timeout = (int) env('UPDATER_STEP_TIMEOUT_GIT', 600);
         $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
 
         $config = $this->runtimeConfig();
-        $path = (string) ($config['path'] ?? $this->path);
-        $remote = (string) ($config['remote'] ?? $this->remote);
-        $branch = (string) ($config['branch'] ?? $this->branch);
+        $path = $this->cwd();
+        $remote = (string) ($config['remote'] ?? 'origin');
+        $branch = (string) ($config['branch'] ?? 'main');
 
         // Atualiza apenas o branch alvo (shallow) e volta pro revision (hard)
-        $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--prune', '--depth='.$depth, $remote, $branch], $path, $this->gitEnv(), $timeout);
+        $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--no-tags', '--prune', '--depth=' . $depth, $remote, $branch], $path, $this->gitEnv(), $timeout);
         $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $revision], $path, $this->gitEnv(), $timeout);
 
         if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
-            $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--aggressive', '--prune=now'], $path, $this->gitEnv(), $timeout);
+            $this->shellRunner->runOrFailWithTimeout(['git', 'gc', '--prune=now'], $path, $this->gitEnv(), $timeout);
         }
     }
 

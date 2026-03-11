@@ -18,6 +18,9 @@ if ((bool) config('updater.ui.enabled', true)) {
         Route::get('/assets/branding/favicon', [UpdaterUiController::class, 'brandingFavicon'])->name('updater.branding.favicon');
         Route::get('/assets/branding/maintenance-logo', [UpdaterUiController::class, 'brandingMaintenanceLogo'])->name('updater.branding.maintenance_logo');
         Route::post('/api/trigger', [UpdaterUiController::class, 'apiTrigger'])->name('updater.api.trigger');
+        Route::get('/api/status', [UpdaterUiController::class, 'apiStatus'])->name('updater.api.status');
+        Route::get('/api/check', [UpdaterUiController::class, 'apiCheck'])->name('updater.api.check');
+        Route::get('/api/runs', [UpdaterUiController::class, 'apiRuns'])->name('updater.api.runs');
     });
 
     if ((bool) config('updater.ui.auth.enabled', false)) {
