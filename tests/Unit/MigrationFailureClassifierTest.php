@@ -21,6 +21,17 @@ class MigrationFailureClassifierTest extends TestCase
         $this->assertSame('abertura_caixas', $object['name']);
     }
 
+    public function testInfereTabelaViaSqlCreateTableQuandoMensagemNaoTemNomeTabelaNoPrefixo(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception("SQLSTATE[42S01]: Base table or view already exists: 1050 Table 'abertura_caixas' already exists (Connection: mysql, SQL: create table `abertura_caixas` (`id` int unsigned not null auto_increment primary key))", 1050);
+
+        $this->assertSame(MigrationFailureClassifier::ALREADY_EXISTS, $classifier->classify($ex));
+        $object = $classifier->inferObject($ex);
+        $this->assertSame('table', $object['type']);
+        $this->assertSame('abertura_caixas', $object['name']);
+    }
+
     public function testClassificaDuplicateForeignKeyConstraintName(): void
     {
         $classifier = new MigrationFailureClassifier();
