@@ -6,6 +6,7 @@ namespace Argws\LaravelUpdater\Drivers;
 
 use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
 use Argws\LaravelUpdater\Exceptions\GitException;
+use Argws\LaravelUpdater\Exceptions\UpdaterException;
 use Argws\LaravelUpdater\Support\ShellRunner;
 
 class GitDriver implements CodeDriverInterface
@@ -163,6 +164,8 @@ class GitDriver implements CodeDriverInterface
 
     public function update(): string
     {
+        $this->preloadExceptionClasses();
+
         $config = $this->runtimeConfig();
         $path = $this->cwd();
         $remote = (string) ($config['remote'] ?? 'origin');
@@ -567,6 +570,8 @@ class GitDriver implements CodeDriverInterface
 
     public function rollback(string $revision): void
     {
+        $this->preloadExceptionClasses();
+
         $timeout = (int) env('UPDATER_STEP_TIMEOUT_GIT', 600);
         $depth = (int) env('UPDATER_GIT_SHALLOW_DEPTH', 50);
 
@@ -633,6 +638,15 @@ class GitDriver implements CodeDriverInterface
         }
 
         return $merged;
+    }
+
+    private function preloadExceptionClasses(): void
+    {
+        // Em alguns cenários de checkout/clean agressivo do host, o autoloader pode tentar
+        // carregar exceções do próprio pacote após arquivos temporariamente indisponíveis.
+        // Forçamos o preload aqui para evitar fatal por "Failed to open stream" durante git_update.
+        class_exists(UpdaterException::class);
+        class_exists(GitException::class);
     }
 
     private function currentTag(): ?string

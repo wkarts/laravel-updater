@@ -44,17 +44,9 @@ class UpdaterKernel
 
     public static function makePipeline(array $services): UpdatePipeline
     {
-        $maintenanceEarly = (bool) config('updater.maintenance.enter_on_update_start', true);
-        if (isset($services['manager_store'])) {
-            try {
-                $runtime = $services['manager_store']->runtimeSettings();
-                if (isset($runtime['maintenance']['enter_on_update_start'])) {
-                    $maintenanceEarly = (bool) $runtime['maintenance']['enter_on_update_start'];
-                }
-            } catch (\Throwable $e) {
-                // mantém fallback de configuração padrão.
-            }
-        }
+        // Regra operacional: update real sempre entra em manutenção desde o início da pipeline.
+        // A exceção para manter o painel acessível segue no MaintenanceMode via --except (quando suportado).
+        $maintenanceEarly = true;
 
         $steps = [
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
