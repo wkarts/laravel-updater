@@ -14,6 +14,23 @@ composer require argws/laravel-updater
 php artisan vendor:publish --tag=updater-config
 ```
 
+## Pré-requisito obrigatório: PDO SQLite
+
+O updater usa SQLite para estado interno (runs, sessões e metadados).  
+Em qualquer ambiente (CLI/FPM/FrankenPHP), habilite a extensão `pdo_sqlite`.
+
+Exemplo de verificação:
+
+```bash
+php -m | grep -i sqlite
+```
+
+Se o comando não listar `pdo_sqlite`, habilite no `php.ini`:
+
+```ini
+extension=pdo_sqlite
+```
+
 ### Atualização do config após update do pacote
 ### Publicação automática de config/views (equivalente ao --force)
 A partir desta versão, o updater pode sincronizar automaticamente (em execução de console) os arquivos publicados de `config` e `views` para manter o pacote atualizado, com comportamento equivalente ao `vendor:publish --force`.

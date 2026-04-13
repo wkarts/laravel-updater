@@ -65,9 +65,9 @@ class UpdaterServiceProvider extends ServiceProvider
         $this->app->singleton(ArchiveManager::class, fn () => new ArchiveManager());
         $this->app->singleton(EnvironmentDetector::class, fn () => new EnvironmentDetector());
         $this->app->singleton(StateStore::class, function () {
-            // Não força conexão no boot do Laravel/composer.
-            // A criação do schema continua ocorrendo de forma explícita nos fluxos do updater.
-            return new StateStore((string) config('updater.sqlite.path'));
+            $store = new StateStore((string) config('updater.sqlite.path'));
+            $store->ensureSchema();
+            return $store;
         });
 
         // IMPORTANTE:
