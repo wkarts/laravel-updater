@@ -11,6 +11,7 @@ use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Illuminate\Container\Container;
 use Illuminate\Support\Facades\Artisan;
+use Symfony\Component\Console\Exception\CommandNotFoundException;
 
 class MigrateStep implements PipelineStepInterface
 {
@@ -82,17 +83,28 @@ class MigrateStep implements PipelineStepInterface
 
             return true;
         } catch (\Throwable $e) {
-            $message = mb_strtolower($e->getMessage());
-            if (str_contains($message, 'there are no commands defined in the "updater" namespace')
-                || str_contains($message, 'command "updater:migrate" is not defined')
-                || str_contains($message, 'the command "updater:migrate" does not exist')
-                || str_contains($message, 'not enough arguments')) {
+            if ($this->isUpdaterMigrateCommandMissing($e)) {
                 return false;
             }
 
             // Falhas reais de migrate em processo devem subir.
             throw $e;
         }
+    }
+
+    private function isUpdaterMigrateCommandMissing(\Throwable $e): bool
+    {
+        $message = mb_strtolower($e->getMessage());
+
+        if ($e instanceof CommandNotFoundException && str_contains($message, 'updater:migrate')) {
+            return true;
+        }
+
+        return str_contains($message, 'there are no commands defined in the "updater" namespace')
+            || str_contains($message, 'command "updater:migrate" is not defined')
+            || str_contains($message, 'the command "updater:migrate" does not exist')
+            || str_contains($message, 'comando "updater:migrate" não está definido')
+            || str_contains($message, 'not enough arguments');
     }
 
     /** @param array<string,mixed> $options */
