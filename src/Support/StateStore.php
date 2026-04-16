@@ -212,6 +212,20 @@ class StateStore
             last_notified_key TEXT NOT NULL,
             notified_at TEXT NOT NULL
         )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_migration_reconciliations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NULL,
+            migration TEXT NOT NULL,
+            strategy TEXT NOT NULL,
+            reason TEXT NULL,
+            reconciled INTEGER NOT NULL DEFAULT 0,
+            object_json TEXT NULL,
+            validation_json TEXT NULL,
+            meta_json TEXT NULL,
+            reconciled_at TEXT NOT NULL
+        )');
+
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_seed_registry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             seeder_class TEXT NOT NULL,
@@ -299,6 +313,23 @@ class StateStore
             ':message' => $message,
             ':context_json' => json_encode($context, JSON_UNESCAPED_UNICODE),
             ':created_at' => date(DATE_ATOM),
+        ]);
+    }
+
+
+    public function addMigrationReconciliation(?int $runId, string $migration, string $strategy, bool $reconciled, ?string $reason = null, ?array $object = null, ?array $validation = null, array $meta = []): void
+    {
+        $stmt = $this->connect()->prepare('INSERT INTO updater_migration_reconciliations (run_id, migration, strategy, reason, reconciled, object_json, validation_json, meta_json, reconciled_at) VALUES (:run_id, :migration, :strategy, :reason, :reconciled, :object_json, :validation_json, :meta_json, :reconciled_at)');
+        $stmt->execute([
+            ':run_id' => $runId,
+            ':migration' => $migration,
+            ':strategy' => $strategy,
+            ':reason' => $reason,
+            ':reconciled' => $reconciled ? 1 : 0,
+            ':object_json' => $object ? json_encode($object, JSON_UNESCAPED_UNICODE) : null,
+            ':validation_json' => $validation ? json_encode($validation, JSON_UNESCAPED_UNICODE) : null,
+            ':meta_json' => $meta !== [] ? json_encode($meta, JSON_UNESCAPED_UNICODE) : null,
+            ':reconciled_at' => date(DATE_ATOM),
         ]);
     }
 

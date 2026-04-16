@@ -157,7 +157,7 @@ return [
         'retry_sleep_base' => (int) env('UPDATER_MIGRATE_RETRY_SLEEP_BASE', 3),
         'dry_run' => (bool) env('UPDATER_MIGRATE_DRY_RUN', false),
         'log_channel' => (string) env('UPDATER_MIGRATE_LOG_CHANNEL', 'stack'),
-        'reconcile_already_exists' => (bool) env('UPDATER_MIGRATE_RECONCILE_ALREADY_EXISTS', true),
+        'reconcile_already_exists' => (bool) env('UPDATER_MIGRATE_RECONCILE_ALREADY_EXISTS', false),
         'report_path' => env('UPDATER_MIGRATE_REPORT_PATH', storage_path('logs/updater-migrate-{timestamp}.log')),
         'paths' => [],
 

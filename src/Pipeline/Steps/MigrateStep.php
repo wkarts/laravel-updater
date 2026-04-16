@@ -79,6 +79,10 @@ class MigrateStep implements PipelineStepInterface
                 $artisanParams['--dry-run'] = true;
             }
 
+            if ((bool) ($options['replay_migrations_from_start'] ?? false)) {
+                $artisanParams['--replay-from-start'] = true;
+            }
+
             Artisan::call('updater:migrate', $artisanParams);
 
             return true;
@@ -137,9 +141,10 @@ class MigrateStep implements PipelineStepInterface
             'mode' => $mode,
             'strict' => $mode === 'strict',
             'dry_run' => (bool) ($options['dry_run'] ?? false),
+            'replay_from_start' => (bool) ($options['replay_migrations_from_start'] ?? false),
             'retry_locks' => (int) config('updater.migrate.retry_locks', 2),
             'retry_sleep_base' => (int) config('updater.migrate.retry_sleep_base', 3),
-            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', true),
+            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', false),
         ], $reporter);
     }
 
@@ -158,6 +163,10 @@ class MigrateStep implements PipelineStepInterface
 
         if ((bool) ($options['dry_run'] ?? false)) {
             $command[] = '--dry-run';
+        }
+
+        if ((bool) ($options['replay_migrations_from_start'] ?? false)) {
+            $command[] = '--replay-from-start';
         }
 
         $command[] = '--retry-locks=' . (int) config('updater.migrate.retry_locks', 2);
