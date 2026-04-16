@@ -17,20 +17,32 @@ class MigrationDriftDetector
         $content = @file_get_contents($migrationPath) ?: '';
         $schema = $this->resolver->connection($connection)->getSchemaBuilder();
 
-        if (preg_match("/Schema::create\(['\"]([a-zA-Z0-9_.$-]+)['\"]/", $content, $matches) === 1) {
-            $table = $matches[1];
-            if ($schema->hasTable($table)) {
+        $matches = [];
+        if ($this->safeMatch('/Schema::create\([\'\"]([a-zA-Z0-9_.$-]+)[\'\"]/', $content, $matches)) {
+            $table = $matches[1] ?? null;
+            if (is_string($table) && $table !== '' && $schema->hasTable($table)) {
                 return ['action' => 'reconcile', 'reason' => 'table_exists', 'object' => ['type' => 'table', 'name' => $table]];
             }
         }
 
-        if (preg_match('/Schema::table\([\'\"]([a-zA-Z0-9_.$-]+)[\'\"],/', $content, $matches) === 1) {
-            $table = $matches[1];
-            if (!$schema->hasTable($table)) {
+        $matches = [];
+        if ($this->safeMatch('/Schema::table\([\'\"]([a-zA-Z0-9_.$-]+)[\'\"],/', $content, $matches)) {
+            $table = $matches[1] ?? null;
+            if (is_string($table) && $table !== '' && !$schema->hasTable($table)) {
                 return ['action' => 'fail', 'reason' => 'target_table_missing', 'object' => ['type' => 'table', 'name' => $table]];
             }
         }
 
         return ['action' => 'run', 'reason' => 'no_obvious_drift', 'object' => null];
+    }
+
+    /**
+     * @param array<int,string> $matches
+     */
+    private function safeMatch(string $pattern, string $subject, array &$matches): bool
+    {
+        $result = @preg_match($pattern, $subject, $matches);
+
+        return $result === 1;
     }
 }

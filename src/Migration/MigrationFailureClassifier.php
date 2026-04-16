@@ -46,7 +46,8 @@ class MigrationFailureClassifier
         ];
 
         foreach ($patterns as $rule) {
-            if (preg_match($rule['pattern'], $message, $matches) === 1) {
+            $matches = [];
+            if ($this->safeMatch($rule['pattern'], $message, $matches)) {
                 return [
                     'type' => $rule['type'],
                     'name' => $matches[1],
@@ -71,11 +72,13 @@ class MigrationFailureClassifier
         $sqlstate = null;
         $errno = is_numeric((string) $throwable->getCode()) ? (int) $throwable->getCode() : null;
 
-        if (preg_match('/SQLSTATE\[([A-Z0-9]+)\]/i', $message, $matches) === 1) {
+        $matches = [];
+        if ($this->safeMatch('/SQLSTATE\[([A-Z0-9]+)\]/i', $message, $matches)) {
             $sqlstate = mb_strtoupper($matches[1]);
         }
 
-        if (preg_match('/:\s*(\d{3,5})\s+/i', $message, $matches) === 1) {
+        $matches = [];
+        if ($this->safeMatch('/:\s*(\d{3,5})\s+/i', $message, $matches)) {
             $errno = (int) $matches[1];
         }
 
@@ -178,17 +181,28 @@ class MigrationFailureClassifier
         return in_array($sqlstate, $sqlStates, true) || in_array($errno, $errnoList, true);
     }
 
+    /**
+     * @param array<int,string> $matches
+     */
+    private function safeMatch(string $pattern, string $subject, array &$matches): bool
+    {
+        return @preg_match($pattern, $subject, $matches) === 1;
+    }
+
     private function inferTableName(string $message): ?string
     {
-        if (preg_match("/alter table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", $message, $matches) === 1) {
+        $matches = [];
+        if ($this->safeMatch("/alter table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", $message, $matches)) {
             return $matches[1];
         }
 
-        if (preg_match("/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", $message, $matches) === 1) {
+        $matches = [];
+        if ($this->safeMatch("/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", $message, $matches)) {
             return $matches[1];
         }
 
-        if (preg_match("/on table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", $message, $matches) === 1) {
+        $matches = [];
+        if ($this->safeMatch("/on table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", $message, $matches)) {
             return $matches[1];
         }
 
