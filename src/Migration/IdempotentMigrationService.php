@@ -54,6 +54,7 @@ class IdempotentMigrationService
             'failed' => 0,
             'warnings' => 0,
             'skipped_dry_run' => 0,
+            'skipped_runtime_warning' => 0,
             'divergences' => [],
         ];
 
@@ -66,7 +67,23 @@ class IdempotentMigrationService
         ]);
 
         foreach ($pending as $name => $path) {
-            $drift = $this->driftDetector->inspect($path, is_string($connection) ? $connection : null);
+            try {
+                $drift = $this->driftDetector->inspect($path, is_string($connection) ? $connection : null);
+            } catch (Throwable $throwable) {
+                $drift = ['action' => 'run', 'reason' => 'drift_detector_error', 'object' => null];
+                $stats['warnings']++;
+                $stats['divergences'][] = [
+                    'migration' => $name,
+                    'type' => 'DRIFT_DETECTOR_ERROR',
+                    'object' => null,
+                    'note' => mb_substr($throwable->getMessage(), 0, 500),
+                ];
+                $reporter->log('warning', 'Falha no detector de drift; seguindo migration em modo seguro.', [
+                    'migration' => $name,
+                    'path' => $path,
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
 
             if ($dryRun) {
                 $stats['skipped_dry_run']++;
@@ -187,6 +204,22 @@ class IdempotentMigrationService
                         ]);
                     }
 
+                    if (!$strict && $this->isRecoverableRuntimeWarning($throwable)) {
+                        $stats['warnings']++;
+                        $stats['skipped_runtime_warning']++;
+                        $stats['divergences'][] = [
+                            'migration' => $name,
+                            'type' => 'MIGRATION_RUNTIME_WARNING',
+                            'object' => $object,
+                            'note' => mb_substr($throwable->getMessage(), 0, 500),
+                        ];
+                        $reporter->log('warning', 'Migration ignorada em modo tolerante por warning de runtime; mantendo pendente para correção manual.', [
+                            'migration' => $name,
+                            'error' => $throwable->getMessage(),
+                        ]);
+                        break;
+                    }
+
                     $stats['failed']++;
                     $reporter->log('error', 'Falha não recuperável na migration.', [
                         'migration' => $name,
@@ -201,6 +234,16 @@ class IdempotentMigrationService
         $reporter->log('info', 'Finalizando updater:migrate.', $stats);
 
         return $stats;
+    }
+
+
+    private function isRecoverableRuntimeWarning(Throwable $throwable): bool
+    {
+        $message = mb_strtolower($throwable->getMessage());
+
+        return str_contains($message, 'preg_match(): unknown modifier')
+            || str_contains($message, 'preg_replace(): unknown modifier')
+            || str_contains($message, 'preg_match(): compilation failed');
     }
 
     private function resolvePaths(array $options): array
