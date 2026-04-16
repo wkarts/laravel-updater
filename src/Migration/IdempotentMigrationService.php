@@ -204,7 +204,7 @@ class IdempotentMigrationService
                         ]);
                     }
 
-                    if (!$strict && $this->isRecoverableRuntimeWarning($throwable)) {
+                    if (!$strict && ($this->isRecoverableRuntimeWarning($throwable) || $this->isRecoverableSchemaConstraintMismatch($throwable))) {
                         $stats['warnings']++;
                         $stats['skipped_runtime_warning']++;
                         $stats['divergences'][] = [
@@ -213,7 +213,7 @@ class IdempotentMigrationService
                             'object' => $object,
                             'note' => mb_substr($throwable->getMessage(), 0, 500),
                         ];
-                        $reporter->log('warning', 'Migration ignorada em modo tolerante por warning de runtime; mantendo pendente para correção manual.', [
+                        $reporter->log('warning', 'Migration ignorada em modo tolerante por erro recuperável; mantendo pendente para correção manual.', [
                             'migration' => $name,
                             'error' => $throwable->getMessage(),
                         ]);
@@ -244,6 +244,15 @@ class IdempotentMigrationService
         return str_contains($message, 'preg_match(): unknown modifier')
             || str_contains($message, 'preg_replace(): unknown modifier')
             || str_contains($message, 'preg_match(): compilation failed');
+    }
+
+
+    private function isRecoverableSchemaConstraintMismatch(Throwable $throwable): bool
+    {
+        $message = mb_strtolower($throwable->getMessage());
+
+        return str_contains($message, 'cannot be not null: needed in a foreign key constraint')
+            && str_contains($message, 'on delete set null');
     }
 
     private function resolvePaths(array $options): array
