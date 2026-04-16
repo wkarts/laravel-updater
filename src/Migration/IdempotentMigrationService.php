@@ -66,7 +66,23 @@ class IdempotentMigrationService
         ]);
 
         foreach ($pending as $name => $path) {
-            $drift = $this->driftDetector->inspect($path, is_string($connection) ? $connection : null);
+            try {
+                $drift = $this->driftDetector->inspect($path, is_string($connection) ? $connection : null);
+            } catch (Throwable $throwable) {
+                $drift = ['action' => 'run', 'reason' => 'drift_detector_error', 'object' => null];
+                $stats['warnings']++;
+                $stats['divergences'][] = [
+                    'migration' => $name,
+                    'type' => 'DRIFT_DETECTOR_ERROR',
+                    'object' => null,
+                    'note' => mb_substr($throwable->getMessage(), 0, 500),
+                ];
+                $reporter->log('warning', 'Falha no detector de drift; seguindo migration em modo seguro.', [
+                    'migration' => $name,
+                    'path' => $path,
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
 
             if ($dryRun) {
                 $stats['skipped_dry_run']++;
