@@ -85,6 +85,7 @@ class MigrateStep implements PipelineStepInterface
             $message = mb_strtolower($e->getMessage());
             if (str_contains($message, 'there are no commands defined in the "updater" namespace')
                 || str_contains($message, 'command "updater:migrate" is not defined')
+                || str_contains($message, 'the command "updater:migrate" does not exist')
                 || str_contains($message, 'not enough arguments')) {
                 return false;
             }
