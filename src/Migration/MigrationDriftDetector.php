@@ -24,7 +24,7 @@ class MigrationDriftDetector
             }
         }
 
-        if (preg_match("/Schema::table\(['\"]([a-zA-Z0-9_.$-]+)['\"]/,", $content, $matches) === 1) {
+        if (preg_match('/Schema::table\([\'\"]([a-zA-Z0-9_.$-]+)[\'\"],/', $content, $matches) === 1) {
             $table = $matches[1];
             if (!$schema->hasTable($table)) {
                 return ['action' => 'fail', 'reason' => 'target_table_missing', 'object' => ['type' => 'table', 'name' => $table]];
