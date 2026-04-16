@@ -168,6 +168,23 @@ return [
     ],
 
 
+
+    'psr4_guard' => [
+        'enabled' => (bool) env('UPDATER_PSR4_GUARD_ENABLED', true),
+        'mode' => (string) env('UPDATER_PSR4_GUARD_MODE', 'quarantine'), // off | audit | quarantine | delete
+        'fail_on_blocker' => (bool) env('UPDATER_PSR4_GUARD_FAIL_ON_BLOCKER', false),
+        'paths' => array_values(array_filter(array_map('trim', explode(',', (string) env('UPDATER_PSR4_GUARD_PATHS', 'app'))))),
+        'quarantine_path' => env('UPDATER_PSR4_GUARD_QUARANTINE_PATH', storage_path('app/updater/quarantine/psr4')),
+        'audit_log_path' => env('UPDATER_PSR4_GUARD_AUDIT_LOG_PATH', storage_path('logs/updater-psr4-audit.log')),
+        'filename_patterns' => [
+            '/\(\d+\)\.php$/i',
+            '/__\.php$/i',
+            '/_copy\.php$/i',
+            '/_editado\.php$/i',
+        ],
+        'directory_name_patterns' => ['EXCLUIR', 'BKP', 'BACKUP', 'COPIA', 'OLD'],
+    ],
+
     // Comandos genéricos pré-update (opcional).
     // Exemplo COMENTADO (não executa automaticamente):
     // UPDATER_PRE_UPDATE_COMMANDS="php artisan optimize:clear"
