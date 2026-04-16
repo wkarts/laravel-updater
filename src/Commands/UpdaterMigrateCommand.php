@@ -59,7 +59,7 @@ class UpdaterMigrateCommand extends Command
             'dry_run' => (bool) ($this->option('dry-run') ?: config('updater.migrate.dry_run', false)),
             'retry_locks' => $this->option('retry-locks') ?? config('updater.migrate.retry_locks', config('updater.migrate.max_retries', 2)),
             'retry_sleep_base' => $this->option('retry-sleep-base') ?? config('updater.migrate.retry_sleep_base', max(1, (int) round(((int) config('updater.migrate.backoff_ms', 3000)) / 1000))),
-            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', true),
+            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', false),
         ];
 
         try {

@@ -111,9 +111,9 @@ class MigrationReconciler
         }
 
         return [
-            'compatible' => true,
+            'compatible' => false,
             'warning' => true,
-            'note' => 'object_unknown_reconciled_in_tolerant_mode',
+            'note' => 'object_unknown_requires_manual_review',
             'details' => $errorDetails,
         ];
     }
