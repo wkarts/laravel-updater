@@ -23,7 +23,7 @@ class IdempotentMigrationService
         $mode = (string) ($options['mode'] ?? 'tolerant');
         $strict = $mode === 'strict' || (bool) ($options['strict'] ?? false);
         $dryRun = (bool) ($options['dry_run'] ?? false);
-        $reconcileAlreadyExists = (bool) ($options['reconcile_already_exists'] ?? false);
+        $reconcileAlreadyExists = (bool) ($options['reconcile_already_exists'] ?? true);
         $lockRetries = max(0, (int) ($options['retry_locks'] ?? 2));
         $retrySleepBase = max(1, (int) ($options['retry_sleep_base'] ?? 3));
 
@@ -57,6 +57,8 @@ class IdempotentMigrationService
             'skipped_runtime_warning' => 0,
             'divergences' => [],
         ];
+
+        $runId = $reporter->runId();
 
         $reporter->log('info', 'Iniciando updater:migrate.', [
             'mode' => $mode,
@@ -101,7 +103,8 @@ class IdempotentMigrationService
                     $preflightObject,
                     ['sqlstate' => null, 'errno' => null, 'message' => (string) ($drift['reason'] ?? 'preflight_reconcile')],
                     is_string($connection) ? $connection : null,
-                    false
+                    false,
+                    $runId
                 );
 
                 if (($reconciled['reconciled'] ?? false) === true) {
@@ -173,7 +176,8 @@ class IdempotentMigrationService
                             $object,
                             $details,
                             is_string($connection) ? $connection : null,
-                            false
+                            false,
+                            $runId
                         );
 
                         if (($reconciled['reconciled'] ?? false) === true) {

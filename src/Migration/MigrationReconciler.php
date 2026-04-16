@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Migration;
 
+use Argws\LaravelUpdater\Support\StateStore;
 use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Database\Migrations\DatabaseMigrationRepository;
 
 class MigrationReconciler
 {
-    public function __construct(private readonly ConnectionResolverInterface $resolver)
+    public function __construct(private readonly ConnectionResolverInterface $resolver, private readonly ?StateStore $store = null)
     {
     }
 
@@ -19,9 +20,11 @@ class MigrationReconciler
         array $object,
         array $errorDetails,
         ?string $connection = null,
-        bool $strictMode = false
+        bool $strictMode = false,
+        ?int $runId = null
     ): array {
         if ($this->alreadyLogged($repository, $migrationName)) {
+            $this->trackReconciliation($runId, $migrationName, 'already_logged', true, $object, ['compatible' => true, 'note' => 'migration_already_in_repository']);
             return [
                 'reconciled' => true,
                 'reason' => 'already_logged',
@@ -33,6 +36,7 @@ class MigrationReconciler
         $validation = $this->validateMinimumCompatibility($object, $errorDetails, $connection, $strictMode);
 
         if (($validation['compatible'] ?? false) !== true) {
+            $this->trackReconciliation($runId, $migrationName, 'minimum_compatibility_failed', false, $object, $validation);
             return [
                 'reconciled' => false,
                 'reason' => 'minimum_compatibility_failed',
@@ -42,6 +46,7 @@ class MigrationReconciler
         }
 
         $repository->log($migrationName, $repository->getNextBatchNumber());
+        $this->trackReconciliation($runId, $migrationName, 'already_exists_safe', true, $object, $validation);
 
         return [
             'reconciled' => true,
@@ -49,6 +54,24 @@ class MigrationReconciler
             'warning' => (bool) ($validation['warning'] ?? false),
             'validation' => $validation,
         ];
+    }
+
+
+    private function trackReconciliation(?int $runId, string $migrationName, string $reason, bool $reconciled, array $object, array $validation): void
+    {
+        if ($this->store === null) {
+            return;
+        }
+
+        $this->store->addMigrationReconciliation(
+            $runId,
+            $migrationName,
+            'idempotent_reconcile',
+            $reconciled,
+            $reason,
+            $object,
+            $validation
+        );
     }
 
     private function alreadyLogged(DatabaseMigrationRepository $repository, string $migrationName): bool

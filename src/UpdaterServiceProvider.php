@@ -136,7 +136,7 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->app->singleton(MigrationFailureClassifier::class, fn () => new MigrationFailureClassifier());
         $this->app->singleton(MigrationDriftDetector::class, fn () => new MigrationDriftDetector($this->app['db']));
-        $this->app->singleton(MigrationReconciler::class, fn () => new MigrationReconciler($this->app['db']));
+        $this->app->singleton(MigrationReconciler::class, fn () => new MigrationReconciler($this->app['db'], $this->app->make(StateStore::class)));
         $this->app->singleton(IdempotentMigrationService::class, function () {
             return new IdempotentMigrationService(
                 $this->app->make('migrator'),

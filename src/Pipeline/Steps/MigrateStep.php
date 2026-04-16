@@ -139,7 +139,7 @@ class MigrateStep implements PipelineStepInterface
             'dry_run' => (bool) ($options['dry_run'] ?? false),
             'retry_locks' => (int) config('updater.migrate.retry_locks', 2),
             'retry_sleep_base' => (int) config('updater.migrate.retry_sleep_base', 3),
-            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', false),
+            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', true),
         ], $reporter);
     }
 
