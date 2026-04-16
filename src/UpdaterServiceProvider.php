@@ -40,6 +40,7 @@ use Argws\LaravelUpdater\Support\LoggerFactory;
 use Argws\LaravelUpdater\Support\MaintenanceMode;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\PreflightChecker;
+use Argws\LaravelUpdater\Support\Psr4Sanitizer;
 use Argws\LaravelUpdater\Support\RunReportMailer;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
@@ -131,6 +132,7 @@ class UpdaterServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(RunReportMailer::class, fn () => new RunReportMailer());
+        $this->app->singleton(Psr4Sanitizer::class, fn () => new Psr4Sanitizer());
 
         $this->app->singleton(MigrationFailureClassifier::class, fn () => new MigrationFailureClassifier());
         $this->app->singleton(MigrationDriftDetector::class, fn () => new MigrationDriftDetector($this->app['db']));
@@ -166,6 +168,7 @@ $this->app->singleton(UpdaterKernel::class, function () {
                 'store' => $this->app->make(StateStore::class),
                 'manager_store' => $this->app->make(ManagerStore::class),
                 'maintenance_mode' => $this->app->make(MaintenanceMode::class),
+                'psr4_sanitizer' => $this->app->make(Psr4Sanitizer::class),
             ];
 
             $kernel = new UpdaterKernel(
