@@ -39,6 +39,7 @@ class OperationsController extends Controller
             'update_mode' => ['required', 'in:merge,ff-only,tag,full-update'],
             'target_tag' => ['nullable', 'string', 'max:120'],
             'dry_run_before' => ['nullable', 'boolean'],
+            'replay_migrations_from_start' => ['nullable', 'boolean'],
         ], [
             'profile_id.required' => 'Selecione um perfil.',
             'source_id.required' => 'Selecione uma fonte.',
@@ -57,6 +58,7 @@ class OperationsController extends Controller
 
         $action = (string) $request->input('action', 'apply');
         $shouldDryRunFirst = $action === 'simulate' || ($action === '' && (bool) $request->boolean('dry_run_before', true));
+        $replayMigrationsFromStart = (bool) ($data['replay_migrations_from_start'] ?? false);
         $profile = $this->managerStore->activeProfile();
         $profileOptions = $this->resolveActiveBackupOptions();
 
@@ -76,6 +78,7 @@ class OperationsController extends Controller
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
                     'backup_type' => 'full',
+                    'replay_migrations_from_start' => $replayMigrationsFromStart,
                 ]);
             } catch (\Throwable $e) {
                 return back()->withErrors(['update' => 'Falha ao executar dry-run: ' . $e->getMessage()])->withInput();
@@ -90,6 +93,7 @@ class OperationsController extends Controller
                 'source_id' => (int) $data['source_id'],
                 'update_type' => $updateType,
                 'target_tag' => $targetTag,
+                'replay_migrations_from_start' => $replayMigrationsFromStart,
             ]);
 
             return redirect()->route('updater.runs.show', ['id' => $runId])
@@ -114,6 +118,7 @@ class OperationsController extends Controller
                     'snapshot_include_vendor' => (bool) ($profileOptions['include_vendor'] ?? false),
                     'snapshot_compression' => (string) ($profileOptions['compression'] ?? 'zip'),
                     'backup_type' => 'full',
+                    'replay_migrations_from_start' => $replayMigrationsFromStart,
                 ]);
         } catch (\Throwable $e) {
             return back()->withErrors(['update' => 'Falha ao aplicar atualização: ' . $e->getMessage()])->withInput();
@@ -161,6 +166,7 @@ class OperationsController extends Controller
                 'target_tag' => (string) ($pending['target_tag'] ?? ''),
                 'profile_id' => (int) ($pending['profile_id'] ?? 0),
                 'source_id' => (int) ($pending['source_id'] ?? 0),
+                'replay_migrations_from_start' => (bool) ($pending['replay_migrations_from_start'] ?? false),
                 'sync' => false,
                     'allow_http' => true,
                     'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
