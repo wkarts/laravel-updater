@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Http\Controllers;
 
 use Argws\LaravelUpdater\Contracts\BackupDriverInterface;
+use Argws\LaravelUpdater\Migration\IdempotentMigrationService;
+use Argws\LaravelUpdater\Migration\MigrationRunReporter;
 use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\BackupCloudUploader;
 use Argws\LaravelUpdater\Support\FileManager;
@@ -650,14 +652,11 @@ class OperationsController extends Controller
         $status = 'success';
         $errorMessage = null;
         try {
-            $this->shell->runOrFail([
-                'php',
-                'artisan',
-                'updater:migrate',
-                '--force',
-                '--path=' . $files[$migration],
-                '--replay-from-start',
-                '--run-id=' . $runId,
+            $execution = $this->executeSingleMigrationReapply($files[$migration], $runId);
+            $this->stateStore->addRunLog($runId, 'info', 'Reaplicação executada.', [
+                'migration' => $migration,
+                'strategy' => $execution['strategy'] ?? 'unknown',
+                'stats' => $execution['stats'] ?? null,
             ]);
             $this->stateStore->finishRun($runId, ['revision_before' => null, 'revision_after' => null]);
         } catch (Throwable $e) {
@@ -700,6 +699,79 @@ class OperationsController extends Controller
         }
 
         return redirect()->route('updater.migrations.index')->with('status', 'Migration reaplicada com sucesso.');
+    }
+
+    /** @return array{strategy:string,stats?:array<string,mixed>} */
+    private function executeSingleMigrationReapply(string $migrationPath, int $runId): array
+    {
+        try {
+            /** @var IdempotentMigrationService $service */
+            $service = app(IdempotentMigrationService::class);
+            $logFile = (string) config('updater.migrate.report_path', storage_path('logs/updater-migrate.log'));
+            if (str_contains($logFile, '{timestamp}')) {
+                $logFile = str_replace('{timestamp}', date('Ymd-His'), $logFile);
+            }
+
+            $reporter = new MigrationRunReporter(
+                $this->stateStore,
+                $logFile,
+                $runId,
+                (string) config('updater.migrate.log_channel', 'stack')
+            );
+
+            $stats = $service->run([
+                'idempotent' => true,
+                'database' => config('database.default'),
+                'path' => $migrationPath,
+                'mode' => 'tolerant',
+                'strict' => false,
+                'dry_run' => false,
+                'replay_from_start' => true,
+                'retry_locks' => (int) config('updater.migrate.retry_locks', 2),
+                'retry_sleep_base' => (int) config('updater.migrate.retry_sleep_base', 3),
+                'reconcile_already_exists' => true,
+            ], $reporter);
+
+            return ['strategy' => 'idempotent_service', 'stats' => $stats];
+        } catch (Throwable $serviceError) {
+            try {
+                $this->shell->runOrFail([
+                    'php',
+                    'artisan',
+                    'updater:migrate',
+                    '--force',
+                    '--path=' . $migrationPath,
+                    '--replay-from-start',
+                    '--run-id=' . $runId,
+                ]);
+
+                return ['strategy' => 'updater_migrate_command'];
+            } catch (Throwable $updaterCommandError) {
+                if (!$this->isUpdaterMigrateCommandMissing($updaterCommandError)) {
+                    throw $serviceError;
+                }
+
+                $this->shell->runOrFail([
+                    'php',
+                    'artisan',
+                    'migrate',
+                    '--force',
+                    '--path=' . $migrationPath,
+                    '--realpath',
+                ]);
+
+                return ['strategy' => 'laravel_migrate_realpath'];
+            }
+        }
+    }
+
+    private function isUpdaterMigrateCommandMissing(Throwable $e): bool
+    {
+        $message = mb_strtolower($e->getMessage());
+
+        return str_contains($message, 'there are no commands defined in the "updater" namespace')
+            || str_contains($message, 'command "updater:migrate" is not defined')
+            || str_contains($message, 'the command "updater:migrate" does not exist');
     }
 
     /** @return array<string,string> */
