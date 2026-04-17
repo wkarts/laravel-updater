@@ -11,8 +11,8 @@
             <input type="number" name="retention_backups" value="10" min="1" max="200" placeholder="Retenção de backups">
 
             @foreach(['backup_enabled' => 'Backup habilitado', 'dry_run' => 'Dry run', 'force' => 'Forçar operação', 'composer_install' => 'Composer install', 'migrate' => 'Rodar migrate', 'seed' => 'Rodar seed', 'build_assets' => 'Build de assets', 'health_check' => 'Health check', 'rollback_on_fail' => 'Rollback ao falhar', 'active' => 'Marcar como ativo'] as $field => $label)
-                <label class="form-inline" style="align-items:center;">
-                    <input type="checkbox" name="{{ $field }}" value="1" style="max-width:20px;">
+                <label class="switch-inline">
+                    <input type="checkbox" name="{{ $field }}" value="1">
                     <span>{{ $label }}</span>
                 </label>
             @endforeach

@@ -59,6 +59,7 @@ class ManagerController extends Controller
                 'gitMaintenanceEnabled' => (bool) config('updater.git_maintenance.enabled', true),
                 'lockInfo' => app(UpdaterLockTools::class)->info('system-update'),
             ]),
+            'migrations' => redirect()->route('updater.migrations.index'),
             'seeds' => redirect()->route('updater.seeds.index'),
             'admin-users' => redirect()->route('updater.users.index'),
             'settings' => redirect()->route('updater.settings.index'),
