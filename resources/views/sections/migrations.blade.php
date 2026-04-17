@@ -101,9 +101,9 @@
                             <a class="btn btn-secondary hint-action btn-action-sm" title="Filtrar viewer de logs por esta migration" href="{{ route('updater.section', ['section' => 'logs']) }}?q={{ urlencode($row['migration']) }}">📜</a>
                             <a class="btn btn-secondary hint-action btn-action-sm" title="Analisar consistência código x banco x histórico" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#consistencia">🧪</a>
 
-                            <button class="btn btn-secondary hint-action btn-action-sm" type="button" data-open-reason title="Definir motivo da reaplicação">Motivo</button>
-                            <button class="btn hint-action btn-action-sm btn-action-wide" title="Registrar na fila para execução posterior" type="submit" name="action_type" value="queue">Marcar</button>
-                            <button class="btn btn-primary hint-action btn-action-sm btn-action-wide" title="Executar reaplicação desta migration agora (modo idempotente)" type="submit" name="action_type" value="run_now">Reaplicar agora</button>
+                            <button class="btn btn-secondary hint-action btn-action-sm btn-action-icon" type="button" data-open-reason title="Definir motivo da reaplicação" aria-label="Definir motivo da reaplicação">✎</button>
+                            <button class="btn hint-action btn-action-sm btn-action-icon" title="Registrar na fila para execução posterior" aria-label="Marcar para reaplicação" type="submit" name="action_type" value="queue">⏳</button>
+                            <button class="btn btn-primary hint-action btn-action-sm btn-action-icon" title="Executar reaplicação desta migration agora (modo idempotente)" aria-label="Reaplicar migration agora" type="submit" name="action_type" value="run_now">↻</button>
                         </form>
 
                         <dialog class="reason-dialog" data-reason-dialog>
