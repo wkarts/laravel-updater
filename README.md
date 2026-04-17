@@ -4,7 +4,7 @@ Pacote Composer para autoatualização segura, idempotente e reversível de apli
 
 ## Compatibilidade
 
-- PHP: **8.2, 8.3, 8.4**
+- PHP: **8.2, 8.3, 8.4, 8.5**
 - Laravel/Illuminate: **10, 11, 12**
 
 ## Instalação
@@ -12,6 +12,23 @@ Pacote Composer para autoatualização segura, idempotente e reversível de apli
 ```bash
 composer require argws/laravel-updater
 php artisan vendor:publish --tag=updater-config
+```
+
+## Pré-requisito obrigatório: PDO SQLite
+
+O updater usa SQLite para estado interno (runs, sessões e metadados).  
+Em qualquer ambiente (CLI/FPM/FrankenPHP), habilite a extensão `pdo_sqlite`.
+
+Exemplo de verificação:
+
+```bash
+php -m | grep -i sqlite
+```
+
+Se o comando não listar `pdo_sqlite`, habilite no `php.ini`:
+
+```ini
+extension=pdo_sqlite
 ```
 
 ### Atualização do config após update do pacote
@@ -213,7 +230,7 @@ UPDATER_SEED_REFORMA_TRIBUTARIA_SEEDER="Database\Seeders\ReformaTributariaSeeder
 
 ## CI e release
 
-- CI valida matrix real: PHP 8.2/8.3/8.4 + Laravel 10/11/12.
+- CI valida matrix real: PHP 8.2/8.3/8.4/8.5 + Laravel 10/11/12.
 - `release-after-ci.yml` cria tag automática após CI verde na `main` (evento `push`).
 - Para evitar erro 403 no push de tag, configure o secret `RELEASE_TOKEN` com permissão de `contents:write` (fallback automático para `GITHUB_TOKEN`).
 - Notificação Packagist usa `PACKAGIST_USERNAME` e `PACKAGIST_TOKEN` como secrets.
