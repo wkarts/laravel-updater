@@ -128,6 +128,9 @@
             @if(!is_array($user) || $perm->has($user, 'logs.view'))
                 <a class="{{ request()->route('section') === 'logs' ? 'active' : '' }}" href="{{ route('updater.section', 'logs') }}">☰ Logs</a>
             @endif
+            @if(!is_array($user) || $perm->has($user, 'migrations.manage'))
+                <a class="{{ request()->routeIs('updater.migrations.*') || request()->route('section') === 'migrations' ? 'active' : '' }}" href="{{ route('updater.migrations.index') }}">🧬 Migrations</a>
+            @endif
             @if(!is_array($user) || $perm->has($user, 'users.manage'))
                 <a class="{{ request()->routeIs('updater.users.*') ? 'active' : '' }}" href="{{ route('updater.users.index') }}">👤 Usuários</a>
             @endif

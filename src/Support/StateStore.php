@@ -212,6 +212,20 @@ class StateStore
             last_notified_key TEXT NOT NULL,
             notified_at TEXT NOT NULL
         )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_migration_reconciliations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NULL,
+            migration TEXT NOT NULL,
+            strategy TEXT NOT NULL,
+            reason TEXT NULL,
+            reconciled INTEGER NOT NULL DEFAULT 0,
+            object_json TEXT NULL,
+            validation_json TEXT NULL,
+            meta_json TEXT NULL,
+            reconciled_at TEXT NOT NULL
+        )');
+
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_seed_registry (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             seeder_class TEXT NOT NULL,
@@ -219,6 +233,36 @@ class StateStore
             applied_at TEXT NOT NULL,
             app_revision TEXT NULL,
             notes TEXT NULL
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_migration_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NULL,
+            migration TEXT NOT NULL,
+            file_path TEXT NULL,
+            status TEXT NOT NULL,
+            attempt_no INTEGER NOT NULL DEFAULT 1,
+            is_replay INTEGER NOT NULL DEFAULT 0,
+            is_reconciled INTEGER NOT NULL DEFAULT 0,
+            is_idempotent_skip INTEGER NOT NULL DEFAULT 0,
+            error_message TEXT NULL,
+            context_json TEXT NULL,
+            origin TEXT NULL,
+            requested_by TEXT NULL,
+            reason TEXT NULL,
+            created_at TEXT NOT NULL
+        )');
+
+        $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_migration_reapply_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            migration TEXT NOT NULL,
+            reason TEXT NULL,
+            requested_by TEXT NULL,
+            status TEXT NOT NULL DEFAULT \'queued\',
+            run_id INTEGER NULL,
+            result_json TEXT NULL,
+            requested_at TEXT NOT NULL,
+            processed_at TEXT NULL
         )');
 
         $this->connect()->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_updater_login_attempts_email_ip ON updater_login_attempts(email, ip)');
@@ -300,6 +344,158 @@ class StateStore
             ':context_json' => json_encode($context, JSON_UNESCAPED_UNICODE),
             ':created_at' => date(DATE_ATOM),
         ]);
+    }
+
+
+    public function addMigrationReconciliation(?int $runId, string $migration, string $strategy, bool $reconciled, ?string $reason = null, ?array $object = null, ?array $validation = null, array $meta = []): void
+    {
+        $stmt = $this->connect()->prepare('INSERT INTO updater_migration_reconciliations (run_id, migration, strategy, reason, reconciled, object_json, validation_json, meta_json, reconciled_at) VALUES (:run_id, :migration, :strategy, :reason, :reconciled, :object_json, :validation_json, :meta_json, :reconciled_at)');
+        $stmt->execute([
+            ':run_id' => $runId,
+            ':migration' => $migration,
+            ':strategy' => $strategy,
+            ':reason' => $reason,
+            ':reconciled' => $reconciled ? 1 : 0,
+            ':object_json' => $object ? json_encode($object, JSON_UNESCAPED_UNICODE) : null,
+            ':validation_json' => $validation ? json_encode($validation, JSON_UNESCAPED_UNICODE) : null,
+            ':meta_json' => $meta !== [] ? json_encode($meta, JSON_UNESCAPED_UNICODE) : null,
+            ':reconciled_at' => date(DATE_ATOM),
+        ]);
+    }
+
+    public function addMigrationAttempt(
+        ?int $runId,
+        string $migration,
+        string $status,
+        int $attemptNo = 1,
+        ?string $filePath = null,
+        bool $isReplay = false,
+        bool $isReconciled = false,
+        bool $isIdempotentSkip = false,
+        ?string $errorMessage = null,
+        array $context = [],
+        ?string $origin = null,
+        ?string $requestedBy = null,
+        ?string $reason = null
+    ): void {
+        $stmt = $this->connect()->prepare('INSERT INTO updater_migration_attempts (run_id, migration, file_path, status, attempt_no, is_replay, is_reconciled, is_idempotent_skip, error_message, context_json, origin, requested_by, reason, created_at) VALUES (:run_id, :migration, :file_path, :status, :attempt_no, :is_replay, :is_reconciled, :is_idempotent_skip, :error_message, :context_json, :origin, :requested_by, :reason, :created_at)');
+        $stmt->execute([
+            ':run_id' => $runId,
+            ':migration' => $migration,
+            ':file_path' => $filePath,
+            ':status' => $status,
+            ':attempt_no' => max(1, $attemptNo),
+            ':is_replay' => $isReplay ? 1 : 0,
+            ':is_reconciled' => $isReconciled ? 1 : 0,
+            ':is_idempotent_skip' => $isIdempotentSkip ? 1 : 0,
+            ':error_message' => $errorMessage,
+            ':context_json' => $context !== [] ? json_encode($context, JSON_UNESCAPED_UNICODE) : null,
+            ':origin' => $origin,
+            ':requested_by' => $requestedBy,
+            ':reason' => $reason,
+            ':created_at' => date(DATE_ATOM),
+        ]);
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public function listMigrationAttempts(?string $migration = null, ?int $runId = null, int $limit = 3000): array
+    {
+        $sql = 'SELECT * FROM updater_migration_attempts WHERE 1=1';
+        $params = [];
+        if ($migration !== null && $migration !== '') {
+            $sql .= ' AND migration = :migration';
+            $params[':migration'] = $migration;
+        }
+        if ($runId !== null) {
+            $sql .= ' AND run_id = :run_id';
+            $params[':run_id'] = $runId;
+        }
+        $sql .= ' ORDER BY id DESC LIMIT :limit';
+        $stmt = $this->connect()->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', max(1, $limit), PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    public function queueMigrationReapply(string $migration, ?string $reason = null, ?string $requestedBy = null): int
+    {
+        $stmt = $this->connect()->prepare('INSERT INTO updater_migration_reapply_queue (migration, reason, requested_by, status, requested_at) VALUES (:migration, :reason, :requested_by, :status, :requested_at)');
+        $stmt->execute([
+            ':migration' => $migration,
+            ':reason' => $reason,
+            ':requested_by' => $requestedBy,
+            ':status' => 'queued',
+            ':requested_at' => date(DATE_ATOM),
+        ]);
+
+        return (int) $this->connect()->lastInsertId();
+    }
+
+    public function hasQueuedMigrationReapply(string $migration): bool
+    {
+        $stmt = $this->connect()->prepare('SELECT COUNT(*) FROM updater_migration_reapply_queue WHERE migration = :migration AND status = :status');
+        $stmt->execute([
+            ':migration' => $migration,
+            ':status' => 'queued',
+        ]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    public function finishMigrationReapplyQueue(int $id, string $status, ?int $runId = null, array $result = []): void
+    {
+        $stmt = $this->connect()->prepare('UPDATE updater_migration_reapply_queue SET status=:status, run_id=:run_id, result_json=:result_json, processed_at=:processed_at WHERE id=:id');
+        $stmt->execute([
+            ':status' => $status,
+            ':run_id' => $runId,
+            ':result_json' => $result !== [] ? json_encode($result, JSON_UNESCAPED_UNICODE) : null,
+            ':processed_at' => date(DATE_ATOM),
+            ':id' => $id,
+        ]);
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public function listMigrationReapplyQueue(?string $migration = null, int $limit = 200): array
+    {
+        $sql = 'SELECT * FROM updater_migration_reapply_queue';
+        $params = [];
+        if ($migration !== null && $migration !== '') {
+            $sql .= ' WHERE migration = :migration';
+            $params[':migration'] = $migration;
+        }
+        $sql .= ' ORDER BY id DESC LIMIT :limit';
+        $stmt = $this->connect()->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', max(1, $limit), PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /** @return array<int,array<string,mixed>> */
+    public function listMigrationReconciliations(?string $migration = null, int $limit = 2000): array
+    {
+        $sql = 'SELECT * FROM updater_migration_reconciliations';
+        $params = [];
+        if ($migration !== null && $migration !== '') {
+            $sql .= ' WHERE migration = :migration';
+            $params[':migration'] = $migration;
+        }
+        $sql .= ' ORDER BY id DESC LIMIT :limit';
+        $stmt = $this->connect()->prepare($sql);
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+        $stmt->bindValue(':limit', max(1, $limit), PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function lastRun(): ?array

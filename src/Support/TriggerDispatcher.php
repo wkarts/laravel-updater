@@ -399,6 +399,10 @@ class TriggerDispatcher
             $args[] = '--allow-http';
         }
 
+        if ((bool) ($options['replay_migrations_from_start'] ?? false)) {
+            $args[] = '--replay-migrations-from-start';
+        }
+
         $seeders = $options['seeders'] ?? [];
         foreach ((array) $seeders as $seeder) {
             $args[] = '--seeder=' . (string) $seeder;
