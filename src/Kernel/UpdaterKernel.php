@@ -13,6 +13,7 @@ use Argws\LaravelUpdater\Pipeline\Steps\FullBackupStep;
 use Argws\LaravelUpdater\Pipeline\Steps\ComposerInstallStep;
 use Argws\LaravelUpdater\Pipeline\Steps\GitUpdateStep;
 use Argws\LaravelUpdater\Pipeline\Steps\GitMaintenanceStep;
+use Argws\LaravelUpdater\Pipeline\Steps\Psr4SanitizeStep;
 use Argws\LaravelUpdater\Pipeline\Steps\HealthCheckStep;
 use Argws\LaravelUpdater\Pipeline\Steps\LockStep;
 use Argws\LaravelUpdater\Pipeline\Steps\MaintenanceOffStep;
@@ -76,6 +77,7 @@ class UpdaterKernel
             new GitMaintenanceStep($services['git_maintenance'], 'pre_update'),
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
             new GitMaintenanceStep($services['git_maintenance'], 'post_update'),
+            new Psr4SanitizeStep($services['psr4_sanitizer'], $services['store'], $services['logger']),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
             new SeedStep($services['shell'], $services['store']),
@@ -135,7 +137,7 @@ class UpdaterKernel
                     'versao_atual' => $this->codeDriver->currentRevision(),
                     'versao_alvo' => $status['remote'] ?? null,
                     'diff_commits' => $status['behind_by_commits'] ?? 0,
-                    'steps' => ['lock','backup_full','pre_update_commands','maintenance_on','git_update','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','post_update_commands','health_check','maintenance_off'],
+                    'steps' => ['lock','backup_full','pre_update_commands','maintenance_on','git_update','psr4_sanitize','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','post_update_commands','health_check','maintenance_off'],
                     'comandos_simulados' => [
                         'git fetch origin <branch>',
                         'git rev-list --count HEAD..origin/<branch>',
