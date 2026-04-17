@@ -235,26 +235,6 @@ th, td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: lef
 th { background: var(--surface-soft); }
 thead th { position: sticky; top: 0; z-index: 1; }
 
-.audit-grid-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 4px;
-}
-
-.audit-grid-table th,
-.audit-grid-table td {
-    font-size: 10.5px;
-    text-align: center;
-}
-
-.audit-grid-table td.col-main,
-.audit-grid-table th.col-main { text-align: left; }
-
-.audit-grid-table td.col-actions,
-.audit-grid-table th.col-actions { text-align: right; }
-
 pre {
     background: var(--surface-soft);
     border: 1px solid var(--line);
@@ -349,99 +329,21 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
     table-layout: fixed;
 }
 
-.migrations-grid-wrap th,
-.migrations-grid-wrap td { font-size: 10.5px; padding: 4px 5px; }
-
 .migrations-grid-wrap th:nth-child(1),
-.migrations-grid-wrap td:nth-child(1) { width: 2.5%; }
+.migrations-grid-wrap td:nth-child(1) { width: 28%; }
 
 .migrations-grid-wrap th:nth-child(2),
-.migrations-grid-wrap td:nth-child(2) { width: 34%; }
+.migrations-grid-wrap td:nth-child(2) { width: 27%; }
 
-.migrations-grid-wrap th:nth-child(3),
-.migrations-grid-wrap th:nth-child(4),
-.migrations-grid-wrap th:nth-child(5),
-.migrations-grid-wrap th:nth-child(6),
-.migrations-grid-wrap th:nth-child(7),
-.migrations-grid-wrap th:nth-child(8),
-.migrations-grid-wrap td:nth-child(3),
-.migrations-grid-wrap td:nth-child(4),
-.migrations-grid-wrap td:nth-child(5),
-.migrations-grid-wrap td:nth-child(6),
-.migrations-grid-wrap td:nth-child(7),
-.migrations-grid-wrap td:nth-child(8) { width: 5.5%; }
-
-.migrations-grid-wrap th:nth-child(9),
-.migrations-grid-wrap td:nth-child(9) { width: 8.5%; }
-
-.migrations-grid-wrap th:nth-child(10),
-.migrations-grid-wrap td:nth-child(10) { width: 4.5%; }
+.migrations-grid-wrap td:nth-child(2) .ellipsis-cell {
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 .actions-cell { min-width: 236px; }
-
-.migration-file-path {
-    display: none;
-    margin-top: 2px;
-    font-size: 10px;
-    line-height: 1.2;
-    overflow-wrap: anywhere;
-}
-
-.migrations-grid-wrap.show-file-path .migration-file-path { display: block; }
-
-.audit-dashboard-grid {
-    gap: 4px;
-    grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
-}
-
-.audit-dashboard-grid p {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.2;
-}
-
-.compact-form {
-    gap: 5px;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.compact-form-inline {
-    grid-template-columns: minmax(220px, 2fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(170px, 1fr) auto;
-    align-items: end;
-}
-
-.compact-form label { margin-bottom: 3px; font-size: 11px; }
-.compact-form input,
-.compact-form select { padding: 6px 8px; }
-
-.audit-filter-options {
-    grid-column: 1 / -1;
-}
-
-.compact-actions > * {
-    flex: 0 0 auto;
-    min-width: 90px;
-}
-
-.batch-toolbar {
-    display: grid;
-    grid-template-columns: 120px 130px minmax(220px, 1fr) auto auto minmax(180px, 1fr);
-    gap: 6px;
-    align-items: center;
-    margin-bottom: 6px;
-}
-
-.batch-toolbar input,
-.batch-toolbar select {
-    padding: 5px 7px;
-    font-size: 11px;
-}
-
-.last-exec-cell {
-    white-space: nowrap;
-    font-size: 10px;
-    letter-spacing: -.1px;
-}
 
 .migration-actions-row {
     display: grid;
@@ -511,26 +413,6 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 
     .updater-content {
         padding: 14px;
-    }
-
-    .audit-dashboard-grid {
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    }
-
-    .migrations-grid-wrap th,
-    .migrations-grid-wrap td { font-size: 10px; }
-
-    .audit-grid-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .compact-form-inline {
-        grid-template-columns: repeat(2, minmax(150px, 1fr));
-    }
-
-    .batch-toolbar {
-        grid-template-columns: repeat(2, minmax(140px, 1fr));
     }
 
     .migration-actions-row {
