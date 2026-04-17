@@ -19,7 +19,7 @@
     </div>
     @php($fields = ['backup_enabled' => 'Backup ativado', 'dry_run' => 'Modo dry-run', 'force' => 'Forçar execução', 'composer_install' => 'Rodar composer', 'migrate' => 'Rodar migrations', 'seed' => 'Rodar seed', 'rollback_on_fail' => 'Rollback em falha', 'snapshot_include_vendor' => 'Incluir diretório vendor no snapshot', 'active' => 'Definir como perfil ativo'])
     @foreach($fields as $field => $label)
-        <label class="form-inline"><input type="checkbox" name="{{ $field }}" value="1" style="max-width:20px;" {{ old($field, (int) ($profile[$field] ?? 0)) == 1 ? 'checked' : '' }}><span>{{ $label }}</span></label>
+        <label class="switch-inline"><input type="checkbox" name="{{ $field }}" value="1" {{ old($field, (int) ($profile[$field] ?? 0)) == 1 ? 'checked' : '' }}><span>{{ $label }}</span></label>
     @endforeach
 </div>
 
