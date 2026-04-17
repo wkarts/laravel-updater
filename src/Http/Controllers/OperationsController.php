@@ -616,69 +616,6 @@ class OperationsController extends Controller
         return redirect()->route('updater.migrations.index')->with('status', (string) ($result['message'] ?? 'Migration reaplicada com sucesso.'));
     }
 
-    public function reapplyMigrationsBatch(Request $request): RedirectResponse
-    {
-        $actor = request()->attributes->get('updater_user');
-        abort_if(!is_array($actor), 403);
-
-        $data = $request->validate([
-            'selected_migrations' => ['nullable', 'array'],
-            'selected_migrations.*' => ['string'],
-            'filtered_migrations' => ['nullable', 'string'],
-            'scope' => ['nullable', 'string', 'in:selected,filtered,all'],
-            'limit' => ['nullable', 'integer', 'min:0', 'max:500'],
-            'reason' => ['nullable', 'string', 'max:1000'],
-            'action_type' => ['nullable', 'string', 'in:queue,run_now'],
-        ]);
-
-        $scope = (string) ($data['scope'] ?? 'selected');
-        $limit = (int) ($data['limit'] ?? 0);
-        $reason = trim((string) ($data['reason'] ?? ''));
-        $actionType = (string) ($data['action_type'] ?? 'queue');
-        $requestedBy = (string) (($actor['email'] ?? $actor['name'] ?? 'unknown'));
-
-        $selected = array_values(array_filter(array_map('strval', (array) ($data['selected_migrations'] ?? []))));
-        $filtered = array_values(array_filter(array_map('trim', explode(',', (string) ($data['filtered_migrations'] ?? '')))));
-        $allNames = array_map(static fn (array $row): string => (string) ($row['migration'] ?? ''), $this->buildMigrationAuditRows());
-        $allNames = array_values(array_filter($allNames));
-
-        $targets = match ($scope) {
-            'all' => $allNames,
-            'filtered' => $filtered,
-            default => $selected,
-        };
-
-        $targets = array_values(array_unique($targets));
-        if ($limit > 0) {
-            $targets = array_slice($targets, 0, $limit);
-        }
-
-        if ($targets === []) {
-            return back()->withErrors(['batch' => 'Nenhuma migration selecionada para reaplicação em lote.']);
-        }
-
-        $summary = ['ok' => 0, 'failed' => 0];
-        $errors = [];
-
-        foreach ($targets as $migration) {
-            $result = $this->performMigrationReapply($migration, $reason, $requestedBy, $actionType);
-            if (($result['ok'] ?? false) === true) {
-                $summary['ok']++;
-                continue;
-            }
-
-            $summary['failed']++;
-            $errors[] = $migration . ': ' . (string) ($result['message'] ?? 'erro desconhecido');
-        }
-
-        if ($summary['failed'] > 0) {
-            return back()->withErrors(['batch' => 'Lote finalizado com falhas (' . $summary['failed'] . '). ' . implode(' | ', $errors)])
-                ->with('status', 'Lote processado: ' . $summary['ok'] . ' sucesso(s), ' . $summary['failed'] . ' falha(s).');
-        }
-
-        return back()->with('status', 'Lote processado com sucesso: ' . $summary['ok'] . ' migration(s).');
-    }
-
     /** @return array{ok:bool,message:string} */
     private function performMigrationReapply(string $migration, string $reason, string $requestedBy, string $actionType): array
     {

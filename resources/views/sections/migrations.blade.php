@@ -65,25 +65,10 @@
             Exibir caminho completo
         </label>
     </div>
-    <form id="batch-reapply-form" method="POST" action="{{ route('updater.migrations.reapply.batch') }}" class="batch-toolbar">
-        @csrf
-        <input type="hidden" name="filtered_migrations" value="{{ implode(',', array_map(static fn(array $row): string => (string) ($row['migration'] ?? ''), $rows)) }}">
-        <select name="scope">
-            <option value="selected">Selecionadas</option>
-            <option value="filtered">Filtradas</option>
-            <option value="all">Todas</option>
-        </select>
-        <input type="number" name="limit" min="0" max="500" placeholder="Limite (opcional)">
-        <input type="text" name="reason" maxlength="1000" placeholder="Motivo da ação em lote">
-        <button class="btn" type="submit" name="action_type" value="queue" onclick="return confirm('Confirma enfileirar reaplicação em lote?')">Fila lote</button>
-        <button class="btn btn-primary" type="submit" name="action_type" value="run_now" onclick="return confirm('Confirma reaplicar agora em lote?')">Rodar lote</button>
-        <span class="muted">Selecione linhas ou use escopo filtrado/todas.</span>
-    </form>
     <div class="table-wrap migrations-grid-wrap" data-migrations-grid>
         <table class="audit-grid-table">
             <thead>
             <tr>
-                <th><input type="checkbox" data-select-all></th>
                 <th>Migration</th>
                 <th>Status</th>
                 <th>Aplicada</th>
@@ -99,7 +84,6 @@
             <tbody>
             @forelse($rows as $row)
                 <tr>
-                    <td><input type="checkbox" name="selected_migrations[]" value="{{ $row['migration'] }}" form="batch-reapply-form" data-row-select></td>
                     <td class="col-main">
                         <code>{{ $row['migration'] }}</code>
                         <small class="migration-file-path muted">{{ $row['file_path'] ?? '-' }}</small>
@@ -125,7 +109,6 @@
                             <a class="btn btn-secondary hint-action btn-action-sm" title="Analisar consistência código x banco x histórico" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#consistencia">🧪</a>
 
                             <button class="btn btn-secondary hint-action btn-action-sm btn-action-icon" type="button" data-open-reason title="Definir motivo da reaplicação" aria-label="Definir motivo da reaplicação">✎</button>
-                            <button class="btn hint-action btn-action-sm btn-action-icon" title="Registrar na fila para execução posterior" aria-label="Marcar para reaplicação" type="submit" name="action_type" value="queue">⏳</button>
                             <button class="btn btn-primary hint-action btn-action-sm btn-action-icon" title="Executar reaplicação desta migration agora (modo idempotente)" aria-label="Reaplicar migration agora" type="submit" name="action_type" value="run_now">↻</button>
                         </form>
 
@@ -144,7 +127,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="11" class="muted">Nenhuma migration encontrada para os filtros aplicados.</td>
+                    <td colspan="10" class="muted">Nenhuma migration encontrada para os filtros aplicados.</td>
                 </tr>
             @endforelse
             </tbody>
@@ -177,8 +160,6 @@
             const gridWrap = document.querySelector('[data-migrations-grid]');
             const filePathToggle = document.querySelector('[data-toggle-file-path]');
             const filePathStorageKey = 'updater:migrations:show-file-path';
-            const selectAll = document.querySelector('[data-select-all]');
-            const rowCheckboxes = Array.from(document.querySelectorAll('[data-row-select]'));
 
             const applyFilePathPreference = (enabled) => {
                 if (gridWrap) {
@@ -206,14 +187,6 @@
                         // fallback silencioso: mantém comportamento em memória.
                     }
                     applyFilePathPreference(enabled);
-                });
-            }
-
-            if (selectAll && rowCheckboxes.length > 0) {
-                selectAll.addEventListener('change', () => {
-                    rowCheckboxes.forEach((checkbox) => {
-                        checkbox.checked = selectAll.checked;
-                    });
                 });
             }
 

@@ -71,7 +71,6 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::get('/migrations', [OperationsController::class, 'migrationsAuditIndex'])->name('updater.migrations.index');
                 Route::get('/migrations/{migration}', [OperationsController::class, 'migrationAuditShow'])->name('updater.migrations.show');
                 Route::post('/migrations/reapply', [OperationsController::class, 'reapplyMigration'])->name('updater.migrations.reapply');
-                Route::post('/migrations/reapply/batch', [OperationsController::class, 'reapplyMigrationsBatch'])->name('updater.migrations.reapply.batch');
 
                 Route::get('/users', [ManagerController::class, 'usersIndex'])->name('updater.users.index');
                 Route::get('/users/create', [ManagerController::class, 'usersCreate'])->name('updater.users.create');
@@ -124,7 +123,6 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::get('/migrations', [OperationsController::class, 'migrationsAuditIndex'])->name('updater.migrations.index');
             Route::get('/migrations/{migration}', [OperationsController::class, 'migrationAuditShow'])->name('updater.migrations.show');
             Route::post('/migrations/reapply', [OperationsController::class, 'reapplyMigration'])->name('updater.migrations.reapply');
-            Route::post('/migrations/reapply/batch', [OperationsController::class, 'reapplyMigrationsBatch'])->name('updater.migrations.reapply.batch');
             Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds', 'migrations'])->name('updater.section');
         });
     }
