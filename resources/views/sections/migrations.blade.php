@@ -45,7 +45,7 @@
             </select>
         </div>
         <div>
-            <label>
+            <label class="switch-inline">
                 <input type="checkbox" name="inconsistent" value="1" {{ !empty($filters['inconsistent']) ? 'checked' : '' }}>
                 Somente inconsistentes
             </label>
@@ -59,7 +59,7 @@
 
 <div class="card" style="margin-top:14px;">
     <h3>Grid de auditoria</h3>
-    <div style="overflow-x:auto;">
+    <div class="table-wrap table-wrap-scroll">
         <table>
             <thead>
             <tr>
@@ -90,11 +90,11 @@
                     <td>{{ $row['last_execution_at'] ?? '-' }}</td>
                     <td>{{ !empty($row['last_run_id']) ? '#' . (int) $row['last_run_id'] : '-' }}</td>
                     <td>
-                        <div class="form-inline">
-                            <a class="btn btn-secondary" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}">Visualizar detalhes</a>
-                            <a class="btn btn-secondary" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#historico">Ver histórico</a>
-                            <a class="btn btn-secondary" href="{{ route('updater.section', ['section' => 'logs']) }}?q={{ urlencode($row['migration']) }}">Ver logs</a>
-                            <a class="btn btn-secondary" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#consistencia">Analisar consistência</a>
+                        <div class="actions-compact">
+                            <a class="btn btn-secondary hint-action" title="Visualizar detalhes consolidados da migration" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}">👁</a>
+                            <a class="btn btn-secondary hint-action" title="Abrir histórico completo de tentativas" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#historico">🕘</a>
+                            <a class="btn btn-secondary hint-action" title="Filtrar viewer de logs por esta migration" href="{{ route('updater.section', ['section' => 'logs']) }}?q={{ urlencode($row['migration']) }}">📜</a>
+                            <a class="btn btn-secondary hint-action" title="Analisar consistência código x banco x histórico" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#consistencia">🧪</a>
                         </div>
                         <form method="POST" action="{{ route('updater.migrations.reapply') }}" class="form-grid" style="margin-top:8px;">
                             @csrf
@@ -105,8 +105,8 @@
                                 <input type="text" name="reason" placeholder="Ex.: corrigir inconsistência detectada">
                             </label>
                             <div class="form-inline">
-                                <button class="btn" type="submit" name="action_type" value="queue">Marcar para reaplicação</button>
-                                <button class="btn btn-primary" type="submit" name="action_type" value="run_now">Reaplicar individualmente agora</button>
+                                <button class="btn hint-action" title="Registrar na fila para execução posterior" type="submit" name="action_type" value="queue">Marcar para reaplicação</button>
+                                <button class="btn btn-primary hint-action" title="Executar reaplicação desta migration agora (modo idempotente)" type="submit" name="action_type" value="run_now">Reaplicar individualmente agora</button>
                             </div>
                         </form>
                     </td>

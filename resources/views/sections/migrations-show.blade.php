@@ -24,7 +24,7 @@
             <input id="reason" type="text" name="reason" maxlength="1000" placeholder="Ex.: validação de consistência operacional">
         </div>
         <div class="form-inline">
-            <button class="btn btn-primary" type="submit">Reaplicar individualmente agora</button>
+            <button class="btn btn-primary hint-action" title="Executar reaplicação idempotente apenas desta migration" type="submit">Reaplicar individualmente agora</button>
             <a class="btn" href="{{ route('updater.migrations.index') }}">Voltar</a>
         </div>
     </form>

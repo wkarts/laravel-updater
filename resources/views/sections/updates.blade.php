@@ -77,14 +77,14 @@
         </div>
 
         <div>
-            <label>
+            <label class="switch-inline">
                 <input type="checkbox" name="dry_run_before" value="1" {{ old('dry_run_before', '1') ? 'checked' : '' }}>
                 Executar dry-run antes (recomendado)
             </label>
         </div>
 
         <div>
-            <label>
+            <label class="switch-inline">
                 <input type="checkbox" name="replay_migrations_from_start" value="1" {{ old('replay_migrations_from_start') ? 'checked' : '' }}>
                 Recomeçar da primeira migration (reaplicar de forma idempotente)
             </label>
