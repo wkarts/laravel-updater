@@ -23,11 +23,13 @@ class TriggerDispatcherTest extends TestCase
             'update_type' => 'git_ff_only',
             'source_id' => 2,
             'profile_id' => 7,
+            'replay_migrations_from_start' => true,
         ]);
 
         $this->assertContains('--allow-http', $args);
         $this->assertContains('--update-type=git_ff_only', $args);
         $this->assertContains('--source-id=2', $args);
         $this->assertContains('--profile-id=7', $args);
+        $this->assertContains('--replay-migrations-from-start', $args);
     }
 }
