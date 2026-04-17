@@ -26,8 +26,8 @@
         <input id="password_confirmation" type="password" name="password_confirmation" {{ isset($user) ? '' : 'required' }}>
     </div>
 
-    <label class="form-inline form-inline-check"><input type="checkbox" name="is_admin" value="1" {{ old('is_admin', (int) ($user['is_admin'] ?? 0)) == 1 ? 'checked' : '' }}><span>Usuário administrador</span></label>
-    <label class="form-inline form-inline-check"><input type="checkbox" name="is_active" value="1" {{ old('is_active', isset($user) ? (int) ($user['is_active'] ?? 0) : 1) == 1 ? 'checked' : '' }}><span>Usuário ativo</span></label>
+    <label class="switch-inline"><input type="checkbox" name="is_admin" value="1" {{ old('is_admin', (int) ($user['is_admin'] ?? 0)) == 1 ? 'checked' : '' }}><span>Usuário administrador</span></label>
+    <label class="switch-inline"><input type="checkbox" name="is_active" value="1" {{ old('is_active', isset($user) ? (int) ($user['is_active'] ?? 0) : 1) == 1 ? 'checked' : '' }}><span>Usuário ativo</span></label>
 
     <div>
         <label>Permissões do perfil</label>
