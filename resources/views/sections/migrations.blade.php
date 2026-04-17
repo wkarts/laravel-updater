@@ -21,7 +21,7 @@
 
 <div class="card" style="margin-top:14px;">
     <h3>Filtros</h3>
-    <form method="GET" action="{{ route('updater.migrations.index') }}" class="form-grid" style="margin-top:10px;">
+    <form method="GET" action="{{ route('updater.migrations.index') }}" class="form-grid audit-filters" style="margin-top:6px;">
         <div>
             <label for="q">Nome da migration</label>
             <input id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ex: create_users_table">
@@ -50,7 +50,7 @@
                 Somente inconsistentes
             </label>
         </div>
-        <div class="form-inline">
+        <div class="form-inline audit-filter-actions">
             <button class="btn btn-primary" type="submit">Filtrar</button>
             <a class="btn" href="{{ route('updater.migrations.index') }}">Limpar</a>
         </div>
@@ -100,11 +100,8 @@
                             @csrf
                             <input type="hidden" name="migration" value="{{ $row['migration'] }}">
                             <input type="hidden" name="redirect_to" value="index">
-                            <label>
-                                Motivo (opcional)
-                                <input type="text" name="reason" placeholder="Ex.: corrigir inconsistência detectada">
-                            </label>
-                            <div class="form-inline">
+                            <input type="hidden" name="reason" value="">
+                            <div class="actions-compact">
                                 <button class="btn hint-action" title="Registrar na fila para execução posterior" type="submit" name="action_type" value="queue">Marcar para reaplicação</button>
                                 <button class="btn btn-primary hint-action" title="Executar reaplicação desta migration agora (modo idempotente)" type="submit" name="action_type" value="run_now">Reaplicar individualmente agora</button>
                             </div>
