@@ -44,6 +44,11 @@ class MigrationRunReporter
         $this->store?->addRunLog($this->runId, $level, $message, $context);
     }
 
+    public function runId(): ?int
+    {
+        return $this->runId;
+    }
+
     public function summary(array $stats): array
     {
         return [

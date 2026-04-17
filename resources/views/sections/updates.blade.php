@@ -83,6 +83,13 @@
             </label>
         </div>
 
+        <div>
+            <label>
+                <input type="checkbox" name="replay_migrations_from_start" value="1" {{ old('replay_migrations_from_start') ? 'checked' : '' }}>
+                Recomeçar da primeira migration (reaplicar de forma idempotente)
+            </label>
+        </div>
+
         <div class="muted">Backup FULL é obrigatório e sempre será executado antes da atualização real.</div>
 
         <div class="form-inline">
