@@ -18,6 +18,7 @@ class UpdaterMigrateCommand extends Command
         {--mode= : Modo de execução (tolerant|strict)}
         {--strict : Atalho para --mode=strict}
         {--dry-run : Não executa SQL, apenas simula}
+        {--replay-from-start : Reaplica migrations desde o início (modo idempotente)}
         {--retry-locks= : Máximo de retries para lock/deadlock}
         {--retry-sleep-base= : Backoff base em segundos}
         {--run-id= : Vincula logs ao run_id do updater}
@@ -57,9 +58,10 @@ class UpdaterMigrateCommand extends Command
             'mode' => $mode,
             'strict' => $mode === 'strict',
             'dry_run' => (bool) ($this->option('dry-run') ?: config('updater.migrate.dry_run', false)),
+            'replay_from_start' => (bool) $this->option('replay-from-start'),
             'retry_locks' => $this->option('retry-locks') ?? config('updater.migrate.retry_locks', config('updater.migrate.max_retries', 2)),
             'retry_sleep_base' => $this->option('retry-sleep-base') ?? config('updater.migrate.retry_sleep_base', max(1, (int) round(((int) config('updater.migrate.backoff_ms', 3000)) / 1000))),
-            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', true),
+            'reconcile_already_exists' => (bool) config('updater.migrate.reconcile_already_exists', false),
         ];
 
         try {

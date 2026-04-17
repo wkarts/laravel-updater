@@ -27,6 +27,7 @@ class UpdateRunCommand extends Command
         {--tag= : Tag alvo para update por tag}
         {--allow-http : Permite execução disparada via HTTP/UI}
         {--strict-migrate : Não reconcilia drift de migrations}
+        {--replay-migrations-from-start : Reaplica migrations desde o início (modo idempotente)}
         {--source-id= : ID da fonte a ativar antes da execução}
         {--profile-id= : ID do perfil a ativar antes da execução}
         {--pre-command=* : Comando pré-update (pode repetir)}
@@ -89,6 +90,7 @@ class UpdateRunCommand extends Command
             'target_tag' => $tag,
             'allow_http' => (bool) $this->option('allow-http'),
             'strict_migrate' => (bool) $this->option('strict-migrate'),
+            'replay_migrations_from_start' => (bool) $this->option('replay-migrations-from-start'),
             'source_id' => $sourceId > 0 ? $sourceId : null,
             'profile_id' => $profileId > 0 ? $profileId : null,
             'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
