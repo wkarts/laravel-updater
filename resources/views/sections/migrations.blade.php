@@ -80,7 +80,7 @@
             @forelse($rows as $row)
                 <tr>
                     <td><code>{{ $row['migration'] }}</code></td>
-                    <td class="muted">{{ $row['file_path'] ?? '-' }}</td>
+                    <td class="muted"><span class="ellipsis-cell" title="{{ $row['file_path'] ?? '-' }}">{{ $row['file_path'] ?? '-' }}</span></td>
                     <td>{{ $row['status'] }}</td>
                     <td>{{ !empty($row['executed']) ? 'SIM' : 'NÃO' }}</td>
                     <td>{{ !empty($row['has_error']) ? 'SIM' : 'NÃO' }}</td>
@@ -89,7 +89,7 @@
                     <td>{{ (int) ($row['attempt_count'] ?? 0) }}</td>
                     <td>{{ $row['last_execution_at'] ?? '-' }}</td>
                     <td>{{ !empty($row['last_run_id']) ? '#' . (int) $row['last_run_id'] : '-' }}</td>
-                    <td>
+                    <td class="actions-cell">
                         <div class="actions-compact">
                             <a class="btn btn-secondary hint-action" title="Visualizar detalhes consolidados da migration" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}">👁</a>
                             <a class="btn btn-secondary hint-action" title="Abrir histórico completo de tentativas" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#historico">🕘</a>
@@ -100,7 +100,10 @@
                             @csrf
                             <input type="hidden" name="migration" value="{{ $row['migration'] }}">
                             <input type="hidden" name="redirect_to" value="index">
-                            <input type="hidden" name="reason" value="">
+                            <label class="muted" style="margin-bottom:2px;">
+                                Motivo (opcional)
+                                <input type="text" name="reason" placeholder="Ex.: corrigir inconsistência detectada">
+                            </label>
                             <div class="actions-compact">
                                 <button class="btn hint-action" title="Registrar na fila para execução posterior" type="submit" name="action_type" value="queue">Marcar para reaplicação</button>
                                 <button class="btn btn-primary hint-action" title="Executar reaplicação desta migration agora (modo idempotente)" type="submit" name="action_type" value="run_now">Reaplicar individualmente agora</button>
