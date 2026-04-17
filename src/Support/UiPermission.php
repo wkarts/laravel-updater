@@ -23,6 +23,7 @@ class UiPermission
             'backups.manage' => 'Gerenciar backups e restore',
             'logs.view' => 'Visualizar logs',
             'seeds.manage' => 'Gerenciar seeds',
+            'migrations.manage' => 'Auditar e reaplicar migrations',
             'users.manage' => 'Gerenciar usuários',
             'settings.manage' => 'Gerenciar configurações e tokens',
             'profile.manage' => 'Acessar/editar próprio perfil',
@@ -52,6 +53,7 @@ class UiPermission
             'updater.users.' => 'users.manage',
             'updater.settings.' => 'settings.manage',
             'updater.seeds.' => 'seeds.manage',
+            'updater.migrations.' => 'migrations.manage',
             'updater.logs' => 'logs.view',
             'updater.profile' => 'profile.manage',
             'updater.profile.' => 'profile.manage',
@@ -84,6 +86,7 @@ class UiPermission
             'admin-users' => 'users.manage',
             'settings' => 'settings.manage',
             'seeds' => 'seeds.manage',
+            'migrations' => 'migrations.manage',
             default => null,
         };
 
