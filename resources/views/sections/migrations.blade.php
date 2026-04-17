@@ -50,12 +50,6 @@
                 Somente inconsistentes
             </label>
         </div>
-        <div class="audit-filter-options">
-            <label class="switch-inline">
-                <input type="checkbox" value="1" data-toggle-file-path>
-                Exibir caminho completo abaixo do nome da migration
-            </label>
-        </div>
         <div class="form-inline audit-filter-actions compact-actions">
             <button class="btn btn-primary" type="submit">Filtrar</button>
             <a class="btn" href="{{ route('updater.migrations.index') }}">Limpar</a>
@@ -64,19 +58,25 @@
 </div>
 
 <div class="card card-compact" style="margin-top:10px;">
-    <h3>Grid de auditoria</h3>
+    <div class="audit-grid-header">
+        <h3>Grid de auditoria</h3>
+        <label class="switch-inline">
+            <input type="checkbox" value="1" data-toggle-file-path>
+            Exibir caminho completo
+        </label>
+    </div>
     <div class="table-wrap migrations-grid-wrap" data-migrations-grid>
-        <table>
+        <table class="audit-grid-table">
             <thead>
             <tr>
                 <th>Migration</th>
-                <th>Status atual</th>
+                <th>Status</th>
                 <th>Aplicada</th>
                 <th>Erro</th>
-                <th>Reconciliada</th>
-                <th>Reaplicada</th>
-                <th>Tentativas</th>
-                <th>Última execução</th>
+                <th>Reconc.</th>
+                <th>Reaplic.</th>
+                <th>Tent.</th>
+                <th>Últ Exec.</th>
                 <th>Run</th>
                 <th>Ações</th>
             </tr>
@@ -84,7 +84,7 @@
             <tbody>
             @forelse($rows as $row)
                 <tr>
-                    <td>
+                    <td class="col-main">
                         <code>{{ $row['migration'] }}</code>
                         <small class="migration-file-path muted">{{ $row['file_path'] ?? '-' }}</small>
                     </td>
@@ -96,7 +96,7 @@
                     <td>{{ (int) ($row['attempt_count'] ?? 0) }}</td>
                     <td>{{ $row['last_execution_at'] ?? '-' }}</td>
                     <td>{{ !empty($row['last_run_id']) ? '#' . (int) $row['last_run_id'] : '-' }}</td>
-                    <td class="actions-cell">
+                    <td class="actions-cell col-actions">
                         <form method="POST" action="{{ route('updater.migrations.reapply') }}" class="migration-actions-row">
                             @csrf
                             <input type="hidden" name="migration" value="{{ $row['migration'] }}">

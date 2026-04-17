@@ -235,6 +235,26 @@ th, td { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: lef
 th { background: var(--surface-soft); }
 thead th { position: sticky; top: 0; z-index: 1; }
 
+.audit-grid-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.audit-grid-table th,
+.audit-grid-table td {
+    font-size: 10.5px;
+    text-align: center;
+}
+
+.audit-grid-table td.col-main,
+.audit-grid-table th.col-main { text-align: left; }
+
+.audit-grid-table td.col-actions,
+.audit-grid-table th.col-actions { text-align: right; }
+
 pre {
     background: var(--surface-soft);
     border: 1px solid var(--line);
@@ -472,6 +492,11 @@ body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
 
     .migrations-grid-wrap th,
     .migrations-grid-wrap td { font-size: 10px; }
+
+    .audit-grid-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 
     .migration-actions-row {
         grid-template-columns: repeat(7, 30px);
