@@ -25,6 +25,7 @@ class IdempotentMigrationService
         $dryRun = (bool) ($options['dry_run'] ?? false);
         $replayFromStart = (bool) ($options['replay_from_start'] ?? false);
         $reconcileAlreadyExists = (bool) ($options['reconcile_already_exists'] ?? false);
+        $shouldReconcileAlreadyExists = $reconcileAlreadyExists || $replayFromStart;
         $lockRetries = max(0, (int) ($options['retry_locks'] ?? 2));
         $retrySleepBase = max(1, (int) ($options['retry_sleep_base'] ?? 3));
 
@@ -68,6 +69,7 @@ class IdempotentMigrationService
             'dry_run' => $dryRun,
             'idempotent' => $isEnabled,
             'replay_from_start' => $replayFromStart,
+            'reconcile_already_exists' => $shouldReconcileAlreadyExists,
             'pending' => array_keys($pending),
             'connection' => $connection,
         ]);
@@ -150,7 +152,7 @@ class IdempotentMigrationService
                         continue;
                     }
 
-                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && $isEnabled && $reconcileAlreadyExists && !$strict) {
+                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && $isEnabled && $shouldReconcileAlreadyExists && !$strict) {
                         $reconciled = $this->reconciler->reconcile(
                             $repository,
                             $name,
@@ -249,10 +251,21 @@ class IdempotentMigrationService
 
     private function resolvePaths(array $options): array
     {
-        $paths = array_values(array_filter((array) config('updater.migrate.paths', [])));
+        $paths = [];
+        if (function_exists('config')) {
+            try {
+                $paths = array_values(array_filter((array) config('updater.migrate.paths', [])));
+            } catch (\Throwable) {
+                $paths = [];
+            }
+        }
 
         if ($paths === []) {
-            $paths = [database_path('migrations')];
+            try {
+                $paths = [database_path('migrations')];
+            } catch (\Throwable) {
+                $paths = ['database/migrations'];
+            }
         }
 
         $extraPath = trim((string) ($options['path'] ?? ''));
