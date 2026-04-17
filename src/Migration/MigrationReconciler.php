@@ -104,6 +104,16 @@ class MigrationReconciler
             ];
         }
 
+        if ($type === 'column' && $name !== null && $table !== null) {
+            $exists = $schema->hasColumn($table, $name);
+
+            return [
+                'compatible' => $expectsAbsent ? !$exists : $exists,
+                'warning' => false,
+                'note' => $expectsAbsent ? 'validated_column_already_absent' : 'validated_column_exists',
+            ];
+        }
+
         if ($type === 'index' && $name !== null && $table !== null) {
             $exists = $this->indexExists($connection, $table, $name);
 

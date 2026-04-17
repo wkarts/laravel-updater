@@ -59,7 +59,7 @@
 
 <div class="card" style="margin-top:14px;">
     <h3>Grid de auditoria</h3>
-    <div class="table-wrap table-wrap-scroll">
+    <div class="table-wrap table-wrap-scroll migrations-grid-wrap">
         <table>
             <thead>
             <tr>
@@ -90,25 +90,33 @@
                     <td>{{ $row['last_execution_at'] ?? '-' }}</td>
                     <td>{{ !empty($row['last_run_id']) ? '#' . (int) $row['last_run_id'] : '-' }}</td>
                     <td class="actions-cell">
-                        <div class="actions-compact">
-                            <a class="btn btn-secondary hint-action" title="Visualizar detalhes consolidados da migration" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}">👁</a>
-                            <a class="btn btn-secondary hint-action" title="Abrir histórico completo de tentativas" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#historico">🕘</a>
-                            <a class="btn btn-secondary hint-action" title="Filtrar viewer de logs por esta migration" href="{{ route('updater.section', ['section' => 'logs']) }}?q={{ urlencode($row['migration']) }}">📜</a>
-                            <a class="btn btn-secondary hint-action" title="Analisar consistência código x banco x histórico" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#consistencia">🧪</a>
-                        </div>
-                        <form method="POST" action="{{ route('updater.migrations.reapply') }}" class="form-grid" style="margin-top:8px;">
+                        <form method="POST" action="{{ route('updater.migrations.reapply') }}" class="migration-actions-row">
                             @csrf
                             <input type="hidden" name="migration" value="{{ $row['migration'] }}">
                             <input type="hidden" name="redirect_to" value="index">
-                            <label class="muted" style="margin-bottom:2px;">
-                                Motivo (opcional)
-                                <input type="text" name="reason" placeholder="Ex.: corrigir inconsistência detectada">
-                            </label>
-                            <div class="actions-compact">
-                                <button class="btn hint-action" title="Registrar na fila para execução posterior" type="submit" name="action_type" value="queue">Marcar para reaplicação</button>
-                                <button class="btn btn-primary hint-action" title="Executar reaplicação desta migration agora (modo idempotente)" type="submit" name="action_type" value="run_now">Reaplicar individualmente agora</button>
-                            </div>
+                            <input type="hidden" name="reason" value="" data-reason-value>
+
+                            <a class="btn btn-secondary hint-action btn-action-sm" title="Visualizar detalhes consolidados da migration" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}">👁</a>
+                            <a class="btn btn-secondary hint-action btn-action-sm" title="Abrir histórico completo de tentativas" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#historico">🕘</a>
+                            <a class="btn btn-secondary hint-action btn-action-sm" title="Filtrar viewer de logs por esta migration" href="{{ route('updater.section', ['section' => 'logs']) }}?q={{ urlencode($row['migration']) }}">📜</a>
+                            <a class="btn btn-secondary hint-action btn-action-sm" title="Analisar consistência código x banco x histórico" href="{{ route('updater.migrations.show', ['migration' => $row['migration']]) }}#consistencia">🧪</a>
+
+                            <button class="btn btn-secondary hint-action btn-action-sm" type="button" data-open-reason title="Definir motivo da reaplicação">Motivo</button>
+                            <button class="btn hint-action btn-action-sm btn-action-wide" title="Registrar na fila para execução posterior" type="submit" name="action_type" value="queue">Marcar</button>
+                            <button class="btn btn-primary hint-action btn-action-sm btn-action-wide" title="Executar reaplicação desta migration agora (modo idempotente)" type="submit" name="action_type" value="run_now">Reaplicar agora</button>
                         </form>
+
+                        <dialog class="reason-dialog" data-reason-dialog>
+                            <form method="dialog" class="reason-dialog-form">
+                                <h4>Motivo da reaplicação</h4>
+                                <input type="text" data-reason-input placeholder="Ex.: corrigir inconsistência detectada">
+                                <div class="reason-dialog-actions">
+                                    <button type="button" class="btn btn-secondary btn-action-sm" data-clear-reason>Limpar</button>
+                                    <button type="button" class="btn btn-secondary btn-action-sm" data-close-reason>Cancelar</button>
+                                    <button type="button" class="btn btn-primary btn-action-sm" data-save-reason>Salvar</button>
+                                </div>
+                            </form>
+                        </dialog>
                     </td>
                 </tr>
             @empty
@@ -121,3 +129,84 @@
     </div>
 </div>
 @endsection
+
+@once
+    <script>
+        (() => {
+            const getRowContext = (target) => {
+                const actionsRow = target.closest('.migration-actions-row');
+                if (!actionsRow) {
+                    return null;
+                }
+
+                const cell = actionsRow.closest('.actions-cell');
+                const dialog = cell ? cell.querySelector('[data-reason-dialog]') : null;
+                const hiddenReason = actionsRow.querySelector('[data-reason-value]');
+                const input = dialog ? dialog.querySelector('[data-reason-input]') : null;
+
+                if (!dialog || !hiddenReason || !input) {
+                    return null;
+                }
+
+                return { dialog, hiddenReason, input };
+            };
+
+            document.addEventListener('click', (event) => {
+                const openButton = event.target.closest('[data-open-reason]');
+                if (openButton) {
+                    const context = getRowContext(openButton);
+                    if (!context) {
+                        return;
+                    }
+
+                    context.input.value = context.hiddenReason.value || '';
+                    context.dialog.showModal();
+                    context.input.focus();
+                    context.input.select();
+                    return;
+                }
+
+                const saveButton = event.target.closest('[data-save-reason]');
+                if (saveButton) {
+                    const dialog = saveButton.closest('[data-reason-dialog]');
+                    if (!dialog) {
+                        return;
+                    }
+
+                    const cell = dialog.closest('.actions-cell');
+                    const actionsRow = cell ? cell.querySelector('.migration-actions-row') : null;
+                    const hiddenReason = actionsRow ? actionsRow.querySelector('[data-reason-value]') : null;
+                    const input = dialog.querySelector('[data-reason-input]');
+                    if (hiddenReason && input) {
+                        hiddenReason.value = input.value.trim();
+                    }
+                    dialog.close();
+                    return;
+                }
+
+                const clearButton = event.target.closest('[data-clear-reason]');
+                if (clearButton) {
+                    const dialog = clearButton.closest('[data-reason-dialog]');
+                    if (!dialog) {
+                        return;
+                    }
+
+                    const input = dialog.querySelector('[data-reason-input]');
+                    if (input) {
+                        input.value = '';
+                        input.focus();
+                    }
+                    return;
+                }
+
+                const closeButton = event.target.closest('[data-close-reason]');
+                if (closeButton) {
+                    const dialog = closeButton.closest('[data-reason-dialog]');
+                    if (dialog) {
+                        dialog.close();
+                    }
+                }
+            });
+        })();
+    </script>
+@endonce

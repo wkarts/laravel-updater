@@ -29,12 +29,42 @@ final class MigrationReconcilerTest extends TestCase
         $this->assertSame('object_unknown_requires_manual_review', $result['note']);
     }
 
-    private function resolverMock(): ConnectionResolverInterface
+    public function testReconciliarColunaQuandoJaExisteNaTabela(): void
     {
-        $schema = new class {
+        $reconciler = new MigrationReconciler($this->resolverMock(['veiculos' => ['filial_id', 'deleted_at']]));
+
+        $result = $reconciler->validateMinimumCompatibility([
+            'type' => 'column',
+            'name' => 'filial_id',
+            'table' => 'veiculos',
+            'expects_absent' => false,
+        ], [
+            'sqlstate' => '42S21',
+            'errno' => 1060,
+            'message' => "duplicate column name 'filial_id'",
+        ], null, false);
+
+        $this->assertTrue($result['compatible']);
+        $this->assertSame('validated_column_exists', $result['note']);
+    }
+
+    private function resolverMock(array $columnsByTable = []): ConnectionResolverInterface
+    {
+        $schema = new class($columnsByTable) {
+            public function __construct(private readonly array $columnsByTable)
+            {
+            }
+
             public function hasTable(string $table): bool
             {
                 return false;
+            }
+
+            public function hasColumn(string $table, string $column): bool
+            {
+                $columns = $this->columnsByTable[$table] ?? [];
+
+                return in_array($column, $columns, true);
             }
         };
 
