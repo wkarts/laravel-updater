@@ -68,6 +68,9 @@ if ((bool) config('updater.ui.enabled', true)) {
 
                 Route::get('/seeds', [OperationsController::class, 'seedsIndex'])->name('updater.seeds.index');
                 Route::post('/seeds/reapply', [OperationsController::class, 'reapplySeed'])->name('updater.seeds.reapply');
+                Route::get('/migrations', [OperationsController::class, 'migrationsAuditIndex'])->name('updater.migrations.index');
+                Route::get('/migrations/{migration}', [OperationsController::class, 'migrationAuditShow'])->name('updater.migrations.show');
+                Route::post('/migrations/reapply', [OperationsController::class, 'reapplyMigration'])->name('updater.migrations.reapply');
 
                 Route::get('/users', [ManagerController::class, 'usersIndex'])->name('updater.users.index');
                 Route::get('/users/create', [ManagerController::class, 'usersCreate'])->name('updater.users.create');
@@ -102,7 +105,7 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/security/git/maintain', [ManagerController::class, 'gitMaintainNow'])->name('updater.security.git.maintain');
                 Route::post('/security/lock/clear', [ManagerController::class, 'forceClearUpdateLock'])->name('updater.security.lock.clear');
 
-                Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds'])->name('updater.section');
+                Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds', 'migrations'])->name('updater.section');
             });
         });
     } else {
@@ -117,7 +120,10 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
             Route::post('/maintenance/on', [UpdaterUiController::class, 'maintenanceOn'])->name('updater.maintenance.on');
             Route::post('/maintenance/off', [UpdaterUiController::class, 'maintenanceOff'])->name('updater.maintenance.off');
-            Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds'])->name('updater.section');
+            Route::get('/migrations', [OperationsController::class, 'migrationsAuditIndex'])->name('updater.migrations.index');
+            Route::get('/migrations/{migration}', [OperationsController::class, 'migrationAuditShow'])->name('updater.migrations.show');
+            Route::post('/migrations/reapply', [OperationsController::class, 'reapplyMigration'])->name('updater.migrations.reapply');
+            Route::get('/{section}', [ManagerController::class, 'section'])->whereIn('section', ['updates', 'runs', 'sources', 'profiles', 'backups', 'logs', 'security', 'admin-users', 'settings', 'seeds', 'migrations'])->name('updater.section');
         });
     }
 }

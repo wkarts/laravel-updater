@@ -2,10 +2,10 @@
 @section('page_title', 'Logs')
 
 @section('content')
-<div class="card">
+<div class="card card-compact">
     <h3>Viewer de logs</h3>
 
-    <form method="GET" class="form-inline" style="margin:10px 0 14px;">
+    <form method="GET" class="form-inline compact-actions" style="margin:6px 0 8px;">
         <input name="run_id" placeholder="Run ID" value="{{ request('run_id') }}">
         <select name="level">
             <option value="">Todos os níveis</option>
@@ -18,14 +18,14 @@
     </form>
 
     <div class="table-wrap">
-        <table>
-            <thead><tr><th>Data</th><th>Nível</th><th>Mensagem</th></tr></thead>
+        <table class="audit-grid-table">
+            <thead><tr><th>Data</th><th>Nível</th><th class="col-main">Mensagem</th></tr></thead>
             <tbody>
             @forelse($logs as $log)
                 <tr>
                     <td>{{ $log['created_at'] }}</td>
                     <td>{{ strtoupper($log['level']) }}</td>
-                    <td>{{ $log['message'] }}</td>
+                    <td class="col-main">{{ $log['message'] }}</td>
                 </tr>
             @empty
                 <tr><td colspan="3" class="muted">Sem logs para os filtros selecionados.</td></tr>
