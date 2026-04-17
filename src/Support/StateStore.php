@@ -435,6 +435,17 @@ class StateStore
         return (int) $this->connect()->lastInsertId();
     }
 
+    public function hasQueuedMigrationReapply(string $migration): bool
+    {
+        $stmt = $this->connect()->prepare('SELECT COUNT(*) FROM updater_migration_reapply_queue WHERE migration = :migration AND status = :status');
+        $stmt->execute([
+            ':migration' => $migration,
+            ':status' => 'queued',
+        ]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
     public function finishMigrationReapplyQueue(int $id, string $status, ?int $runId = null, array $result = []): void
     {
         $stmt = $this->connect()->prepare('UPDATE updater_migration_reapply_queue SET status=:status, run_id=:run_id, result_json=:result_json, processed_at=:processed_at WHERE id=:id');

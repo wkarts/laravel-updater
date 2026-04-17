@@ -105,8 +105,8 @@
                                 <input type="text" name="reason" placeholder="Ex.: corrigir inconsistência detectada">
                             </label>
                             <div class="form-inline">
-                                <button class="btn" type="submit">Marcar para reaplicação</button>
-                                <button class="btn btn-primary" type="submit">Reaplicar individualmente agora</button>
+                                <button class="btn" type="submit" name="action_type" value="queue">Marcar para reaplicação</button>
+                                <button class="btn btn-primary" type="submit" name="action_type" value="run_now">Reaplicar individualmente agora</button>
                             </div>
                         </form>
                     </td>
@@ -121,4 +121,3 @@
     </div>
 </div>
 @endsection
-

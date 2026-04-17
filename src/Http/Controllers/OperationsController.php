@@ -591,18 +591,49 @@ class OperationsController extends Controller
             'migration' => ['required', 'string'],
             'reason' => ['nullable', 'string', 'max:1000'],
             'redirect_to' => ['nullable', 'string', 'in:index,show'],
+            'action_type' => ['nullable', 'string', 'in:queue,run_now'],
         ]);
 
         $migration = (string) $data['migration'];
         $reason = trim((string) ($data['reason'] ?? ''));
         $requestedBy = (string) (($actor['email'] ?? $actor['name'] ?? 'unknown'));
+        $actionType = (string) ($data['action_type'] ?? 'run_now');
 
         $files = $this->discoverMigrationFiles();
         if (!isset($files[$migration])) {
             return back()->withErrors(['migration' => 'Migration não encontrada no código-fonte para reaplicação.']);
         }
 
+        if ($this->stateStore->hasQueuedMigrationReapply($migration)) {
+            return back()->with('status', 'Esta migration já está marcada para reaplicação na fila.');
+        }
+
         $queueId = $this->stateStore->queueMigrationReapply($migration, $reason !== '' ? $reason : null, $requestedBy);
+
+        if ($actionType === 'queue') {
+            $this->stateStore->addMigrationAttempt(
+                null,
+                $migration,
+                'manual_reapply_queued',
+                1,
+                $files[$migration],
+                true,
+                false,
+                false,
+                null,
+                ['queue_id' => $queueId],
+                'manual_reapply',
+                $requestedBy,
+                $reason !== '' ? $reason : null
+            );
+
+            return back()->with('status', 'Migration marcada para reaplicação com sucesso.');
+        }
+
+        if ($this->stateStore->hasActiveRun()) {
+            return back()->withErrors(['migration' => 'Já existe uma execução em andamento. Aguarde para reaplicar agora.']);
+        }
+
         $runId = $this->stateStore->createRun([
             'manual_migration_reapply' => true,
             'migration' => $migration,

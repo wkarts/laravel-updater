@@ -18,6 +18,7 @@
         @csrf
         <input type="hidden" name="migration" value="{{ $item['migration'] }}">
         <input type="hidden" name="redirect_to" value="show">
+        <input type="hidden" name="action_type" value="run_now">
         <div>
             <label for="reason">Motivo da reaplicação</label>
             <input id="reason" type="text" name="reason" maxlength="1000" placeholder="Ex.: validação de consistência operacional">
@@ -132,4 +133,3 @@
     </table>
 </div>
 @endsection
-
