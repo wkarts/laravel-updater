@@ -2,9 +2,9 @@
 @section('page_title', 'Auditoria de Migrations')
 
 @section('content')
-<div class="card">
+<div class="card card-compact">
     <h3>Dashboard de auditoria</h3>
-    <div class="update-status-grid">
+    <div class="update-status-grid audit-dashboard-grid">
         <p><strong>Total no projeto:</strong> {{ (int) ($metrics['total'] ?? 0) }}</p>
         <p><strong>Aplicadas com sucesso:</strong> {{ (int) ($metrics['success'] ?? 0) }}</p>
         <p><strong>Pendentes:</strong> {{ (int) ($metrics['pending'] ?? 0) }}</p>
@@ -19,9 +19,9 @@
     </div>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card card-compact" style="margin-top:10px;">
     <h3>Filtros</h3>
-    <form method="GET" action="{{ route('updater.migrations.index') }}" class="form-grid audit-filters" style="margin-top:6px;">
+    <form method="GET" action="{{ route('updater.migrations.index') }}" class="form-grid audit-filters compact-form" style="margin-top:4px;">
         <div>
             <label for="q">Nome da migration</label>
             <input id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ex: create_users_table">
@@ -50,21 +50,26 @@
                 Somente inconsistentes
             </label>
         </div>
-        <div class="form-inline audit-filter-actions">
+        <div class="audit-filter-options">
+            <label class="switch-inline">
+                <input type="checkbox" value="1" data-toggle-file-path>
+                Exibir caminho completo abaixo do nome da migration
+            </label>
+        </div>
+        <div class="form-inline audit-filter-actions compact-actions">
             <button class="btn btn-primary" type="submit">Filtrar</button>
             <a class="btn" href="{{ route('updater.migrations.index') }}">Limpar</a>
         </div>
     </form>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card card-compact" style="margin-top:10px;">
     <h3>Grid de auditoria</h3>
-    <div class="table-wrap table-wrap-scroll migrations-grid-wrap">
+    <div class="table-wrap migrations-grid-wrap" data-migrations-grid>
         <table>
             <thead>
             <tr>
                 <th>Migration</th>
-                <th>Arquivo</th>
                 <th>Status atual</th>
                 <th>Aplicada</th>
                 <th>Erro</th>
@@ -79,8 +84,10 @@
             <tbody>
             @forelse($rows as $row)
                 <tr>
-                    <td><code>{{ $row['migration'] }}</code></td>
-                    <td class="muted"><span class="ellipsis-cell" title="{{ $row['file_path'] ?? '-' }}">{{ $row['file_path'] ?? '-' }}</span></td>
+                    <td>
+                        <code>{{ $row['migration'] }}</code>
+                        <small class="migration-file-path muted">{{ $row['file_path'] ?? '-' }}</small>
+                    </td>
                     <td>{{ $row['status'] }}</td>
                     <td>{{ !empty($row['executed']) ? 'SIM' : 'NÃO' }}</td>
                     <td>{{ !empty($row['has_error']) ? 'SIM' : 'NÃO' }}</td>
@@ -121,7 +128,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="11" class="muted">Nenhuma migration encontrada para os filtros aplicados.</td>
+                    <td colspan="10" class="muted">Nenhuma migration encontrada para os filtros aplicados.</td>
                 </tr>
             @endforelse
             </tbody>
@@ -150,6 +157,30 @@
 
                 return { dialog, hiddenReason, input };
             };
+
+            const gridWrap = document.querySelector('[data-migrations-grid]');
+            const filePathToggle = document.querySelector('[data-toggle-file-path]');
+            const filePathStorageKey = 'updater:migrations:show-file-path';
+
+            const applyFilePathPreference = (enabled) => {
+                if (gridWrap) {
+                    gridWrap.classList.toggle('show-file-path', enabled);
+                }
+                if (filePathToggle) {
+                    filePathToggle.checked = enabled;
+                }
+            };
+
+            if (filePathToggle) {
+                const storedPreference = localStorage.getItem(filePathStorageKey);
+                applyFilePathPreference(storedPreference === '1');
+
+                filePathToggle.addEventListener('change', () => {
+                    const enabled = filePathToggle.checked;
+                    localStorage.setItem(filePathStorageKey, enabled ? '1' : '0');
+                    applyFilePathPreference(enabled);
+                });
+            }
 
             document.addEventListener('click', (event) => {
                 const openButton = event.target.closest('[data-open-reason]');
