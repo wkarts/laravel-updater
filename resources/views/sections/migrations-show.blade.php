@@ -2,7 +2,7 @@
 @section('page_title', 'Detalhes da migration')
 
 @section('content')
-<div class="card">
+<div class="card card-compact">
     <h3>{{ $item['migration'] }}</h3>
     <div class="update-status-grid">
         <p><strong>Arquivo:</strong> {{ $item['file_path'] ?? '-' }}</p>
@@ -30,7 +30,7 @@
     </form>
 </div>
 
-<div class="card" id="consistencia" style="margin-top:14px;">
+<div class="card card-compact" id="consistencia" style="margin-top:10px;">
     <h3>Consistência</h3>
     <p class="muted">Use este painel para comparar código x histórico x banco. Se houver divergência operacional, reaplique individualmente com motivo e rastreabilidade.</p>
     <ul>
@@ -40,14 +40,15 @@
     </ul>
 </div>
 
-<div class="card" id="historico" style="margin-top:14px;">
+<div class="card card-compact" id="historico" style="margin-top:10px;">
     <h3>Histórico de tentativas</h3>
-    <table>
+    <div class="table-wrap">
+    <table class="audit-grid-table">
         <thead>
         <tr>
-            <th>Data/Hora</th>
+            <th>Data</th>
             <th>Status</th>
-            <th>Tentativa</th>
+            <th>Tent.</th>
             <th>Run</th>
             <th>Origem</th>
             <th>Usuário</th>
@@ -64,20 +65,22 @@
                 <td>{{ !empty($attempt['run_id']) ? '#' . (int) $attempt['run_id'] : '-' }}</td>
                 <td>{{ $attempt['origin'] ?? '-' }}</td>
                 <td>{{ $attempt['requested_by'] ?? '-' }}</td>
-                <td>{{ $attempt['reason'] ?? '-' }}</td>
-                <td class="muted">{{ $attempt['error_message'] ?? '-' }}</td>
+                <td class="col-main">{{ $attempt['reason'] ?? '-' }}</td>
+                <td class="muted col-main">{{ $attempt['error_message'] ?? '-' }}</td>
             </tr>
         @empty
             <tr><td colspan="8" class="muted">Sem histórico registrado.</td></tr>
         @endforelse
         </tbody>
     </table>
+    </div>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card card-compact" style="margin-top:10px;">
     <h3>Eventos de reconciliação</h3>
-    <table>
-        <thead><tr><th>Data/Hora</th><th>Reconciliado</th><th>Estratégia</th><th>Run</th><th>Motivo</th></tr></thead>
+    <div class="table-wrap">
+    <table class="audit-grid-table">
+        <thead><tr><th>Data</th><th>Reconc.</th><th>Estratégia</th><th>Run</th><th class="col-main">Motivo</th></tr></thead>
         <tbody>
         @forelse($reconciliations as $event)
             <tr>
@@ -85,19 +88,21 @@
                 <td>{{ (int) ($event['reconciled'] ?? 0) === 1 ? 'SIM' : 'NÃO' }}</td>
                 <td>{{ $event['strategy'] ?? '-' }}</td>
                 <td>{{ !empty($event['run_id']) ? '#' . (int) $event['run_id'] : '-' }}</td>
-                <td>{{ $event['reason'] ?? '-' }}</td>
+                <td class="col-main">{{ $event['reason'] ?? '-' }}</td>
             </tr>
         @empty
             <tr><td colspan="5" class="muted">Sem reconciliações registradas.</td></tr>
         @endforelse
         </tbody>
     </table>
+    </div>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card card-compact" style="margin-top:10px;">
     <h3>Fila e histórico de reaplicações</h3>
-    <table>
-        <thead><tr><th>Solicitado em</th><th>Status</th><th>Run</th><th>Solicitante</th><th>Motivo</th></tr></thead>
+    <div class="table-wrap">
+    <table class="audit-grid-table">
+        <thead><tr><th>Solicitado em</th><th>Status</th><th>Run</th><th>Solicitante</th><th class="col-main">Motivo</th></tr></thead>
         <tbody>
         @forelse($reapplyQueue as $itemQueue)
             <tr>
@@ -105,25 +110,27 @@
                 <td>{{ $itemQueue['status'] ?? '-' }}</td>
                 <td>{{ !empty($itemQueue['run_id']) ? '#' . (int) $itemQueue['run_id'] : '-' }}</td>
                 <td>{{ $itemQueue['requested_by'] ?? '-' }}</td>
-                <td>{{ $itemQueue['reason'] ?? '-' }}</td>
+                <td class="col-main">{{ $itemQueue['reason'] ?? '-' }}</td>
             </tr>
         @empty
             <tr><td colspan="5" class="muted">Nenhuma reaplicação registrada.</td></tr>
         @endforelse
         </tbody>
     </table>
+    </div>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card card-compact" style="margin-top:10px;">
     <h3>Logs relacionados</h3>
-    <table>
-        <thead><tr><th>Data/Hora</th><th>Nível</th><th>Mensagem</th><th>Run</th></tr></thead>
+    <div class="table-wrap">
+    <table class="audit-grid-table">
+        <thead><tr><th>Data</th><th>Nível</th><th class="col-main">Mensagem</th><th>Run</th></tr></thead>
         <tbody>
         @forelse($logs as $log)
             <tr>
                 <td>{{ $log['created_at'] ?? '-' }}</td>
                 <td>{{ $log['level'] ?? '-' }}</td>
-                <td>{{ $log['message'] ?? '-' }}</td>
+                <td class="col-main">{{ $log['message'] ?? '-' }}</td>
                 <td>{{ !empty($log['run_id']) ? '#' . (int) $log['run_id'] : '-' }}</td>
             </tr>
         @empty
@@ -131,5 +138,6 @@
         @endforelse
         </tbody>
     </table>
+    </div>
 </div>
 @endsection
