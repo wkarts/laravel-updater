@@ -9,6 +9,7 @@ use Argws\LaravelUpdater\Migration\MigrationDriftDetector;
 use Argws\LaravelUpdater\Migration\MigrationFailureClassifier;
 use Argws\LaravelUpdater\Migration\MigrationReconciler;
 use Argws\LaravelUpdater\Migration\MigrationRunReporter;
+use Illuminate\Database\Migrations\DatabaseMigrationRepository;
 use Illuminate\Database\Migrations\Migrator;
 use PHPUnit\Framework\TestCase;
 
@@ -16,8 +17,9 @@ class IdempotentMigrationServiceReplayTest extends TestCase
 {
     public function testReplayFromStartReconciliaAlreadyExistsMesmoComFlagDesligada(): void
     {
-        $repository = $this->getMockBuilder(\stdClass::class)
-            ->addMethods(['repositoryExists', 'createRepository', 'getRan', 'delete', 'log', 'getNextBatchNumber'])
+        $repository = $this->getMockBuilder(DatabaseMigrationRepository::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['repositoryExists', 'createRepository', 'getRan', 'delete', 'log', 'getNextBatchNumber'])
             ->getMock();
 
         $repository->method('repositoryExists')->willReturn(true);
@@ -85,4 +87,3 @@ class IdempotentMigrationServiceReplayTest extends TestCase
         $this->assertSame(0, $stats['failed']);
     }
 }
-
