@@ -49,6 +49,37 @@ class MigrationRunReporter
         return $this->runId;
     }
 
+    public function migrationAttempt(
+        string $migration,
+        string $status,
+        int $attemptNo = 1,
+        ?string $filePath = null,
+        bool $isReplay = false,
+        bool $isReconciled = false,
+        bool $isIdempotentSkip = false,
+        ?string $errorMessage = null,
+        array $context = [],
+        ?string $origin = null,
+        ?string $requestedBy = null,
+        ?string $reason = null
+    ): void {
+        $this->store?->addMigrationAttempt(
+            $this->runId,
+            $migration,
+            $status,
+            $attemptNo,
+            $filePath,
+            $isReplay,
+            $isReconciled,
+            $isIdempotentSkip,
+            $errorMessage,
+            $context,
+            $origin,
+            $requestedBy,
+            $reason
+        );
+    }
+
     public function summary(array $stats): array
     {
         return [

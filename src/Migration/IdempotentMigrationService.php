@@ -96,6 +96,7 @@ class IdempotentMigrationService
             if ($dryRun) {
                 $stats['skipped_dry_run']++;
                 $reporter->log('info', 'Dry-run de migration.', ['migration' => $name, 'path' => $path, 'simulation' => $drift]);
+                $reporter->migrationAttempt($name, 'dry_run', 1, $path, $replayFromStart, false, true, null, ['simulation' => $drift], 'updater:migrate');
                 continue;
             }
 
@@ -119,11 +120,13 @@ class IdempotentMigrationService
                     'path' => $path,
                     'attempt' => $attempt,
                 ]);
+                $reporter->migrationAttempt($name, 'started', $attempt, $path, $replayFromStart, false, false, null, [], 'updater:migrate');
 
                 try {
                     $this->migrator->run([$path], ['step' => false]);
                     $stats['executed']++;
                     $reporter->log('info', 'Migration executada com sucesso.', ['migration' => $name, 'attempt' => $attempt]);
+                    $reporter->migrationAttempt($name, 'success', $attempt, $path, $replayFromStart, false, false, null, [], 'updater:migrate');
                     break;
                 } catch (Throwable $throwable) {
                     $classification = $this->classifier->classify($throwable);
@@ -178,6 +181,11 @@ class IdempotentMigrationService
                                 'migration' => $name,
                                 'result' => $reconciled,
                             ]);
+                            $reporter->migrationAttempt($name, 'reconciled', $attempt, $path, $replayFromStart, true, true, null, [
+                                'classification' => $classification,
+                                'object' => $object,
+                                'details' => $details,
+                            ], 'updater:migrate');
                             break;
                         }
                     }
@@ -204,6 +212,11 @@ class IdempotentMigrationService
                             'migration' => $name,
                             'error' => $throwable->getMessage(),
                         ]);
+                        $reporter->migrationAttempt($name, 'warning_skipped', $attempt, $path, $replayFromStart, false, true, $throwable->getMessage(), [
+                            'classification' => $classification,
+                            'object' => $object,
+                            'details' => $details,
+                        ], 'updater:migrate');
 
                         if ($deletedForReplay && !$this->repositoryHasMigration($repository, $name)) {
                             $repository->log($name, $repository->getNextBatchNumber());
@@ -220,6 +233,11 @@ class IdempotentMigrationService
                     if ($deletedForReplay && !$this->repositoryHasMigration($repository, $name)) {
                         $repository->log($name, $repository->getNextBatchNumber());
                     }
+                    $reporter->migrationAttempt($name, 'failed', $attempt, $path, $replayFromStart, false, false, $throwable->getMessage(), [
+                        'classification' => $classification,
+                        'object' => $object,
+                        'details' => $details,
+                    ], 'updater:migrate');
                     throw $throwable;
                 }
             }
