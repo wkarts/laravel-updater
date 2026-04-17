@@ -77,9 +77,9 @@
                 <input id="ssh_private_key_path" name="ssh_private_key_path" value="{{ old('ssh_private_key_path', $editingSource['ssh_private_key_path'] ?? '') }}">
             </div>
 
-            <label class="form-inline" style="align-items:center;">
+            <label class="switch-inline">
                 @php($activeValue = old('active', (int) ($editingSource['active'] ?? 0)) ? 1 : 0)
-                <input type="checkbox" name="active" value="1" style="max-width:20px;" {{ $activeValue ? 'checked' : '' }}>
+                <input type="checkbox" name="active" value="1" {{ $activeValue ? 'checked' : '' }}>
                 <span>Definir como fonte ativa</span>
             </label>
 
