@@ -2,9 +2,9 @@
 @section('page_title', 'Auditoria de Migrations')
 
 @section('content')
-<div class="card">
+<div class="card card-compact">
     <h3>Dashboard de auditoria</h3>
-    <div class="update-status-grid">
+    <div class="update-status-grid audit-dashboard-grid">
         <p><strong>Total no projeto:</strong> {{ (int) ($metrics['total'] ?? 0) }}</p>
         <p><strong>Aplicadas com sucesso:</strong> {{ (int) ($metrics['success'] ?? 0) }}</p>
         <p><strong>Pendentes:</strong> {{ (int) ($metrics['pending'] ?? 0) }}</p>
@@ -19,9 +19,9 @@
     </div>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card card-compact" style="margin-top:10px;">
     <h3>Filtros</h3>
-    <form method="GET" action="{{ route('updater.migrations.index') }}" class="form-grid audit-filters" style="margin-top:6px;">
+    <form method="GET" action="{{ route('updater.migrations.index') }}" class="form-grid audit-filters compact-form compact-form-inline" style="margin-top:4px;">
         <div>
             <label for="q">Nome da migration</label>
             <input id="q" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="ex: create_users_table">
@@ -50,28 +50,48 @@
                 Somente inconsistentes
             </label>
         </div>
-        <div class="form-inline audit-filter-actions">
+        <div class="form-inline audit-filter-actions compact-actions">
             <button class="btn btn-primary" type="submit">Filtrar</button>
             <a class="btn" href="{{ route('updater.migrations.index') }}">Limpar</a>
         </div>
     </form>
 </div>
 
-<div class="card" style="margin-top:14px;">
-    <h3>Grid de auditoria</h3>
-    <div class="table-wrap table-wrap-scroll migrations-grid-wrap">
-        <table>
+<div class="card card-compact" style="margin-top:10px;">
+    <div class="audit-grid-header">
+        <h3>Grid de auditoria</h3>
+        <label class="switch-inline">
+            <input type="checkbox" value="1" data-toggle-file-path>
+            Exibir caminho completo
+        </label>
+    </div>
+    <form id="batch-reapply-form" method="POST" action="{{ route('updater.migrations.reapply.batch') }}" class="batch-toolbar">
+        @csrf
+        <input type="hidden" name="filtered_migrations" value="{{ implode(',', array_map(static fn(array $row): string => (string) ($row['migration'] ?? ''), $rows)) }}">
+        <select name="scope">
+            <option value="selected">Selecionadas</option>
+            <option value="filtered">Filtradas</option>
+            <option value="all">Todas</option>
+        </select>
+        <input type="number" name="limit" min="0" max="500" placeholder="Limite (opcional)">
+        <input type="text" name="reason" maxlength="1000" placeholder="Motivo da ação em lote">
+        <button class="btn" type="submit" name="action_type" value="queue" onclick="return confirm('Confirma enfileirar reaplicação em lote?')">Fila lote</button>
+        <button class="btn btn-primary" type="submit" name="action_type" value="run_now" onclick="return confirm('Confirma reaplicar agora em lote?')">Rodar lote</button>
+        <span class="muted">Selecione linhas ou use escopo filtrado/todas.</span>
+    </form>
+    <div class="table-wrap migrations-grid-wrap" data-migrations-grid>
+        <table class="audit-grid-table">
             <thead>
             <tr>
+                <th><input type="checkbox" data-select-all></th>
                 <th>Migration</th>
-                <th>Arquivo</th>
-                <th>Status atual</th>
+                <th>Status</th>
                 <th>Aplicada</th>
                 <th>Erro</th>
-                <th>Reconciliada</th>
-                <th>Reaplicada</th>
-                <th>Tentativas</th>
-                <th>Última execução</th>
+                <th>Reconc.</th>
+                <th>Reaplic.</th>
+                <th>Tent.</th>
+                <th>Últ Exec.</th>
                 <th>Run</th>
                 <th>Ações</th>
             </tr>
@@ -79,17 +99,20 @@
             <tbody>
             @forelse($rows as $row)
                 <tr>
-                    <td><code>{{ $row['migration'] }}</code></td>
-                    <td class="muted"><span class="ellipsis-cell" title="{{ $row['file_path'] ?? '-' }}">{{ $row['file_path'] ?? '-' }}</span></td>
+                    <td><input type="checkbox" name="selected_migrations[]" value="{{ $row['migration'] }}" form="batch-reapply-form" data-row-select></td>
+                    <td class="col-main">
+                        <code>{{ $row['migration'] }}</code>
+                        <small class="migration-file-path muted">{{ $row['file_path'] ?? '-' }}</small>
+                    </td>
                     <td>{{ $row['status'] }}</td>
                     <td>{{ !empty($row['executed']) ? 'SIM' : 'NÃO' }}</td>
                     <td>{{ !empty($row['has_error']) ? 'SIM' : 'NÃO' }}</td>
                     <td>{{ !empty($row['reconciled']) ? 'SIM' : 'NÃO' }}</td>
                     <td>{{ !empty($row['reapplied']) ? 'SIM' : 'NÃO' }}</td>
                     <td>{{ (int) ($row['attempt_count'] ?? 0) }}</td>
-                    <td>{{ $row['last_execution_at'] ?? '-' }}</td>
+                    <td class="last-exec-cell">{{ !empty($row['last_execution_at']) ? str_replace('T', ' ', mb_substr((string) $row['last_execution_at'], 0, 16)) : '-' }}</td>
                     <td>{{ !empty($row['last_run_id']) ? '#' . (int) $row['last_run_id'] : '-' }}</td>
-                    <td class="actions-cell">
+                    <td class="actions-cell col-actions">
                         <form method="POST" action="{{ route('updater.migrations.reapply') }}" class="migration-actions-row">
                             @csrf
                             <input type="hidden" name="migration" value="{{ $row['migration'] }}">
@@ -150,6 +173,49 @@
 
                 return { dialog, hiddenReason, input };
             };
+
+            const gridWrap = document.querySelector('[data-migrations-grid]');
+            const filePathToggle = document.querySelector('[data-toggle-file-path]');
+            const filePathStorageKey = 'updater:migrations:show-file-path';
+            const selectAll = document.querySelector('[data-select-all]');
+            const rowCheckboxes = Array.from(document.querySelectorAll('[data-row-select]'));
+
+            const applyFilePathPreference = (enabled) => {
+                if (gridWrap) {
+                    gridWrap.classList.toggle('show-file-path', enabled);
+                }
+                if (filePathToggle) {
+                    filePathToggle.checked = enabled;
+                }
+            };
+
+            if (filePathToggle) {
+                let storedPreference = null;
+                try {
+                    storedPreference = window.localStorage.getItem(filePathStorageKey);
+                } catch (_error) {
+                    storedPreference = null;
+                }
+                applyFilePathPreference(storedPreference === '1');
+
+                filePathToggle.addEventListener('change', () => {
+                    const enabled = filePathToggle.checked;
+                    try {
+                        window.localStorage.setItem(filePathStorageKey, enabled ? '1' : '0');
+                    } catch (_error) {
+                        // fallback silencioso: mantém comportamento em memória.
+                    }
+                    applyFilePathPreference(enabled);
+                });
+            }
+
+            if (selectAll && rowCheckboxes.length > 0) {
+                selectAll.addEventListener('change', () => {
+                    rowCheckboxes.forEach((checkbox) => {
+                        checkbox.checked = selectAll.checked;
+                    });
+                });
+            }
 
             document.addEventListener('click', (event) => {
                 const openButton = event.target.closest('[data-open-reason]');

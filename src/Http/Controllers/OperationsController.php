@@ -521,7 +521,8 @@ class OperationsController extends Controller
 
     public function migrationsAuditIndex(Request $request)
     {
-        $rows = $this->buildMigrationAuditRows();
+        $allRows = $this->buildMigrationAuditRows();
+        $rows = $allRows;
 
         $search = trim((string) $request->input('q', ''));
         $status = trim((string) $request->input('status', ''));
@@ -545,10 +546,11 @@ class OperationsController extends Controller
             return true;
         }));
 
-        $metrics = $this->buildMigrationAuditMetrics($rows);
+        $metrics = $this->buildMigrationAuditMetrics($allRows);
 
         return view('laravel-updater::sections.migrations', [
             'rows' => $rows,
+            'all_rows' => $allRows,
             'metrics' => $metrics,
             'runs' => $this->stateStore->recentRuns(200),
             'filters' => [
@@ -596,18 +598,98 @@ class OperationsController extends Controller
             'action_type' => ['nullable', 'string', 'in:queue,run_now'],
         ]);
 
-        $migration = (string) $data['migration'];
         $reason = trim((string) ($data['reason'] ?? ''));
         $requestedBy = (string) (($actor['email'] ?? $actor['name'] ?? 'unknown'));
         $actionType = (string) ($data['action_type'] ?? 'run_now');
+        $migration = (string) $data['migration'];
+
+        $result = $this->performMigrationReapply($migration, $reason, $requestedBy, $actionType);
+        if (($result['ok'] ?? false) !== true) {
+            return back()->withErrors(['migration' => (string) ($result['message'] ?? 'Falha ao reaplicar migration.')]);
+        }
+
+        $target = (string) ($data['redirect_to'] ?? 'index');
+        if ($target === 'show') {
+            return redirect()->route('updater.migrations.show', ['migration' => $migration])->with('status', (string) ($result['message'] ?? 'Migration reaplicada com sucesso.'));
+        }
+
+        return redirect()->route('updater.migrations.index')->with('status', (string) ($result['message'] ?? 'Migration reaplicada com sucesso.'));
+    }
+
+    public function reapplyMigrationsBatch(Request $request): RedirectResponse
+    {
+        $actor = request()->attributes->get('updater_user');
+        abort_if(!is_array($actor), 403);
+
+        $data = $request->validate([
+            'selected_migrations' => ['nullable', 'array'],
+            'selected_migrations.*' => ['string'],
+            'filtered_migrations' => ['nullable', 'string'],
+            'scope' => ['nullable', 'string', 'in:selected,filtered,all'],
+            'limit' => ['nullable', 'integer', 'min:0', 'max:500'],
+            'reason' => ['nullable', 'string', 'max:1000'],
+            'action_type' => ['nullable', 'string', 'in:queue,run_now'],
+        ]);
+
+        $scope = (string) ($data['scope'] ?? 'selected');
+        $limit = (int) ($data['limit'] ?? 0);
+        $reason = trim((string) ($data['reason'] ?? ''));
+        $actionType = (string) ($data['action_type'] ?? 'queue');
+        $requestedBy = (string) (($actor['email'] ?? $actor['name'] ?? 'unknown'));
+
+        $selected = array_values(array_filter(array_map('strval', (array) ($data['selected_migrations'] ?? []))));
+        $filtered = array_values(array_filter(array_map('trim', explode(',', (string) ($data['filtered_migrations'] ?? '')))));
+        $allNames = array_map(static fn (array $row): string => (string) ($row['migration'] ?? ''), $this->buildMigrationAuditRows());
+        $allNames = array_values(array_filter($allNames));
+
+        $targets = match ($scope) {
+            'all' => $allNames,
+            'filtered' => $filtered,
+            default => $selected,
+        };
+
+        $targets = array_values(array_unique($targets));
+        if ($limit > 0) {
+            $targets = array_slice($targets, 0, $limit);
+        }
+
+        if ($targets === []) {
+            return back()->withErrors(['batch' => 'Nenhuma migration selecionada para reaplicação em lote.']);
+        }
+
+        $summary = ['ok' => 0, 'failed' => 0];
+        $errors = [];
+
+        foreach ($targets as $migration) {
+            $result = $this->performMigrationReapply($migration, $reason, $requestedBy, $actionType);
+            if (($result['ok'] ?? false) === true) {
+                $summary['ok']++;
+                continue;
+            }
+
+            $summary['failed']++;
+            $errors[] = $migration . ': ' . (string) ($result['message'] ?? 'erro desconhecido');
+        }
+
+        if ($summary['failed'] > 0) {
+            return back()->withErrors(['batch' => 'Lote finalizado com falhas (' . $summary['failed'] . '). ' . implode(' | ', $errors)])
+                ->with('status', 'Lote processado: ' . $summary['ok'] . ' sucesso(s), ' . $summary['failed'] . ' falha(s).');
+        }
+
+        return back()->with('status', 'Lote processado com sucesso: ' . $summary['ok'] . ' migration(s).');
+    }
+
+    /** @return array{ok:bool,message:string} */
+    private function performMigrationReapply(string $migration, string $reason, string $requestedBy, string $actionType): array
+    {
 
         $files = $this->discoverMigrationFiles();
         if (!isset($files[$migration])) {
-            return back()->withErrors(['migration' => 'Migration não encontrada no código-fonte para reaplicação.']);
+            return ['ok' => false, 'message' => 'Migration não encontrada no código-fonte para reaplicação.'];
         }
 
         if ($this->stateStore->hasQueuedMigrationReapply($migration)) {
-            return back()->with('status', 'Esta migration já está marcada para reaplicação na fila.');
+            return ['ok' => true, 'message' => 'Esta migration já está marcada para reaplicação na fila.'];
         }
 
         $queueId = $this->stateStore->queueMigrationReapply($migration, $reason !== '' ? $reason : null, $requestedBy);
@@ -629,11 +711,11 @@ class OperationsController extends Controller
                 $reason !== '' ? $reason : null
             );
 
-            return back()->with('status', 'Migration marcada para reaplicação com sucesso.');
+            return ['ok' => true, 'message' => 'Migration marcada para reaplicação com sucesso.'];
         }
 
         if ($this->stateStore->hasActiveRun()) {
-            return back()->withErrors(['migration' => 'Já existe uma execução em andamento. Aguarde para reaplicar agora.']);
+            return ['ok' => false, 'message' => 'Já existe uma execução em andamento. Aguarde para reaplicar agora.'];
         }
 
         $runId = $this->stateStore->createRun([
@@ -690,15 +772,9 @@ class OperationsController extends Controller
         );
 
         if ($status !== 'success') {
-            return back()->withErrors(['migration' => 'Falha ao reaplicar migration: ' . $errorMessage]);
+            return ['ok' => false, 'message' => 'Falha ao reaplicar migration: ' . $errorMessage];
         }
-
-        $target = (string) ($data['redirect_to'] ?? 'index');
-        if ($target === 'show') {
-            return redirect()->route('updater.migrations.show', ['migration' => $migration])->with('status', 'Migration reaplicada com sucesso.');
-        }
-
-        return redirect()->route('updater.migrations.index')->with('status', 'Migration reaplicada com sucesso.');
+        return ['ok' => true, 'message' => 'Migration reaplicada com sucesso.'];
     }
 
     /** @return array{strategy:string,stats?:array<string,mixed>} */
@@ -940,8 +1016,10 @@ class OperationsController extends Controller
             $countByStatus[$status] = (int) ($countByStatus[$status] ?? 0) + 1;
         }
 
-        $lastError = collect($rows)->first(static fn (array $row): bool => (bool) ($row['has_error'] ?? false));
-        $lastRunWithMigration = collect($rows)->first(static fn (array $row): bool => (int) ($row['last_run_id'] ?? 0) > 0);
+        $attempts = $this->stateStore->listMigrationAttempts(null, null, 5000);
+        usort($attempts, static fn (array $a, array $b): int => strcmp((string) ($b['created_at'] ?? ''), (string) ($a['created_at'] ?? '')));
+        $lastError = collect($attempts)->first(static fn (array $attempt): bool => str_contains((string) ($attempt['status'] ?? ''), 'failed'));
+        $lastRunWithMigration = collect($attempts)->first(static fn (array $attempt): bool => (int) ($attempt['run_id'] ?? 0) > 0);
         $total = max(1, count($rows));
         $ok = (int) ($countByStatus['aplicada com sucesso'] ?? 0);
         $integrity = (int) round(($ok / $total) * 100);
@@ -955,7 +1033,7 @@ class OperationsController extends Controller
             'reconciled' => $countByStatus['reconciliada'] ?? 0,
             'idempotent_skipped' => $countByStatus['ignorada por idempotência'] ?? 0,
             'inconsistent' => ($countByStatus['inconsistente'] ?? 0) + ($countByStatus['órfã'] ?? 0) + ($countByStatus['ausente no código'] ?? 0) + ($countByStatus['ausente no banco'] ?? 0),
-            'last_run_id' => $lastRunWithMigration['last_run_id'] ?? null,
+            'last_run_id' => $lastRunWithMigration['run_id'] ?? null,
             'last_error_migration' => $lastError['migration'] ?? null,
             'integrity_percent' => $integrity,
         ];
