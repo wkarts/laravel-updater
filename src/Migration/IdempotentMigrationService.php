@@ -155,7 +155,10 @@ class IdempotentMigrationService
                         continue;
                     }
 
-                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && $isEnabled && $shouldReconcileAlreadyExists && !$strict) {
+                    $isAutoReconcilableObject = in_array((string) ($object['type'] ?? ''), ['table', 'column', 'index', 'constraint', 'view'], true);
+                    $allowAutoReconcile = $shouldReconcileAlreadyExists || $isAutoReconcilableObject;
+
+                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && $isEnabled && $allowAutoReconcile && !$strict) {
                         $reconciled = $this->reconciler->reconcile(
                             $repository,
                             $name,

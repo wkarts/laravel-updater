@@ -63,7 +63,15 @@ class MigrationRunReporter
         ?string $requestedBy = null,
         ?string $reason = null
     ): void {
-        $this->store?->addMigrationAttempt(
+        if ($this->store === null || !method_exists($this->store, 'addMigrationAttempt')) {
+            $this->log('warning', 'StateStore sem suporte a addMigrationAttempt; evento registrado apenas em log.', [
+                'migration' => $migration,
+                'status' => $status,
+            ]);
+            return;
+        }
+
+        $this->store->addMigrationAttempt(
             $this->runId,
             $migration,
             $status,

@@ -63,6 +63,10 @@ class MigrationReconciler
             return;
         }
 
+        if (!method_exists($this->store, 'addMigrationReconciliation')) {
+            return;
+        }
+
         $this->store->addMigrationReconciliation(
             $runId,
             $migrationName,

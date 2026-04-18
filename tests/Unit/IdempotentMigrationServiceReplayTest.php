@@ -86,4 +86,73 @@ class IdempotentMigrationServiceReplayTest extends TestCase
         $this->assertSame(1, $stats['reconciled']);
         $this->assertSame(0, $stats['failed']);
     }
+
+    public function testModoToleranteReconciliaDuplicateIndexMesmoSemFlagExplcita(): void
+    {
+        $repository = $this->getMockBuilder(DatabaseMigrationRepository::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['repositoryExists', 'createRepository', 'getRan', 'log', 'getNextBatchNumber'])
+            ->getMock();
+
+        $repository->method('repositoryExists')->willReturn(true);
+        $repository->method('getRan')->willReturn([]);
+        $repository->method('getNextBatchNumber')->willReturn(5);
+
+        $migrator = $this->getMockBuilder(Migrator::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['getRepository', 'setConnection', 'getMigrationFiles', 'run'])
+            ->getMock();
+
+        $migrator->method('getRepository')->willReturn($repository);
+        $migrator->method('getMigrationFiles')->willReturn([
+            '2025_01_01_000000_add_idx_categoria_contas' => '/tmp/2025_01_01_000000_add_idx_categoria_contas.php',
+        ]);
+        $migrator->method('run')->willThrowException(new \RuntimeException(
+            "SQLSTATE[42000]: Syntax error or access violation: 1061 Duplicate key name 'idx_categoria_contas_empresa_id' (Connection: mysql, SQL: alter table `categoria_contas` add index `idx_categoria_contas_empresa_id`(`empresa_id`))"
+        ));
+
+        $classifier = $this->createMock(MigrationFailureClassifier::class);
+        $classifier->method('classify')->willReturn(MigrationFailureClassifier::ALREADY_EXISTS);
+        $classifier->method('inferObject')->willReturn([
+            'type' => 'index',
+            'name' => 'idx_categoria_contas_empresa_id',
+            'table' => 'categoria_contas',
+            'expects_absent' => false,
+        ]);
+        $classifier->method('extractErrorDetails')->willReturn([
+            'sqlstate' => '42000',
+            'errno' => 1061,
+            'message' => "duplicate key name 'idx_categoria_contas_empresa_id'",
+        ]);
+
+        $reconciler = $this->createMock(MigrationReconciler::class);
+        $reconciler->expects($this->once())
+            ->method('reconcile')
+            ->willReturn(['reconciled' => true, 'warning' => false]);
+
+        $driftDetector = $this->createMock(MigrationDriftDetector::class);
+        $driftDetector->method('inspect')->willReturn([
+            'action' => 'run',
+            'reason' => 'default',
+            'object' => null,
+        ]);
+
+        $service = new IdempotentMigrationService($migrator, $classifier, $reconciler, $driftDetector);
+        $reporter = new MigrationRunReporter(null, sys_get_temp_dir() . '/updater-migrate-test-' . uniqid('', true) . '.log');
+
+        $stats = $service->run([
+            'idempotent' => true,
+            'database' => 'mysql',
+            'mode' => 'tolerant',
+            'strict' => false,
+            'dry_run' => false,
+            'replay_from_start' => false,
+            'reconcile_already_exists' => false,
+            'retry_locks' => 0,
+            'retry_sleep_base' => 1,
+        ], $reporter);
+
+        $this->assertSame(1, $stats['reconciled']);
+        $this->assertSame(0, $stats['failed']);
+    }
 }
