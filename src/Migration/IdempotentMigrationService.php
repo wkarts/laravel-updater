@@ -23,7 +23,9 @@ class IdempotentMigrationService
         $mode = (string) ($options['mode'] ?? 'tolerant');
         $strict = $mode === 'strict' || (bool) ($options['strict'] ?? false);
         $dryRun = (bool) ($options['dry_run'] ?? false);
-        $reconcileAlreadyExists = (bool) ($options['reconcile_already_exists'] ?? true);
+        $replayFromStart = (bool) ($options['replay_from_start'] ?? false);
+        $reconcileAlreadyExists = (bool) ($options['reconcile_already_exists'] ?? false);
+        $shouldReconcileAlreadyExists = $reconcileAlreadyExists || $replayFromStart;
         $lockRetries = max(0, (int) ($options['retry_locks'] ?? 2));
         $retrySleepBase = max(1, (int) ($options['retry_sleep_base'] ?? 3));
 
@@ -40,11 +42,13 @@ class IdempotentMigrationService
 
         $allFiles = $this->migrator->getMigrationFiles($paths);
         $ran = array_flip($repository->getRan());
-        $pending = array_filter(
-            $allFiles,
-            static fn (string $path, string $name): bool => !array_key_exists($name, $ran),
-            ARRAY_FILTER_USE_BOTH
-        );
+        $pending = $replayFromStart
+            ? $allFiles
+            : array_filter(
+                $allFiles,
+                static fn (string $path, string $name): bool => !array_key_exists($name, $ran),
+                ARRAY_FILTER_USE_BOTH
+            );
 
         $stats = [
             'total' => count($pending),
@@ -54,58 +58,58 @@ class IdempotentMigrationService
             'failed' => 0,
             'warnings' => 0,
             'skipped_dry_run' => 0,
+            'skipped_runtime_warning' => 0,
             'divergences' => [],
         ];
+
+        $runId = $reporter->runId();
 
         $reporter->log('info', 'Iniciando updater:migrate.', [
             'mode' => $mode,
             'dry_run' => $dryRun,
             'idempotent' => $isEnabled,
+            'replay_from_start' => $replayFromStart,
+            'reconcile_already_exists' => $shouldReconcileAlreadyExists,
             'pending' => array_keys($pending),
             'connection' => $connection,
         ]);
 
         foreach ($pending as $name => $path) {
-            $drift = $this->driftDetector->inspect($path, is_string($connection) ? $connection : null);
+            try {
+                $drift = $this->driftDetector->inspect($path, is_string($connection) ? $connection : null);
+            } catch (Throwable $throwable) {
+                $drift = ['action' => 'run', 'reason' => 'drift_detector_error', 'object' => null];
+                $stats['warnings']++;
+                $stats['divergences'][] = [
+                    'migration' => $name,
+                    'type' => 'DRIFT_DETECTOR_ERROR',
+                    'object' => null,
+                    'note' => mb_substr($throwable->getMessage(), 0, 500),
+                ];
+                $reporter->log('warning', 'Falha no detector de drift; seguindo migration em modo seguro.', [
+                    'migration' => $name,
+                    'path' => $path,
+                    'error' => $throwable->getMessage(),
+                ]);
+            }
 
             if ($dryRun) {
                 $stats['skipped_dry_run']++;
                 $reporter->log('info', 'Dry-run de migration.', ['migration' => $name, 'path' => $path, 'simulation' => $drift]);
+                $reporter->migrationAttempt($name, 'dry_run', 1, $path, $replayFromStart, false, true, null, ['simulation' => $drift], 'updater:migrate');
                 continue;
             }
 
-            if ($isEnabled && $reconcileAlreadyExists && !$strict && ($drift['action'] ?? null) === 'reconcile') {
-                $preflightObject = (array) ($drift['object'] ?? []);
-                $preflightObject['expects_absent'] = (bool) ($preflightObject['expects_absent'] ?? false);
+            $wasLogged = array_key_exists($name, $ran);
+            $deletedForReplay = false;
 
-                $reconciled = $this->reconciler->reconcile(
-                    $repository,
-                    $name,
-                    $preflightObject,
-                    ['sqlstate' => null, 'errno' => null, 'message' => (string) ($drift['reason'] ?? 'preflight_reconcile')],
-                    is_string($connection) ? $connection : null,
-                    false
-                );
-
-                if (($reconciled['reconciled'] ?? false) === true) {
-                    $stats['reconciled']++;
-                    if (($reconciled['warning'] ?? false) === true) {
-                        $stats['warnings']++;
-                    }
-                    $stats['divergences'][] = [
-                        'migration' => $name,
-                        'type' => 'PRECHECK_RECONCILED',
-                        'object' => $preflightObject,
-                        'note' => (string) ($drift['reason'] ?? 'preflight_reconcile'),
-                    ];
-                    $reporter->log('warning', 'Migration reconciliada por pré-checagem de drift (sem executar SQL).', [
-                        'migration' => $name,
-                        'path' => $path,
-                        'drift' => $drift,
-                        'result' => $reconciled,
-                    ]);
-                    continue;
-                }
+            if ($replayFromStart && $wasLogged) {
+                $repository->delete((object) ['migration' => $name]);
+                $deletedForReplay = true;
+                $reporter->log('warning', 'Replay ativo: registro removido para reaplicar migration fisicamente.', [
+                    'migration' => $name,
+                    'path' => $path,
+                ]);
             }
 
             $attempt = 0;
@@ -116,11 +120,13 @@ class IdempotentMigrationService
                     'path' => $path,
                     'attempt' => $attempt,
                 ]);
+                $reporter->migrationAttempt($name, 'started', $attempt, $path, $replayFromStart, false, false, null, [], 'updater:migrate');
 
                 try {
                     $this->migrator->run([$path], ['step' => false]);
                     $stats['executed']++;
                     $reporter->log('info', 'Migration executada com sucesso.', ['migration' => $name, 'attempt' => $attempt]);
+                    $reporter->migrationAttempt($name, 'success', $attempt, $path, $replayFromStart, false, false, null, [], 'updater:migrate');
                     break;
                 } catch (Throwable $throwable) {
                     $classification = $this->classifier->classify($throwable);
@@ -149,14 +155,18 @@ class IdempotentMigrationService
                         continue;
                     }
 
-                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && $isEnabled && $reconcileAlreadyExists && !$strict) {
+                    $isAutoReconcilableObject = in_array((string) ($object['type'] ?? ''), ['table', 'column', 'index', 'constraint', 'view'], true);
+                    $allowAutoReconcile = $shouldReconcileAlreadyExists || $isAutoReconcilableObject;
+
+                    if ($classification === MigrationFailureClassifier::ALREADY_EXISTS && $isEnabled && $allowAutoReconcile && !$strict) {
                         $reconciled = $this->reconciler->reconcile(
                             $repository,
                             $name,
                             $object,
                             $details,
                             is_string($connection) ? $connection : null,
-                            false
+                            false,
+                            $runId
                         );
 
                         if (($reconciled['reconciled'] ?? false) === true) {
@@ -174,6 +184,11 @@ class IdempotentMigrationService
                                 'migration' => $name,
                                 'result' => $reconciled,
                             ]);
+                            $reporter->migrationAttempt($name, 'reconciled', $attempt, $path, $replayFromStart, true, true, null, [
+                                'classification' => $classification,
+                                'object' => $object,
+                                'details' => $details,
+                            ], 'updater:migrate');
                             break;
                         }
                     }
@@ -187,12 +202,45 @@ class IdempotentMigrationService
                         ]);
                     }
 
+                    if (!$strict && ($this->isRecoverableRuntimeWarning($throwable) || $this->isRecoverableSchemaConstraintMismatch($throwable))) {
+                        $stats['warnings']++;
+                        $stats['skipped_runtime_warning']++;
+                        $stats['divergences'][] = [
+                            'migration' => $name,
+                            'type' => 'MIGRATION_RUNTIME_WARNING',
+                            'object' => $object,
+                            'note' => mb_substr($throwable->getMessage(), 0, 500),
+                        ];
+                        $reporter->log('warning', 'Migration ignorada em modo tolerante por erro recuperável; mantendo pendente para correção manual.', [
+                            'migration' => $name,
+                            'error' => $throwable->getMessage(),
+                        ]);
+                        $reporter->migrationAttempt($name, 'warning_skipped', $attempt, $path, $replayFromStart, false, true, $throwable->getMessage(), [
+                            'classification' => $classification,
+                            'object' => $object,
+                            'details' => $details,
+                        ], 'updater:migrate');
+
+                        if ($deletedForReplay && !$this->repositoryHasMigration($repository, $name)) {
+                            $repository->log($name, $repository->getNextBatchNumber());
+                        }
+                        break;
+                    }
+
                     $stats['failed']++;
                     $reporter->log('error', 'Falha não recuperável na migration.', [
                         'migration' => $name,
                         'error' => $throwable->getMessage(),
                         'classification' => $classification,
                     ]);
+                    if ($deletedForReplay && !$this->repositoryHasMigration($repository, $name)) {
+                        $repository->log($name, $repository->getNextBatchNumber());
+                    }
+                    $reporter->migrationAttempt($name, 'failed', $attempt, $path, $replayFromStart, false, false, $throwable->getMessage(), [
+                        'classification' => $classification,
+                        'object' => $object,
+                        'details' => $details,
+                    ], 'updater:migrate');
                     throw $throwable;
                 }
             }
@@ -203,12 +251,42 @@ class IdempotentMigrationService
         return $stats;
     }
 
+
+    private function isRecoverableRuntimeWarning(Throwable $throwable): bool
+    {
+        $message = mb_strtolower($throwable->getMessage());
+
+        return str_contains($message, 'preg_match(): unknown modifier')
+            || str_contains($message, 'preg_replace(): unknown modifier')
+            || str_contains($message, 'preg_match(): compilation failed');
+    }
+
+
+    private function isRecoverableSchemaConstraintMismatch(Throwable $throwable): bool
+    {
+        $message = mb_strtolower($throwable->getMessage());
+
+        return str_contains($message, 'cannot be not null: needed in a foreign key constraint')
+            && str_contains($message, 'on delete set null');
+    }
+
     private function resolvePaths(array $options): array
     {
-        $paths = array_values(array_filter((array) config('updater.migrate.paths', [])));
+        $paths = [];
+        if (function_exists('config')) {
+            try {
+                $paths = array_values(array_filter((array) config('updater.migrate.paths', [])));
+            } catch (\Throwable) {
+                $paths = [];
+            }
+        }
 
         if ($paths === []) {
-            $paths = [database_path('migrations')];
+            try {
+                $paths = [database_path('migrations')];
+            } catch (\Throwable) {
+                $paths = ['database/migrations'];
+            }
         }
 
         $extraPath = trim((string) ($options['path'] ?? ''));
@@ -217,5 +295,14 @@ class IdempotentMigrationService
         }
 
         return $paths;
+    }
+
+    private function repositoryHasMigration(object $repository, string $name): bool
+    {
+        if (!method_exists($repository, 'getRan')) {
+            return false;
+        }
+
+        return in_array($name, (array) $repository->getRan(), true);
     }
 }

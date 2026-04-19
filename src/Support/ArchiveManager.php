@@ -54,24 +54,48 @@ class ArchiveManager
 
 
         $dir = dirname($targetZip);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new RuntimeException('Não foi possível criar diretório para backup compactado.');
         }
 
-        $zip = new ZipArchive();
-        if ($zip->open($targetZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            throw new RuntimeException('Não foi possível criar arquivo de backup compactado.');
-        }
+        $tmpZip = $targetZip . '.tmp-' . bin2hex(random_bytes(4));
+        @unlink($tmpZip);
 
-        $i = 0;
-        foreach ($this->collectFiles($sourceDir, $exclude) as [$fullPath, $relativePath]) {
-            $zip->addFile($fullPath, $relativePath);
-            if ((++$i % 400) === 0) {
-                $this->touchTimeLimit();
+        $attempts = 0;
+        while ($attempts < 2) {
+            $attempts++;
+            $zip = new ZipArchive();
+            if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+                throw new RuntimeException('Não foi possível criar arquivo de backup compactado.');
+            }
+
+            $i = 0;
+            foreach ($this->collectFiles($sourceDir, $exclude) as [$fullPath, $relativePath]) {
+                $zip->addFile($fullPath, $relativePath);
+                if ((++$i % 400) === 0) {
+                    $this->touchTimeLimit();
+                }
+            }
+
+            if ($zip->close()) {
+                break;
+            }
+
+            @unlink($tmpZip);
+            if ($attempts >= 2) {
+                throw new RuntimeException('Falha ao finalizar arquivo ZIP de backup (close).');
             }
         }
 
-        $zip->close();
+        if (!is_file($tmpZip)) {
+            throw new RuntimeException('Arquivo ZIP temporário não foi gerado.');
+        }
+
+        @unlink($targetZip);
+        if (!rename($tmpZip, $targetZip)) {
+            @unlink($tmpZip);
+            throw new RuntimeException('Falha ao publicar arquivo ZIP final de backup.');
+        }
 
         return $targetZip;
     }
@@ -79,12 +103,15 @@ class ArchiveManager
     public function createZipFromFiles(array $files, string $targetZip): void
     {
         $dir = dirname($targetZip);
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            throw new RuntimeException('Não foi possível criar diretório para arquivo ZIP.');
         }
 
+        $tmpZip = $targetZip . '.tmp-' . bin2hex(random_bytes(4));
+        @unlink($tmpZip);
+
         $zip = new ZipArchive();
-        if ($zip->open($targetZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             throw new RuntimeException('Não foi possível criar arquivo ZIP.');
         }
 
@@ -96,7 +123,20 @@ class ArchiveManager
             $zip->addFile((string) $filePath, (string) $entryName);
         }
 
-        $zip->close();
+        if (!$zip->close()) {
+            @unlink($tmpZip);
+            throw new RuntimeException('Falha ao finalizar arquivo ZIP.');
+        }
+
+        if (!is_file($tmpZip)) {
+            throw new RuntimeException('Arquivo ZIP temporário não foi gerado.');
+        }
+
+        @unlink($targetZip);
+        if (!rename($tmpZip, $targetZip)) {
+            @unlink($tmpZip);
+            throw new RuntimeException('Falha ao publicar arquivo ZIP final.');
+        }
     }
 
     public function extractArchive(string $archivePath, string $destination): void

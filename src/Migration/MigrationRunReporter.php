@@ -44,6 +44,50 @@ class MigrationRunReporter
         $this->store?->addRunLog($this->runId, $level, $message, $context);
     }
 
+    public function runId(): ?int
+    {
+        return $this->runId;
+    }
+
+    public function migrationAttempt(
+        string $migration,
+        string $status,
+        int $attemptNo = 1,
+        ?string $filePath = null,
+        bool $isReplay = false,
+        bool $isReconciled = false,
+        bool $isIdempotentSkip = false,
+        ?string $errorMessage = null,
+        array $context = [],
+        ?string $origin = null,
+        ?string $requestedBy = null,
+        ?string $reason = null
+    ): void {
+        if ($this->store === null || !method_exists($this->store, 'addMigrationAttempt')) {
+            $this->log('warning', 'StateStore sem suporte a addMigrationAttempt; evento registrado apenas em log.', [
+                'migration' => $migration,
+                'status' => $status,
+            ]);
+            return;
+        }
+
+        $this->store->addMigrationAttempt(
+            $this->runId,
+            $migration,
+            $status,
+            $attemptNo,
+            $filePath,
+            $isReplay,
+            $isReconciled,
+            $isIdempotentSkip,
+            $errorMessage,
+            $context,
+            $origin,
+            $requestedBy,
+            $reason
+        );
+    }
+
     public function summary(array $stats): array
     {
         return [

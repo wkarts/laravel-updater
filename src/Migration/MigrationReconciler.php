@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Migration;
 
+use Argws\LaravelUpdater\Support\StateStore;
 use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Database\Migrations\DatabaseMigrationRepository;
 
 class MigrationReconciler
 {
-    public function __construct(private readonly ConnectionResolverInterface $resolver)
+    public function __construct(private readonly ConnectionResolverInterface $resolver, private readonly ?StateStore $store = null)
     {
     }
 
@@ -19,9 +20,11 @@ class MigrationReconciler
         array $object,
         array $errorDetails,
         ?string $connection = null,
-        bool $strictMode = false
+        bool $strictMode = false,
+        ?int $runId = null
     ): array {
         if ($this->alreadyLogged($repository, $migrationName)) {
+            $this->trackReconciliation($runId, $migrationName, 'already_logged', true, $object, ['compatible' => true, 'note' => 'migration_already_in_repository']);
             return [
                 'reconciled' => true,
                 'reason' => 'already_logged',
@@ -33,6 +36,7 @@ class MigrationReconciler
         $validation = $this->validateMinimumCompatibility($object, $errorDetails, $connection, $strictMode);
 
         if (($validation['compatible'] ?? false) !== true) {
+            $this->trackReconciliation($runId, $migrationName, 'minimum_compatibility_failed', false, $object, $validation);
             return [
                 'reconciled' => false,
                 'reason' => 'minimum_compatibility_failed',
@@ -42,6 +46,7 @@ class MigrationReconciler
         }
 
         $repository->log($migrationName, $repository->getNextBatchNumber());
+        $this->trackReconciliation($runId, $migrationName, 'already_exists_safe', true, $object, $validation);
 
         return [
             'reconciled' => true,
@@ -49,6 +54,28 @@ class MigrationReconciler
             'warning' => (bool) ($validation['warning'] ?? false),
             'validation' => $validation,
         ];
+    }
+
+
+    private function trackReconciliation(?int $runId, string $migrationName, string $reason, bool $reconciled, array $object, array $validation): void
+    {
+        if ($this->store === null) {
+            return;
+        }
+
+        if (!method_exists($this->store, 'addMigrationReconciliation')) {
+            return;
+        }
+
+        $this->store->addMigrationReconciliation(
+            $runId,
+            $migrationName,
+            'idempotent_reconcile',
+            $reconciled,
+            $reason,
+            $object,
+            $validation
+        );
     }
 
     private function alreadyLogged(DatabaseMigrationRepository $repository, string $migrationName): bool
@@ -78,6 +105,16 @@ class MigrationReconciler
                 'compatible' => $expectsAbsent ? !$schema->hasTable($name) : $schema->hasTable($name),
                 'warning' => false,
                 'note' => $expectsAbsent ? 'validated_view_already_absent' : 'validated_view_exists_via_schema',
+            ];
+        }
+
+        if ($type === 'column' && $name !== null && $table !== null) {
+            $exists = $schema->hasColumn($table, $name);
+
+            return [
+                'compatible' => $expectsAbsent ? !$exists : $exists,
+                'warning' => false,
+                'note' => $expectsAbsent ? 'validated_column_already_absent' : 'validated_column_exists',
             ];
         }
 
@@ -111,9 +148,9 @@ class MigrationReconciler
         }
 
         return [
-            'compatible' => true,
+            'compatible' => false,
             'warning' => true,
-            'note' => 'object_unknown_reconciled_in_tolerant_mode',
+            'note' => 'object_unknown_requires_manual_review',
             'details' => $errorDetails,
         ];
     }
