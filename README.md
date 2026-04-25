@@ -85,7 +85,8 @@ UPDATER_UI_2FA_ENABLED=true
 UPDATER_UI_2FA_REQUIRED=false
 UPDATER_UI_2FA_ISSUER="Argws Updater"
 
-UPDATER_GIT_PATH=/var/www/seu-projeto
+UPDATER_GIT_PATH=/var/www/seu-projeto   # opcional
+UPDATER_GIT_AUTO_DETECT_PATH=true      # recomendado
 UPDATER_GIT_REMOTE=origin
 UPDATER_GIT_BRANCH=main
 UPDATER_GIT_FF_ONLY=true
@@ -127,7 +128,8 @@ UPDATER_SYNC_TOKEN=
 UPDATER_TRIGGER_DRIVER=queue
 UPDATER_UI_FORCE_SYNC=false
 
-UPDATER_GIT_PATH=/var/www/sua-aplicacao
+UPDATER_GIT_PATH=/var/www/sua-aplicacao   # opcional
+UPDATER_GIT_AUTO_DETECT_PATH=true
 UPDATER_GIT_REMOTE=origin
 UPDATER_GIT_BRANCH=main
 UPDATER_GIT_FF_ONLY=true
@@ -145,7 +147,8 @@ Quando usar:
 UPDATER_TRIGGER_DRIVER=sync
 UPDATER_UI_FORCE_SYNC=true
 
-UPDATER_GIT_PATH=/home/seu-usuario/htdocs/seu-projeto
+UPDATER_GIT_PATH=/home/seu-usuario/htdocs/seu-projeto   # opcional
+UPDATER_GIT_AUTO_DETECT_PATH=true
 UPDATER_GIT_REMOTE=origin
 UPDATER_GIT_BRANCH=main
 UPDATER_GIT_AUTO_INIT=true
@@ -435,17 +438,19 @@ php artisan vendor:publish --tag=updater-views --force
 Checklist:
 1. `UPDATER_GIT_AUTO_INIT=true`
 2. `UPDATER_GIT_REMOTE_URL` preenchida e acessível
-3. `UPDATER_GIT_PATH` aponta para a pasta correta e com permissão de escrita do usuário do PHP
-4. `git` disponível no servidor (`git --version`)
+3. `UPDATER_GIT_PATH` (se usado) aponta para a pasta correta e com permissão de escrita do usuário do PHP
+4. mantenha `UPDATER_GIT_AUTO_DETECT_PATH=true` para fallback automático quando o path estiver inválido
+5. `git` disponível no servidor (`git --version`)
 
 ### Não aparecem atualizações disponíveis, mas o teste de conexão da fonte funciona
 
 Isso normalmente indica divergência entre:
 - a **fonte ativa no painel** (usada no teste de conexão), e
-- `UPDATER_GIT_PATH` local (usado para calcular revisão local/remota).
+- `UPDATER_GIT_PATH` local (se configurado) usado para calcular revisão local/remota.
+- com `UPDATER_GIT_AUTO_DETECT_PATH=true`, caminho inválido cai para auto detecção do projeto.
 
 Valide:
-1. pasta de `UPDATER_GIT_PATH` é o mesmo projeto conectado à fonte ativa;
+1. se `UPDATER_GIT_PATH` estiver configurado, a pasta deve ser o mesmo projeto conectado à fonte ativa;
 2. branch da fonte ativa bate com `UPDATER_GIT_BRANCH`;
 3. repositório local possui upstream correto (`origin/main` por exemplo);
 4. execute `php artisan system:update:check` para comparar com o status da UI.
@@ -459,12 +464,14 @@ UPDATER_GIT_ALLOW_DIRTY_CHECK=false
 
 ### Solução para erro “Diretório atual não é um repositório git válido”
 
-Se a aplicação não estiver na mesma pasta do updater, configure `UPDATER_GIT_PATH` com o diretório real do projeto Laravel versionado em Git.
+Se a aplicação não estiver na mesma pasta do updater, você pode configurar `UPDATER_GIT_PATH` com o diretório real do projeto Laravel versionado em Git.
+Se preferir, deixe `UPDATER_GIT_PATH` vazio e use `UPDATER_GIT_AUTO_DETECT_PATH=true` para detecção automática.
 
 Exemplo:
 
 ```dotenv
-UPDATER_GIT_PATH=/home/seu-usuario/htdocs/seu-projeto
+UPDATER_GIT_PATH=/home/seu-usuario/htdocs/seu-projeto   # opcional
+UPDATER_GIT_AUTO_DETECT_PATH=true
 UPDATER_GIT_REMOTE=origin
 UPDATER_GIT_BRANCH=main
 ```

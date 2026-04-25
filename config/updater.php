@@ -12,13 +12,21 @@ if ($uiRateLimitWindowSeconds === null) {
     $uiRateLimitWindowSeconds = (int) env('UPDATER_UI_LOGIN_DECAY_MINUTES', 10) * 60;
 }
 
+
+$updaterGitPath = env('UPDATER_GIT_PATH');
+$updaterGitPath = is_string($updaterGitPath) ? trim($updaterGitPath) : '';
+if ($updaterGitPath === '') {
+    $updaterGitPath = null;
+}
+
 return [
     'enabled' => env('UPDATER_ENABLED', true),
     'mode' => env('UPDATER_MODE', 'inplace'),
     'channel' => env('UPDATER_CHANNEL', 'stable'),
 
     'git' => [
-        'path' => env('UPDATER_GIT_PATH', base_path()),
+        'path' => $updaterGitPath,
+        'auto_detect_path' => (bool) env('UPDATER_GIT_AUTO_DETECT_PATH', true),
         'remote' => env('UPDATER_GIT_REMOTE', 'origin'),
         'remote_url' => env('UPDATER_GIT_REMOTE_URL', ''),
         'branch' => env('UPDATER_GIT_BRANCH', 'main'),

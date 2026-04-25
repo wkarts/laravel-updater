@@ -94,12 +94,14 @@ class ShellRunner
             2 => ['pipe', 'w'],
         ];
 
+        $workingDirectory = $this->resolveWorkingDirectory($cwd, $command);
+
         $process = @proc_open(
             $command,
             $descriptorspec,
             $pipes,
-            $cwd ?? base_path(),
-            $this->buildEnv($env)
+            $workingDirectory ?: '.',
+            $this->buildEnv($env, $workingDirectory)
         );
 
         if (!is_resource($process)) {
@@ -291,13 +293,18 @@ throw new UpdaterException($msg, $code);
      * @param array<string,string> $env
      * @return array<string,string>
      */
-    private function buildEnv(array $env = []): array
+    private function buildEnv(array $env = [], ?string $cwd = null): array
     {
         // Reusa a lógica que:
         // - herda variáveis do processo (PATH etc.)
         // - complementa chaves a partir do .env (quando necessário)
         // - garante diretórios padrão para execuções não-interativas
-        return $this->normalizeEnv($env, base_path());
+        $base = $cwd;
+        if ($base === null || trim($base) === '') {
+            $base = function_exists('base_path') ? (string) base_path() : (getcwd() ?: '.');
+        }
+
+        return $this->normalizeEnv($env, $base);
     }
 
 private function resolveWorkingDirectory(?string $cwd, array $command): string
