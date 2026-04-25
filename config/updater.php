@@ -307,7 +307,7 @@ return [
     'maintenance' => [
         // View used by `php artisan down --render=...` during update.
         // Default uses the package view to avoid CLI-only globals (REQUEST_URI) issues.
-        'render_view' => env('UPDATER_MAINTENANCE_VIEW', 'laravel-updater::maintenance'),
+        'render_view' => env('UPDATER_MAINTENANCE_VIEW', env('UPDATER_MAINTENANCE_RENDER_VIEW', 'laravel-updater::maintenance')),
 
         // Basic message defaults used by the package maintenance view.
         'default_title' => env('UPDATER_MAINTENANCE_TITLE', 'Manutenção Programada do Sistema'),

@@ -95,6 +95,7 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/settings/tokens', [ManagerController::class, 'createApiToken'])->name('updater.settings.tokens.create');
                 Route::delete('/settings/tokens/{id}', [ManagerController::class, 'revokeApiToken'])->name('updater.settings.tokens.revoke');
                 Route::post('/settings/backup-upload', [ManagerController::class, 'saveBackupUploadSettings'])->name('updater.settings.backup-upload.save');
+                Route::post('/settings/config', [ManagerController::class, 'saveUpdaterConfig'])->name('updater.settings.config.save');
 
                 Route::post('/sources/save', [ManagerController::class, 'saveSource'])->name('updater.sources.save');
                 Route::post('/sources/{id}/activate', [ManagerController::class, 'activateSource'])->name('updater.sources.activate');
