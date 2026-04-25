@@ -87,6 +87,7 @@ UPDATER_UI_2FA_ISSUER="Argws Updater"
 
 UPDATER_GIT_PATH=/var/www/seu-projeto   # opcional
 UPDATER_GIT_AUTO_DETECT_PATH=true      # recomendado
+# Se esquecer qualquer um desses parâmetros, o updater tenta detectar automaticamente o diretório do projeto.
 UPDATER_GIT_REMOTE=origin
 UPDATER_GIT_BRANCH=main
 UPDATER_GIT_FF_ONLY=true
