@@ -191,6 +191,8 @@ $this->app->singleton(UpdaterKernel::class, function () {
 
     public function boot(Router $router): void
     {
+        $this->applyRuntimeConfigOverrides();
+
         // Manutenção "soft": bloqueia a aplicação com 503, mas mantém o updater sempre acessível.
         // Prepend no grupo web para ser avaliado antes do resto do stack.
         if ((bool) config('updater.maintenance.soft_enabled', true)) {
@@ -385,6 +387,88 @@ $this->app->booted(function () {
         if (!is_file($target) || ($sourceMtime !== false && $targetMtime !== false && $sourceMtime > $targetMtime)) {
             @copy($source, $target);
         }
+    }
+
+    private function applyRuntimeConfigOverrides(): void
+    {
+        try {
+            /** @var \Argws\LaravelUpdater\Support\ManagerStore $store */
+            $store = $this->app->make(ManagerStore::class);
+            $overrides = (array) $store->getRuntimeOption('updater_config_overrides', []);
+            $envKeys = $this->readDotEnvKeys();
+
+            foreach ($overrides as $key => $value) {
+                if (!is_string($key) || trim($key) === '' || !str_starts_with($key, 'updater.')) {
+                    continue;
+                }
+
+                foreach ($this->envKeysForConfigKey($key) as $envKey) {
+                    if (isset($envKeys[$envKey])) {
+                        continue 2;
+                    }
+                }
+
+                config([$key => $value]);
+            }
+        } catch (\Throwable) {
+            // Não interromper o boot caso o runtime settings esteja indisponível.
+        }
+    }
+
+    /**
+     * @return array<string,bool>
+     */
+    private function readDotEnvKeys(): array
+    {
+        $path = function_exists('base_path') ? base_path('.env') : '.env';
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $content = @file_get_contents($path);
+        if (!is_string($content) || $content === '') {
+            return [];
+        }
+
+        $keys = [];
+        foreach (preg_split('/\r?\n/', $content) as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            if (preg_match('/^([A-Z0-9_]+)\s*=/', $line, $m) === 1) {
+                $keys[$m[1]] = true;
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    private function envKeysForConfigKey(string $configKey): array
+    {
+        $suffix = strtoupper(str_replace('.', '_', preg_replace('/^updater\./', '', $configKey) ?: $configKey));
+        $keys = ['UPDATER_' . $suffix];
+
+        if ($configKey === 'updater.maintenance.render_view') {
+            $keys[] = 'UPDATER_MAINTENANCE_VIEW';
+            $keys[] = 'UPDATER_MAINTENANCE_RENDER_VIEW';
+        }
+
+        if ($configKey === 'updater.ui.auth.rate_limit.max_attempts') {
+            $keys[] = 'UPDATER_UI_LOGIN_MAX_ATTEMPTS';
+            $keys[] = 'UPDATER_UI_RATE_LIMIT_MAX';
+        }
+
+        if ($configKey === 'updater.ui.auth.rate_limit.window_seconds') {
+            $keys[] = 'UPDATER_UI_LOGIN_DECAY_MINUTES';
+            $keys[] = 'UPDATER_UI_RATE_LIMIT_WINDOW';
+        }
+
+        return array_values(array_unique(array_filter($keys, static fn ($key) => trim((string) $key) !== '')));
     }
 
 

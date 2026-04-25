@@ -11,6 +11,7 @@
         </div>
 
         <div class="settings-side-stack">
+            @include('laravel-updater::settings.config', ['fields' => $updaterConfigFields ?? []])
             @include('laravel-updater::settings.security')
             @include('laravel-updater::settings.tokens', ['tokens' => $tokens])
             @include('laravel-updater::settings.backup-upload', ['backupUpload' => $backupUpload])
