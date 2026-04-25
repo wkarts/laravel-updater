@@ -900,16 +900,23 @@ class ManagerController extends Controller
      */
     private function buildUpdaterEnvFields(): array
     {
-        $fields = $this->buildUpdaterConfigFields();
+        $fields = $this->discoverUpdaterConfigDefinitions();
         $envMap = $this->readDotEnvMap();
+        $runtime = (array) $this->managerStore->getRuntimeOption('updater_config_overrides', []);
         $rows = [];
 
         foreach ($fields as $field) {
-            $primary = (string) ($field['primary_env_key'] ?? '');
+            $envKeys = (array) ($field['env_keys'] ?? []);
+            $primary = (string) ($envKeys[0] ?? '');
             if ($primary === '') {
                 continue;
             }
 
+            $configKey = (string) ($field['config'] ?? '');
+            $effectiveValue = $runtime[$configKey] ?? config($configKey, $field['default'] ?? null);
+            $field['value'] = $this->normalizeFieldValue($effectiveValue, (string) ($field['type'] ?? 'string'));
+            $field['env_key'] = implode(' | ', $envKeys);
+            $field['primary_env_key'] = $primary;
             $field['env_value'] = $envMap[$primary] ?? '';
             $rows[] = $field;
         }
