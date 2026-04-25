@@ -13,19 +13,13 @@ if ($uiRateLimitWindowSeconds === null) {
 }
 
 
-$updaterGitPath = env('UPDATER_GIT_PATH');
-$updaterGitPath = is_string($updaterGitPath) ? trim($updaterGitPath) : '';
-if ($updaterGitPath === '') {
-    $updaterGitPath = null;
-}
-
 return [
     'enabled' => env('UPDATER_ENABLED', true),
     'mode' => env('UPDATER_MODE', 'inplace'),
     'channel' => env('UPDATER_CHANNEL', 'stable'),
 
     'git' => [
-        'path' => $updaterGitPath,
+        'path' => env('UPDATER_GIT_PATH', base_path()),
         'auto_detect_path' => (bool) env('UPDATER_GIT_AUTO_DETECT_PATH', true),
         'remote' => env('UPDATER_GIT_REMOTE', 'origin'),
         'remote_url' => env('UPDATER_GIT_REMOTE_URL', ''),
