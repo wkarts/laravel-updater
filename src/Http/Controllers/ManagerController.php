@@ -295,7 +295,117 @@ class ManagerController extends Controller
             'activeSource' => $this->managerStore->activeSource(),
             'profiles' => $this->managerStore->profiles(),
             'backupUpload' => $this->managerStore->backupUploadSettings(),
+            'updaterConfigFields' => $this->buildUpdaterConfigFields(),
         ]);
+    }
+
+    public function settingsEnvIndex()
+    {
+        return view('laravel-updater::settings.env', [
+            'envFields' => $this->buildUpdaterEnvFields(),
+        ]);
+    }
+
+    public function saveUpdaterConfig(Request $request): RedirectResponse
+    {
+        $definitions = $this->discoverUpdaterConfigDefinitions();
+        $envKeys = $this->readDotEnvKeys();
+        $stored = (array) $this->managerStore->getRuntimeOption('updater_config_overrides', []);
+
+        foreach ($definitions as $item) {
+            $field = (string) ($item['field'] ?? '');
+            $type = (string) ($item['type'] ?? 'string');
+            $configKey = (string) ($item['config'] ?? '');
+            $envKeysForField = (array) ($item['env_keys'] ?? []);
+            $isSensitive = (bool) ($item['sensitive'] ?? false);
+
+            if ($field === '' || $configKey === '') {
+                continue;
+            }
+
+            // Se está fixo no .env, não permite override pela UI.
+            $envLocked = false;
+            foreach ($envKeysForField as $envKey) {
+                if (isset($envKeys[(string) $envKey])) {
+                    $envLocked = true;
+                    break;
+                }
+            }
+
+            if ($envLocked) {
+                continue;
+            }
+
+            if ($type === 'bool') {
+                $stored[$configKey] = $request->boolean($field);
+                continue;
+            }
+
+            $value = trim((string) $request->input($field, ''));
+            if ($type === 'int') {
+                $stored[$configKey] = max(0, (int) $value);
+                continue;
+            }
+
+            if ($type === 'list') {
+                $lines = preg_split('/\r?\n/', $value) ?: [];
+                $stored[$configKey] = array_values(array_filter(array_map(static fn ($line) => trim((string) $line), $lines), static fn ($line) => $line !== ''));
+                continue;
+            }
+
+            if ($isSensitive && $value === '') {
+                // Mantém valor anterior para evitar apagar segredo por envio de campo vazio.
+                continue;
+            }
+
+            $stored[$configKey] = $value;
+        }
+
+        $this->managerStore->setRuntimeOption('updater_config_overrides', $stored);
+        $this->audit($request, $this->actorId($request), 'Configurações gerais do updater atualizadas pela UI.');
+
+        return back()->with('status', 'Configurações do updater salvas com sucesso.');
+    }
+
+    public function saveUpdaterEnv(Request $request): RedirectResponse
+    {
+        $fields = $this->buildUpdaterEnvFields();
+        $updates = [];
+
+        foreach ($fields as $field) {
+            $input = (string) ($field['field'] ?? '');
+            $envKey = (string) ($field['primary_env_key'] ?? '');
+            $type = (string) ($field['type'] ?? 'string');
+            $sensitive = (bool) ($field['sensitive'] ?? false);
+
+            if ($input === '' || $envKey === '') {
+                continue;
+            }
+
+            if ($type === 'bool') {
+                $updates[$envKey] = $request->boolean($input) ? 'true' : 'false';
+                continue;
+            }
+
+            $raw = (string) $request->input($input, '');
+            if ($sensitive && trim($raw) === '') {
+                continue;
+            }
+
+            if ($type === 'list') {
+                $lines = preg_split('/\r?\n/', $raw) ?: [];
+                $lines = array_values(array_filter(array_map(static fn ($line) => trim((string) $line), $lines), static fn ($line) => $line !== ''));
+                $updates[$envKey] = implode(',', $lines);
+                continue;
+            }
+
+            $updates[$envKey] = trim($raw);
+        }
+
+        $this->writeDotEnvEntries($updates);
+        $this->audit($request, $this->actorId($request), 'Parâmetros .env do updater atualizados pela UI.', ['keys' => array_keys($updates)]);
+
+        return back()->with('status', 'Parâmetros .env salvos. Execute php artisan config:clear para aplicar imediatamente.');
     }
 
     public function saveBranding(Request $request): RedirectResponse
@@ -578,6 +688,325 @@ class ManagerController extends Controller
         $data['snapshot_compression'] = 'zip';
 
         return $data;
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    private function buildUpdaterConfigFields(): array
+    {
+        $envKeys = $this->readDotEnvKeys();
+        $overrides = (array) $this->managerStore->getRuntimeOption('updater_config_overrides', []);
+        $definitions = $this->discoverUpdaterConfigDefinitions();
+        $rows = [];
+
+        foreach ($definitions as $item) {
+            $configKey = (string) ($item['config'] ?? '');
+            $envKeysForField = (array) ($item['env_keys'] ?? []);
+            $type = (string) ($item['type'] ?? 'string');
+
+            $envLocked = false;
+            foreach ($envKeysForField as $envKey) {
+                if (isset($envKeys[(string) $envKey])) {
+                    $envLocked = true;
+                    break;
+                }
+            }
+
+            $value = $envLocked
+                ? config($configKey, $item['default'] ?? null)
+                : ($overrides[$configKey] ?? config($configKey, $item['default'] ?? null));
+
+            $rows[] = array_merge($item, [
+                'env_locked' => $envLocked,
+                'value' => $this->normalizeFieldValue($value, $type),
+                'env_key' => implode(' | ', $envKeysForField),
+                'primary_env_key' => (string) ($envKeysForField[0] ?? ''),
+            ]);
+        }
+
+        usort($rows, static fn (array $a, array $b): int => strcmp((string) $a['config'], (string) $b['config']));
+
+        return $rows;
+    }
+
+    /**
+     * @return array<string,bool>
+     */
+    private function readDotEnvKeys(): array
+    {
+        $path = function_exists('base_path') ? base_path('.env') : '.env';
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $content = @file_get_contents($path);
+        if (!is_string($content) || $content === '') {
+            return [];
+        }
+
+        $keys = [];
+        foreach (preg_split('/\r?\n/', $content) as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            if (preg_match('/^([A-Z0-9_]+)\s*=/', $line, $m) === 1) {
+                $keys[$m[1]] = true;
+            }
+        }
+
+        return $keys;
+    }
+
+    private function normalizeFieldValue(mixed $value, string $type): mixed
+    {
+        return match ($type) {
+            'bool' => (bool) $value,
+            'int' => (int) $value,
+            'list' => is_array($value) ? implode("\n", array_map(static fn ($v) => (string) $v, $value)) : (string) $value,
+            default => (string) ($value ?? ''),
+        };
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    private function discoverUpdaterConfigDefinitions(): array
+    {
+        $config = (array) config('updater', []);
+        $defs = [];
+        $this->flattenUpdaterConfig('updater', $config, $defs);
+
+        return $defs;
+    }
+
+    /**
+     * @param array<int,array<string,mixed>> $defs
+     * @param array<string,mixed> $value
+     */
+    private function flattenUpdaterConfig(string $prefix, array $value, array &$defs): void
+    {
+        foreach ($value as $key => $current) {
+            $keyString = (string) $key;
+            $path = $prefix . '.' . $keyString;
+
+            if (is_array($current)) {
+                if ($current === []) {
+                    continue;
+                }
+
+                if ($this->isListOfScalars($current)) {
+                    $defs[] = $this->buildConfigDefinition($path, $current, 'list');
+                    continue;
+                }
+
+                $this->flattenUpdaterConfig($path, $current, $defs);
+                continue;
+            }
+
+            if (is_bool($current)) {
+                $defs[] = $this->buildConfigDefinition($path, $current, 'bool');
+                continue;
+            }
+
+            if (is_int($current)) {
+                $defs[] = $this->buildConfigDefinition($path, $current, 'int');
+                continue;
+            }
+
+            if (is_float($current)) {
+                $defs[] = $this->buildConfigDefinition($path, (string) $current, 'string');
+                continue;
+            }
+
+            if (is_string($current) || $current === null) {
+                $defs[] = $this->buildConfigDefinition($path, (string) ($current ?? ''), 'string');
+            }
+        }
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function buildConfigDefinition(string $configKey, mixed $default, string $type): array
+    {
+        $field = str_replace(['.', '-'], '_', $configKey);
+        $segments = explode('.', $configKey);
+        $group = $segments[1] ?? 'geral';
+        $label = ucwords(str_replace('_', ' ', (string) end($segments)));
+        $sensitive = preg_match('/(password|token|secret|private|key)/i', $configKey) === 1;
+
+        return [
+            'group' => ucfirst($group),
+            'label' => $label,
+            'config' => $configKey,
+            'field' => $field,
+            'type' => $type,
+            'default' => $default,
+            'sensitive' => $sensitive,
+            'env_keys' => $this->envKeysForConfigKey($configKey),
+        ];
+    }
+
+    /**
+     * @return array<int,string>
+     */
+    private function envKeysForConfigKey(string $configKey): array
+    {
+        $suffix = strtoupper(str_replace('.', '_', preg_replace('/^updater\./', '', $configKey) ?: $configKey));
+        $keys = ['UPDATER_' . $suffix];
+
+        // Compatibilidades legadas conhecidas.
+        if ($configKey === 'updater.maintenance.render_view') {
+            $keys[] = 'UPDATER_MAINTENANCE_RENDER_VIEW';
+            $keys[] = 'UPDATER_MAINTENANCE_VIEW';
+        }
+
+        if ($configKey === 'updater.ui.auth.rate_limit.max_attempts') {
+            $keys[] = 'UPDATER_UI_LOGIN_MAX_ATTEMPTS';
+            $keys[] = 'UPDATER_UI_RATE_LIMIT_MAX';
+        }
+
+        if ($configKey === 'updater.ui.auth.rate_limit.window_seconds') {
+            $keys[] = 'UPDATER_UI_LOGIN_DECAY_MINUTES';
+            $keys[] = 'UPDATER_UI_RATE_LIMIT_WINDOW';
+        }
+
+        return array_values(array_unique(array_filter($keys, static fn ($k) => trim((string) $k) !== '')));
+    }
+
+    /**
+     * @param array<int,mixed> $value
+     */
+    private function isListOfScalars(array $value): bool
+    {
+        if (!array_is_list($value)) {
+            return false;
+        }
+
+        foreach ($value as $item) {
+            if (is_array($item) || is_object($item)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    private function buildUpdaterEnvFields(): array
+    {
+        $fields = $this->discoverUpdaterConfigDefinitions();
+        $envMap = $this->readDotEnvMap();
+        $runtime = (array) $this->managerStore->getRuntimeOption('updater_config_overrides', []);
+        $rows = [];
+
+        foreach ($fields as $field) {
+            $envKeys = (array) ($field['env_keys'] ?? []);
+            $primary = (string) ($envKeys[0] ?? '');
+            if ($primary === '') {
+                continue;
+            }
+
+            $configKey = (string) ($field['config'] ?? '');
+            $effectiveValue = $runtime[$configKey] ?? config($configKey, $field['default'] ?? null);
+            $field['value'] = $this->normalizeFieldValue($effectiveValue, (string) ($field['type'] ?? 'string'));
+            $field['env_key'] = implode(' | ', $envKeys);
+            $field['primary_env_key'] = $primary;
+            $field['env_value'] = $envMap[$primary] ?? '';
+            $rows[] = $field;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private function readDotEnvMap(): array
+    {
+        $path = function_exists('base_path') ? base_path('.env') : '.env';
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $content = @file_get_contents($path);
+        if (!is_string($content) || $content === '') {
+            return [];
+        }
+
+        $map = [];
+        foreach (preg_split('/\r?\n/', $content) as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            if (preg_match('/^([A-Z0-9_]+)\s*=\s*(.*)$/', $line, $m) !== 1) {
+                continue;
+            }
+
+            $map[$m[1]] = trim((string) $m[2], "\"'");
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param array<string,string> $updates
+     */
+    private function writeDotEnvEntries(array $updates): void
+    {
+        if ($updates === []) {
+            return;
+        }
+
+        $path = function_exists('base_path') ? base_path('.env') : '.env';
+        $content = is_file($path) ? (string) file_get_contents($path) : '';
+        $lines = preg_split('/\r?\n/', $content) ?: [];
+
+        $found = [];
+        foreach ($lines as $idx => $line) {
+            $raw = (string) $line;
+            if (preg_match('/^\s*([A-Z0-9_]+)\s*=/', $raw, $m) !== 1) {
+                continue;
+            }
+
+            $key = (string) $m[1];
+            if (!array_key_exists($key, $updates)) {
+                continue;
+            }
+
+            $lines[$idx] = $key . '=' . $this->normalizeEnvValue($updates[$key]);
+            $found[$key] = true;
+        }
+
+        foreach ($updates as $key => $value) {
+            if (isset($found[$key])) {
+                continue;
+            }
+            $lines[] = $key . '=' . $this->normalizeEnvValue($value);
+        }
+
+        file_put_contents($path, implode(PHP_EOL, $lines));
+    }
+
+    private function normalizeEnvValue(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/\s|#/', $value) === 1) {
+            return '"' . str_replace('"', '\"', $value) . '"';
+        }
+
+        return $value;
     }
 
 
