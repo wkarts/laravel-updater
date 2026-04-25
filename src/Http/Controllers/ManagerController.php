@@ -299,6 +299,13 @@ class ManagerController extends Controller
         ]);
     }
 
+    public function settingsEnvIndex()
+    {
+        return view('laravel-updater::settings.env', [
+            'envFields' => $this->buildUpdaterEnvFields(),
+        ]);
+    }
+
     public function saveUpdaterConfig(Request $request): RedirectResponse
     {
         $definitions = $this->discoverUpdaterConfigDefinitions();
@@ -358,6 +365,47 @@ class ManagerController extends Controller
         $this->audit($request, $this->actorId($request), 'Configurações gerais do updater atualizadas pela UI.');
 
         return back()->with('status', 'Configurações do updater salvas com sucesso.');
+    }
+
+    public function saveUpdaterEnv(Request $request): RedirectResponse
+    {
+        $fields = $this->buildUpdaterEnvFields();
+        $updates = [];
+
+        foreach ($fields as $field) {
+            $input = (string) ($field['field'] ?? '');
+            $envKey = (string) ($field['primary_env_key'] ?? '');
+            $type = (string) ($field['type'] ?? 'string');
+            $sensitive = (bool) ($field['sensitive'] ?? false);
+
+            if ($input === '' || $envKey === '') {
+                continue;
+            }
+
+            if ($type === 'bool') {
+                $updates[$envKey] = $request->boolean($input) ? 'true' : 'false';
+                continue;
+            }
+
+            $raw = (string) $request->input($input, '');
+            if ($sensitive && trim($raw) === '') {
+                continue;
+            }
+
+            if ($type === 'list') {
+                $lines = preg_split('/\r?\n/', $raw) ?: [];
+                $lines = array_values(array_filter(array_map(static fn ($line) => trim((string) $line), $lines), static fn ($line) => $line !== ''));
+                $updates[$envKey] = implode(',', $lines);
+                continue;
+            }
+
+            $updates[$envKey] = trim($raw);
+        }
+
+        $this->writeDotEnvEntries($updates);
+        $this->audit($request, $this->actorId($request), 'Parâmetros .env do updater atualizados pela UI.', ['keys' => array_keys($updates)]);
+
+        return back()->with('status', 'Parâmetros .env salvos. Execute php artisan config:clear para aplicar imediatamente.');
     }
 
     public function saveBranding(Request $request): RedirectResponse
@@ -673,6 +721,7 @@ class ManagerController extends Controller
                 'env_locked' => $envLocked,
                 'value' => $this->normalizeFieldValue($value, $type),
                 'env_key' => implode(' | ', $envKeysForField),
+                'primary_env_key' => (string) ($envKeysForField[0] ?? ''),
             ]);
         }
 
@@ -844,6 +893,113 @@ class ManagerController extends Controller
         }
 
         return true;
+    }
+
+    /**
+     * @return array<int,array<string,mixed>>
+     */
+    private function buildUpdaterEnvFields(): array
+    {
+        $fields = $this->buildUpdaterConfigFields();
+        $envMap = $this->readDotEnvMap();
+        $rows = [];
+
+        foreach ($fields as $field) {
+            $primary = (string) ($field['primary_env_key'] ?? '');
+            if ($primary === '') {
+                continue;
+            }
+
+            $field['env_value'] = $envMap[$primary] ?? '';
+            $rows[] = $field;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return array<string,string>
+     */
+    private function readDotEnvMap(): array
+    {
+        $path = function_exists('base_path') ? base_path('.env') : '.env';
+        if (!is_file($path)) {
+            return [];
+        }
+
+        $content = @file_get_contents($path);
+        if (!is_string($content) || $content === '') {
+            return [];
+        }
+
+        $map = [];
+        foreach (preg_split('/\r?\n/', $content) as $line) {
+            $line = trim((string) $line);
+            if ($line === '' || str_starts_with($line, '#')) {
+                continue;
+            }
+
+            if (preg_match('/^([A-Z0-9_]+)\s*=\s*(.*)$/', $line, $m) !== 1) {
+                continue;
+            }
+
+            $map[$m[1]] = trim((string) $m[2], "\"'");
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param array<string,string> $updates
+     */
+    private function writeDotEnvEntries(array $updates): void
+    {
+        if ($updates === []) {
+            return;
+        }
+
+        $path = function_exists('base_path') ? base_path('.env') : '.env';
+        $content = is_file($path) ? (string) file_get_contents($path) : '';
+        $lines = preg_split('/\r?\n/', $content) ?: [];
+
+        $found = [];
+        foreach ($lines as $idx => $line) {
+            $raw = (string) $line;
+            if (preg_match('/^\s*([A-Z0-9_]+)\s*=/', $raw, $m) !== 1) {
+                continue;
+            }
+
+            $key = (string) $m[1];
+            if (!array_key_exists($key, $updates)) {
+                continue;
+            }
+
+            $lines[$idx] = $key . '=' . $this->normalizeEnvValue($updates[$key]);
+            $found[$key] = true;
+        }
+
+        foreach ($updates as $key => $value) {
+            if (isset($found[$key])) {
+                continue;
+            }
+            $lines[] = $key . '=' . $this->normalizeEnvValue($value);
+        }
+
+        file_put_contents($path, implode(PHP_EOL, $lines));
+    }
+
+    private function normalizeEnvValue(string $value): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        if (preg_match('/\s|#/', $value) === 1) {
+            return '"' . str_replace('"', '\"', $value) . '"';
+        }
+
+        return $value;
     }
 
 
