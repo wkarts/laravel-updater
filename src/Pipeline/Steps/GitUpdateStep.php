@@ -34,10 +34,17 @@ class GitUpdateStep implements PipelineStepInterface
         $requestedUpdateType = trim((string) ($context['options']['update_type'] ?? config('updater.git.update_type', 'git_ff_only')));
         $requestedTag = trim((string) ($context['options']['target_tag'] ?? config('updater.git.tag', '')));
 
-        $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+        $configuredCwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+        $cwd = $this->resolveGitWorkingDirectory($configuredCwd);
         $env = ['GIT_TERMINAL_PROMPT' => '0'];
 
+        // Mantém o caminho efetivo no runtime para todos os componentes da pipeline.
+        config(['updater.git.path' => $cwd]);
+
         $context['cwd'] = $cwd;
+        if (trim($configuredCwd) !== '' && rtrim($configuredCwd, DIRECTORY_SEPARATOR) !== rtrim($cwd, DIRECTORY_SEPARATOR)) {
+            $context['git_update_log'][] = sprintf('UPDATER_GIT_PATH inválido/inacessível (%s). Usando autodetecção: %s', $configuredCwd, $cwd);
+        }
         $context['git_update_log'][] = sprintf('tipo solicitado: %s', $requestedUpdateType);
         if ($requestedTag !== '') {
             $context['git_update_log'][] = sprintf('tag solicitada: %s', $requestedTag);
@@ -319,9 +326,36 @@ class GitUpdateStep implements PipelineStepInterface
         }
     }
 
+
+    private function resolveGitWorkingDirectory(?string $configuredPath = null): string
+    {
+        $path = trim((string) ($configuredPath ?? ''));
+        if ($path !== '') {
+            $real = @realpath($path);
+            if (is_string($real) && $real !== '' && is_dir($real)) {
+                return $real;
+            }
+        }
+
+        $base = function_exists('base_path') ? (string) base_path() : '';
+        if ($base !== '' && is_dir($base)) {
+            return $base;
+        }
+
+        $script = (string) ($_SERVER['SCRIPT_FILENAME'] ?? '');
+        if ($script !== '') {
+            $scriptDir = dirname($script);
+            if (is_dir($scriptDir)) {
+                return $scriptDir;
+            }
+        }
+
+        return (string) (getcwd() ?: '.');
+    }
+
     private function resolveCurrentTag(): ?string
     {
-        $cwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+        $cwd = $this->resolveGitWorkingDirectory((string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd()));
         $env = ['GIT_TERMINAL_PROMPT' => '0'];
         if (!$this->isGitRepository($cwd, $env)) {
             return null;

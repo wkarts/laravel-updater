@@ -661,15 +661,33 @@ class GitDriver implements CodeDriverInterface
     {
         $config = $this->runtimeConfig();
         $configuredPath = trim((string) ($config['path'] ?? ''));
-        if ($configuredPath === '') {
-            $configuredPath = trim((string) env('UPDATER_GIT_PATH', ''));
-        }
+        $autoDetect = (bool) ($config['auto_detect_path'] ?? true);
 
         if ($configuredPath !== '') {
-            return $configuredPath;
+            $realConfigured = @realpath($configuredPath);
+            if (is_string($realConfigured) && $realConfigured !== '' && is_dir($realConfigured)) {
+                return $realConfigured;
+            }
+
+            if (!$autoDetect) {
+                return $configuredPath;
+            }
         }
 
-        return function_exists('base_path') ? base_path() : (getcwd() ?: '.');
+        $base = function_exists('base_path') ? (string) base_path() : '';
+        if ($base !== '' && is_dir($base)) {
+            return $base;
+        }
+
+        $script = (string) ($_SERVER['SCRIPT_FILENAME'] ?? '');
+        if ($script !== '') {
+            $scriptDir = dirname($script);
+            if (is_dir($scriptDir)) {
+                return $scriptDir;
+            }
+        }
+
+        return (string) (getcwd() ?: '.');
     }
 
     private function isGitRepository(): bool

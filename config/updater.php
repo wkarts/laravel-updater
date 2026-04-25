@@ -12,6 +12,7 @@ if ($uiRateLimitWindowSeconds === null) {
     $uiRateLimitWindowSeconds = (int) env('UPDATER_UI_LOGIN_DECAY_MINUTES', 10) * 60;
 }
 
+
 return [
     'enabled' => env('UPDATER_ENABLED', true),
     'mode' => env('UPDATER_MODE', 'inplace'),
@@ -19,6 +20,7 @@ return [
 
     'git' => [
         'path' => env('UPDATER_GIT_PATH', base_path()),
+        'auto_detect_path' => (bool) env('UPDATER_GIT_AUTO_DETECT_PATH', true),
         'remote' => env('UPDATER_GIT_REMOTE', 'origin'),
         'remote_url' => env('UPDATER_GIT_REMOTE_URL', ''),
         'branch' => env('UPDATER_GIT_BRANCH', 'main'),
