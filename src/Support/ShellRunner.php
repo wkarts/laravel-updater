@@ -303,7 +303,18 @@ throw new UpdaterException($msg, $code);
 private function resolveWorkingDirectory(?string $cwd, array $command): string
     {
         if (is_string($cwd) && trim($cwd) !== '') {
-            return $cwd;
+            $provided = trim($cwd);
+            if (is_dir($provided)) {
+                return $provided;
+            }
+
+            // Em alguns ambientes o primeiro run pode carregar caminho legado/inválido
+            // (ex.: troca de symlink entre releases). Nesses casos, cair para base_path()
+            // evita erro enganoso de "binário ausente" no proc_open.
+            $realProvided = @realpath($provided);
+            if (is_string($realProvided) && $realProvided !== '' && is_dir($realProvided)) {
+                return $realProvided;
+            }
         }
 
         $configured = '';

@@ -18,6 +18,18 @@ class ShellRunnerTest extends TestCase
         $this->assertSame(0, $result['exit_code']);
     }
 
+
+    public function testFallbackDeCwdInvalidoNaoQuebraExecucao(): void
+    {
+        $runner = new ShellRunner();
+        $invalidCwd = sys_get_temp_dir() . '/updater-inexistente-' . uniqid('', true);
+
+        $result = $runner->runOrFail(['php', '-r', 'echo "ok";'], $invalidCwd);
+
+        $this->assertSame('ok', $result['stdout']);
+        $this->assertSame(0, $result['exit_code']);
+    }
+
     public function testInjetaEncryptionKeyDoDotEnvQuandoAusenteNoAmbiente(): void
     {
         $runner = new ShellRunner();
