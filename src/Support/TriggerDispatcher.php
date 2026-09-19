@@ -31,8 +31,12 @@ class TriggerDispatcher
             );
         }
 
-        $forceSync = (bool) ($options['sync'] ?? false);
-        $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
+        $driver = $this->resolveUpdateDriver($options);
+
+        $options['dispatch_driver'] = $driver;
+        $options['dispatch_sapi'] = PHP_SAPI;
+        $options['queue_connection'] = $this->queueConnectionName();
+        $options['queue_driver'] = $this->queueConnectionDriver();
 
         $modernCommandAvailable = $this->isUpdateCommandAvailable();
 
@@ -340,6 +344,57 @@ class TriggerDispatcher
         return (int) $exitCode === 0;
     }
 
+    /** @param array<string,mixed> $options */
+    private function resolveUpdateDriver(array $options): string
+    {
+        $forceSync = (bool) ($options['sync'] ?? false);
+        $isDryRun = (bool) ($options['dry_run'] ?? false);
+
+        $driver = ($forceSync || $isDryRun) ? 'sync' : $this->resolveDriver();
+
+        // Solicitação HTTP real nunca pode cair em queue=sync, sync-dispatch
+        // ou execução inline. O update é destacado no SO e continua sem o browser.
+        if ((bool) ($options['allow_http'] ?? false) && !$isDryRun) {
+            return $this->detachedUiDriver();
+        }
+
+        return $driver;
+    }
+
+    private function detachedUiDriver(): string
+    {
+        return $this->isWindows() ? 'process' : 'background';
+    }
+
+    private function queueConnectionName(): ?string
+    {
+        if (!function_exists('config')) {
+            return null;
+        }
+
+        try {
+            $name = trim((string) config('queue.default', ''));
+            return $name !== '' ? $name : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function queueConnectionDriver(): ?string
+    {
+        $connection = $this->queueConnectionName();
+        if ($connection === null || !function_exists('config')) {
+            return null;
+        }
+
+        try {
+            $driver = trim((string) config('queue.connections.' . $connection . '.driver', ''));
+            return $driver !== '' ? strtolower($driver) : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     private function resolveDriver(): string
     {
         $configured = strtolower(trim($this->driver));
@@ -445,10 +500,9 @@ class TriggerDispatcher
             $args[] = '--run-id=' . (int) $options['run_id'];
         }
 
-        if ((bool) ($options['allow_http'] ?? false)) {
-            $args[] = '--allow-http';
-        }
-
+        // Não propaga --allow-http para o executor filho. O processo destacado
+        // deve executar obrigatoriamente como CLI; allow_http só identifica a origem
+        // da solicitação no dispatcher web.
         if ((bool) ($options['replay_migrations_from_start'] ?? false)) {
             $args[] = '--replay-migrations-from-start';
         }

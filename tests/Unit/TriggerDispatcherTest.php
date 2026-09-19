@@ -13,7 +13,7 @@ use PHPUnit\Framework\TestCase;
 
 class TriggerDispatcherTest extends TestCase
 {
-    public function testBuildUpdateCommandIncluiAllowHttpQuandoAtivo(): void
+    public function testBuildUpdateCommandNaoPropagaAllowHttpParaExecutorCli(): void
     {
         $store = new StateStore(sys_get_temp_dir() . '/updater-test-' . uniqid('', true) . '.sqlite');
         $dispatcher = new TriggerDispatcher(
@@ -35,11 +35,77 @@ class TriggerDispatcherTest extends TestCase
             'replay_migrations_from_start' => true,
         ]);
 
-        $this->assertContains('--allow-http', $args);
+        $this->assertNotContains('--allow-http', $args);
         $this->assertContains('--update-type=git_ff_only', $args);
         $this->assertContains('--source-id=2', $args);
         $this->assertContains('--profile-id=7', $args);
         $this->assertContains('--run-id=99', $args);
         $this->assertContains('--replay-migrations-from-start', $args);
     }
+    public function testUiRealForcaExecutorDestacadoMesmoComDriverQueue(): void
+    {
+        $store = new StateStore(sys_get_temp_dir() . '/updater-test-' . uniqid('', true) . '.sqlite');
+        $dispatcher = new TriggerDispatcher(
+            'queue',
+            $store,
+            new UpdateRecoveryManager($store, new UpdaterLockTools(), new ShellRunner())
+        );
+
+        $reflection = new \ReflectionClass($dispatcher);
+        $method = $reflection->getMethod('resolveUpdateDriver');
+        $method->setAccessible(true);
+
+        $driver = $method->invoke($dispatcher, [
+            'allow_http' => true,
+            'dry_run' => false,
+            'sync' => false,
+        ]);
+
+        $this->assertSame(PHP_OS_FAMILY === 'Windows' ? 'process' : 'background', $driver);
+    }
+
+    public function testUiRealIgnoraSyncConfiguradoEForcaExecutorDestacado(): void
+    {
+        $store = new StateStore(sys_get_temp_dir() . '/updater-test-' . uniqid('', true) . '.sqlite');
+        $dispatcher = new TriggerDispatcher(
+            'sync',
+            $store,
+            new UpdateRecoveryManager($store, new UpdaterLockTools(), new ShellRunner())
+        );
+
+        $reflection = new \ReflectionClass($dispatcher);
+        $method = $reflection->getMethod('resolveUpdateDriver');
+        $method->setAccessible(true);
+
+        $driver = $method->invoke($dispatcher, [
+            'allow_http' => true,
+            'dry_run' => false,
+            'sync' => true,
+        ]);
+
+        $this->assertSame(PHP_OS_FAMILY === 'Windows' ? 'process' : 'background', $driver);
+    }
+
+    public function testDryRunDaUiPodeUsarSubprocessoSincronoSemExecutarPipelineRealNoFpm(): void
+    {
+        $store = new StateStore(sys_get_temp_dir() . '/updater-test-' . uniqid('', true) . '.sqlite');
+        $dispatcher = new TriggerDispatcher(
+            'queue',
+            $store,
+            new UpdateRecoveryManager($store, new UpdaterLockTools(), new ShellRunner())
+        );
+
+        $reflection = new \ReflectionClass($dispatcher);
+        $method = $reflection->getMethod('resolveUpdateDriver');
+        $method->setAccessible(true);
+
+        $driver = $method->invoke($dispatcher, [
+            'allow_http' => true,
+            'dry_run' => true,
+            'sync' => false,
+        ]);
+
+        $this->assertSame('sync', $driver);
+    }
+
 }

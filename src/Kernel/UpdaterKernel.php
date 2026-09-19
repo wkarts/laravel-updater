@@ -97,10 +97,14 @@ class UpdaterKernel
 
     public function run(array $options = []): array
     {
-        $this->environmentDetector->ensureCli((bool) ($options['allow_http'] ?? false));
-        $this->store->ensureSchema();
-
         $isDryRun = (bool) ($options['dry_run'] ?? false);
+
+        // Update REAL nunca pode executar em FPM/Apache/HTTP. O allow_http fica
+        // restrito ao dry-run de compatibilidade. Esta é a última barreira contra
+        // queue=sync ou qualquer dispatcher que tente executar a pipeline web.
+        $allowHttpDryRun = $isDryRun && (bool) ($options['allow_http'] ?? false);
+        $this->environmentDetector->ensureCli($allowHttpDryRun);
+        $this->store->ensureSchema();
         $requestedRunId = (int) ($options['run_id'] ?? 0);
         $existingRun = $requestedRunId > 0 ? $this->store->findRun($requestedRunId) : null;
 
