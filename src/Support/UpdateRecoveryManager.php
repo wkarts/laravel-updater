@@ -53,17 +53,37 @@ class UpdateRecoveryManager
         $reference = $heartbeat !== '' ? $heartbeat : $startedAt;
         $timestamp = $reference !== '' ? strtotime($reference) : false;
         $age = $timestamp !== false ? max(0, time() - $timestamp) : 0;
-        $alive = $pid > 0 ? $this->isProcessAlive($pid, (int) ($run['id'] ?? 0)) : null;
+        $runId = (int) ($run['id'] ?? 0);
+        $alive = $pid > 0 ? $this->isProcessAlive($pid, $runId) : null;
+        $currentStep = $this->resolveCurrentStep($run);
 
         $runningStaleAfter = max(60, (int) config('updater.recovery.stale_after_seconds', 900));
         $queuedStaleAfter = max(30, (int) config('updater.recovery.queued_stale_after_seconds', 120));
+        $legacyGitMaintenanceStaleAfter = max(
+            60,
+            (int) config('updater.recovery.legacy_git_maintenance_stale_after_seconds', 120)
+        );
 
         $recoverable = false;
         $reason = null;
+        $requiresProcessTermination = false;
 
         if ($pid > 0 && $alive === false) {
             $recoverable = true;
             $reason = 'Processo executor não está mais ativo.';
+        } elseif (
+            $pid > 0
+            && $alive === true
+            && in_array($currentStep, ['git_maintenance_pre_update', 'git_maintenance_post_update'], true)
+            && $age >= $legacyGitMaintenanceStaleAfter
+            && $this->isVerifiedUpdaterProcess($pid, $runId)
+        ) {
+            // Compatibilidade de recuperação da v0.1.207: essa versão podia
+            // permanecer indefinidamente viva dentro do Git Maintenance.
+            $recoverable = true;
+            $requiresProcessTermination = true;
+            $reason = 'Executor antigo está vivo, porém sem progresso em ' . $currentStep
+                . ' há ' . $age . 's. A etapa foi removida da pipeline atual.';
         } elseif ($pid <= 0 && $status === 'queued' && $age >= $queuedStaleAfter) {
             $recoverable = true;
             $reason = 'Execução permaneceu na fila sem iniciar dentro do limite esperado.';
@@ -80,6 +100,8 @@ class UpdateRecoveryManager
             'reason' => $reason,
             'age_seconds' => $age,
             'process_alive' => $alive,
+            'current_step' => $currentStep,
+            'requires_process_termination' => $requiresProcessTermination,
         ];
     }
 
@@ -105,11 +127,15 @@ class UpdateRecoveryManager
         }
 
         $reason = (string) ($state['reason'] ?? 'Execução órfã detectada.');
-        $this->recoverRun($runId, 'Recuperação automática: ' . $reason);
+        $recovered = $this->recoverRun($runId, 'Recuperação automática: ' . $reason);
 
         $after = $this->inspect();
-        $after['recovered_run_id'] = $runId;
-        $after['recovery_message'] = $reason;
+        if ($recovered) {
+            $after['recovered_run_id'] = $runId;
+            $after['recovery_message'] = $reason;
+        } else {
+            $after['recovery_error'] = 'Não foi possível encerrar com segurança o processo executor travado.';
+        }
 
         return $after;
     }
@@ -131,28 +157,164 @@ class UpdateRecoveryManager
             return false;
         }
 
-        $this->recoverRun($runId, $reason);
+        return $this->recoverRun($runId, $reason);
+    }
+
+    public function recoverRun(int $runId, string $reason): bool
+    {
+        $run = $this->store->findRun($runId);
+        if (!is_array($run) || !in_array((string) ($run['status'] ?? ''), ['queued', 'running'], true)) {
+            $this->cleanupOperationalState(true);
+
+            return false;
+        }
+
+        $pid = (int) ($run['worker_pid'] ?? 0);
+        $step = $this->resolveCurrentStep($run);
+
+        // Runs da v0.1.207 podem manter o artisan vivo preso no Git Maintenance.
+        // Antes de liberar lock/manutenção, encerra SOMENTE o processo validado
+        // como executor deste run para impedir concorrência posterior.
+        if (
+            $pid > 0
+            && $this->isProcessAlive($pid, $runId) === true
+            && in_array($step, ['git_maintenance_pre_update', 'git_maintenance_post_update'], true)
+        ) {
+            if (!$this->terminateVerifiedUpdaterProcess($pid, $runId)) {
+                $this->store->addRunLog($runId, 'error', 'Recuperação abortada: processo executor antigo continua ativo.', [
+                    'pid' => $pid,
+                    'etapa' => $step,
+                ]);
+
+                return false;
+            }
+
+            $this->store->addRunLog($runId, 'warning', 'Processo executor travado foi encerrado durante recuperação.', [
+                'pid' => $pid,
+                'etapa' => $step,
+            ]);
+        }
+
+        try {
+            $this->store->updateRunStatus($runId, 'failed', [
+                'message' => $reason,
+                'recovered' => true,
+            ]);
+
+            $this->store->addRunLog($runId, 'error', 'Execução interrompida foi recuperada automaticamente.', [
+                'motivo' => $reason,
+                'etapa' => $step,
+            ]);
+        } finally {
+            $this->cleanupOperationalState(true);
+        }
 
         return true;
     }
 
-    public function recoverRun(int $runId, string $reason): void
+    private function resolveCurrentStep(array $run): ?string
     {
-        try {
-            $run = $this->store->findRun($runId);
-            if (is_array($run) && in_array((string) ($run['status'] ?? ''), ['queued', 'running'], true)) {
-                $this->store->updateRunStatus($runId, 'failed', [
-                    'message' => $reason,
-                    'recovered' => true,
-                ]);
-
-                $this->store->addRunLog($runId, 'error', 'Execução interrompida foi recuperada automaticamente.', [
-                    'motivo' => $reason,
-                ]);
-            }
-        } finally {
-            $this->cleanupOperationalState(true);
+        $step = trim((string) ($run['current_step'] ?? ''));
+        if ($step !== '') {
+            return $step;
         }
+
+        $runId = (int) ($run['id'] ?? 0);
+        if ($runId <= 0) {
+            return null;
+        }
+
+        try {
+            $stmt = $this->store->pdo()->prepare(
+                "SELECT context_json
+                 FROM updater_logs
+                 WHERE run_id = :run_id
+                   AND message = 'Iniciando etapa da atualização.'
+                 ORDER BY id DESC
+                 LIMIT 1"
+            );
+            $stmt->execute([':run_id' => $runId]);
+            $raw = $stmt->fetchColumn();
+            if (!is_string($raw) || trim($raw) === '') {
+                return null;
+            }
+
+            $context = json_decode($raw, true);
+            $legacyStep = is_array($context) ? trim((string) ($context['etapa'] ?? '')) : '';
+
+            return $legacyStep !== '' ? $legacyStep : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function isVerifiedUpdaterProcess(int $pid, int $runId): bool
+    {
+        if ($pid <= 0 || $runId <= 0) {
+            return false;
+        }
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            // Não encerra automaticamente PID no Windows sem validação robusta da command line.
+            return false;
+        }
+
+        $cmdlinePath = '/proc/' . $pid . '/cmdline';
+        if (!is_readable($cmdlinePath)) {
+            return false;
+        }
+
+        $cmdline = @file_get_contents($cmdlinePath);
+        if (!is_string($cmdline) || $cmdline === '') {
+            return false;
+        }
+
+        $cmdline = str_replace("\0", ' ', $cmdline);
+
+        return str_contains($cmdline, 'system:update:run')
+            && str_contains($cmdline, '--run-id=' . $runId);
+    }
+
+    private function terminateVerifiedUpdaterProcess(int $pid, int $runId): bool
+    {
+        if (!$this->isVerifiedUpdaterProcess($pid, $runId)) {
+            return false;
+        }
+
+        if (function_exists('exec')) {
+            // Encerra filhos diretos (git/pack-objects etc.) antes do artisan.
+            @exec('pkill -TERM -P ' . (int) $pid . ' 2>/dev/null');
+        }
+
+        if (function_exists('posix_kill')) {
+            @posix_kill($pid, 15);
+        } elseif (function_exists('exec')) {
+            @exec('kill -TERM ' . (int) $pid . ' 2>/dev/null');
+        } else {
+            return false;
+        }
+
+        $deadline = microtime(true) + 2.0;
+        while (microtime(true) < $deadline) {
+            if ($this->isProcessAlive($pid, $runId) !== true) {
+                return true;
+            }
+            usleep(100_000);
+        }
+
+        if (function_exists('exec')) {
+            @exec('pkill -KILL -P ' . (int) $pid . ' 2>/dev/null');
+        }
+
+        if (function_exists('posix_kill')) {
+            @posix_kill($pid, 9);
+        } elseif (function_exists('exec')) {
+            @exec('kill -KILL ' . (int) $pid . ' 2>/dev/null');
+        }
+
+        usleep(250_000);
+
+        return $this->isProcessAlive($pid, $runId) !== true;
     }
 
     public function registerFatalGuard(int $runId): void
