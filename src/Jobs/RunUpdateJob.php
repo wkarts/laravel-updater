@@ -14,6 +14,12 @@ class RunUpdateJob
 
     public function handle(UpdaterKernel $kernel): void
     {
+        if (PHP_SAPI !== 'cli') {
+            throw new \RuntimeException(
+                'RunUpdateJob recusado fora do CLI. Queue síncrona não pode executar atualização real dentro do PHP-FPM.'
+            );
+        }
+
         $kernel->run($this->options);
     }
 }
