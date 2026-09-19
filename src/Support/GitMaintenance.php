@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Support;
 
-use Argws\LaravelUpdater\Exceptions\GitException;
+use Psr\Log\LoggerInterface;
 
 /**
  * Mantém o repositório git "leve" e saudável em produção.
@@ -21,7 +21,8 @@ class GitMaintenance
 {
     public function __construct(
         private readonly ShellRunner $shell,
-        private readonly array $config
+        private readonly array $config,
+        private readonly ?LoggerInterface $logger = null
     ) {
     }
 
@@ -32,13 +33,22 @@ class GitMaintenance
             return 0;
         }
 
-        // Tenta du primeiro (mais rápido em Linux)
-        $res = $this->shell->run(['bash', '-lc', 'du -sb .git 2>/dev/null | cut -f1'], $this->cwd());
-        if (($res['exit_code'] ?? 1) === 0) {
-            $val = trim((string) ($res['stdout'] ?? ''));
-            if ($val !== '' && ctype_digit($val)) {
-                return (int) $val;
+        // Tenta du primeiro (mais rápido em Linux), com timeout próprio.
+        try {
+            $res = $this->shell->runWithTimeout(
+                ['bash', '-lc', 'du -sb .git 2>/dev/null | cut -f1'],
+                $this->cwd(),
+                [],
+                max(5, (int) ($this->cfg()['size_timeout_seconds'] ?? 30))
+            );
+            if (($res['code'] ?? 1) === 0) {
+                $val = trim((string) ($res['stdout'] ?? ''));
+                if ($val !== '' && ctype_digit($val)) {
+                    return (int) $val;
+                }
             }
+        } catch (\Throwable) {
+            // Fallback PHP abaixo.
         }
 
         // Fallback em PHP (pode ser mais lento, mas garante portabilidade)
@@ -110,9 +120,20 @@ class GitMaintenance
         $depth = max(1, (int) ($cfg['shallow_depth'] ?? 50));
 
         if ($aggressiveThresholdMb > 0 && $this->bytesToMb($afterQuick) >= $aggressiveThresholdMb) {
-            // Camada 2: limpeza pesada
-            $this->runOk(['git', 'reflog', 'expire', '--expire=now', '--all'], $actions, 'reflog_expire');
-            $this->runOk(['git', 'gc', '--prune=now', '--aggressive'], $actions, 'gc_aggressive');
+            // Limpeza agressiva é opt-in. Mesmo fora da pipeline de update ela pode
+            // consumir muita CPU/I/O em repositórios grandes.
+            if ((bool) ($cfg['allow_aggressive'] ?? false)) {
+                $this->runOk(['git', 'reflog', 'expire', '--expire=now', '--all'], $actions, 'reflog_expire');
+                $this->runOk(['git', 'gc', '--prune=now', '--aggressive'], $actions, 'gc_aggressive');
+            } else {
+                $actions[] = [
+                    'action' => 'gc_aggressive',
+                    'cmd' => 'git gc --prune=now --aggressive',
+                    'ok' => true,
+                    'skipped' => true,
+                    'message' => 'Limpeza agressiva desativada por padrão.',
+                ];
+            }
         }
 
         $afterHeavy = $this->sizeBytes();
@@ -173,9 +194,23 @@ class GitMaintenance
     
     private function hasRemoteOrigin(): bool
     {
-        // git remote get-url origin (exit 0) indica origin configurado
-        $res = $this->shell->run(['git', 'remote', 'get-url', 'origin'], $this->cwd());
-        return is_array($res) && (int) ($res['exit_code'] ?? 1) === 0 && trim((string) ($res['stdout'] ?? '')) !== '';
+        try {
+            $res = $this->shell->runWithTimeout(
+                ['git', 'remote', 'get-url', 'origin'],
+                $this->cwd(),
+                [],
+                min(30, $this->commandTimeout())
+            );
+
+            return (int) ($res['code'] ?? 1) === 0
+                && trim((string) ($res['stdout'] ?? '')) !== '';
+        } catch (\Throwable $e) {
+            $this->logger?->warning('git.maintenance.remote_probe.failure', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
 private function isGitRepository(): bool
@@ -185,19 +220,62 @@ private function isGitRepository(): bool
 
     private function runOk(array $cmd, array &$actions, string $name): void
     {
-        $res = $this->shell->run($cmd, $this->cwd());
-        $ok = (($res['exit_code'] ?? 1) === 0);
-        $actions[] = [
-            'action' => $name,
-            'cmd' => implode(' ', $cmd),
-            'ok' => $ok,
-            'stderr' => $ok ? null : (string) ($res['stderr'] ?? ''),
-        ];
+        $startedAt = microtime(true);
+        $command = implode(' ', $cmd);
 
-        if (!$ok) {
-            // Não aborta o update por falha de manutenção; só registra.
-            // A manutenção é melhor-esforço.
+        $this->logger?->info('git.maintenance.command.start', [
+            'action' => $name,
+            'command' => $command,
+            'timeout_seconds' => $this->commandTimeout(),
+        ]);
+
+        try {
+            $res = $this->shell->runWithTimeout(
+                $cmd,
+                $this->cwd(),
+                [],
+                $this->commandTimeout()
+            );
+            $ok = ((int) ($res['code'] ?? 1) === 0);
+            $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+
+            $actions[] = [
+                'action' => $name,
+                'cmd' => $command,
+                'ok' => $ok,
+                'duration_ms' => $durationMs,
+                'stderr' => $ok ? null : trim((string) ($res['stderr'] ?? '')),
+            ];
+
+            $this->logger?->log($ok ? 'info' : 'warning', 'git.maintenance.command.' . ($ok ? 'success' : 'failure'), [
+                'action' => $name,
+                'command' => $command,
+                'duration_ms' => $durationMs,
+                'exit_code' => (int) ($res['code'] ?? 1),
+                'stderr' => $ok ? null : trim((string) ($res['stderr'] ?? '')),
+            ]);
+        } catch (\Throwable $e) {
+            $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
+            $actions[] = [
+                'action' => $name,
+                'cmd' => $command,
+                'ok' => false,
+                'duration_ms' => $durationMs,
+                'error' => $e->getMessage(),
+            ];
+
+            $this->logger?->warning('git.maintenance.command.exception', [
+                'action' => $name,
+                'command' => $command,
+                'duration_ms' => $durationMs,
+                'error' => $e->getMessage(),
+            ]);
         }
+    }
+
+    private function commandTimeout(): int
+    {
+        return max(10, (int) ($this->cfg()['command_timeout_seconds'] ?? 300));
     }
 
     private function dirSizeBytes(string $dir): int
