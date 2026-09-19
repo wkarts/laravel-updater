@@ -156,7 +156,7 @@ class UpdaterServiceProvider extends ServiceProvider
 
         $this->app->singleton(TriggerDispatcher::class, function () {
             return new TriggerDispatcher(
-                (string) config('updater.trigger.driver', 'queue'),
+                (string) config('updater.trigger.driver', 'auto'),
                 $this->app->make(StateStore::class),
                 $this->app->make(UpdateRecoveryManager::class)
             );
