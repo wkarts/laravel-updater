@@ -930,7 +930,7 @@ class OperationsController extends Controller
             $hasSuccess = collect($migrationAttempts)->contains(static fn (array $a): bool => in_array((string) ($a['status'] ?? ''), ['success', 'reconciled', 'manual_reapply_success'], true));
             $isReconciled = collect($reconciliationsByMigration[$name] ?? [])->contains(static fn (array $r): bool => (int) ($r['reconciled'] ?? 0) === 1);
             $isReapplied = collect($reapplyByMigration[$name] ?? [])->contains(static fn (array $r): bool => in_array((string) ($r['status'] ?? ''), ['success', 'failed'], true));
-            $isIdempotentSkip = collect($migrationAttempts)->contains(static fn (array $a): bool => (int) ($a['is_idempotent_skip'] ?? 0) === 1 || (string) ($a['status'] ?? '') === 'warning_skipped');
+            $isIdempotentSkip = collect($migrationAttempts)->contains(static fn (array $a): bool => (int) ($a['is_idempotent_skip'] ?? 0) === 1 || in_array((string) ($a['status'] ?? ''), ['warning_skipped', 'schema_warning_skipped'], true));
             $existsInCode = array_key_exists($name, $files);
             $existsInMigrationsTable = array_key_exists($name, $ranMap);
             $attemptCount = count($migrationAttempts);

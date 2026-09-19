@@ -10,6 +10,8 @@ class MigrationFailureClassifier
 {
     public const ALREADY_EXISTS = 'already_exists';
     public const LOCK_RETRYABLE = 'lock_retryable';
+    public const SCHEMA_COMPATIBILITY_WARNING = 'schema_compatibility_warning';
+    public const RUNTIME_WARNING = 'runtime_warning';
     public const NON_RETRYABLE = 'non_retryable';
 
     public function classify(Throwable $throwable): string
@@ -22,6 +24,14 @@ class MigrationFailureClassifier
 
         if ($this->matchesLockRetryable($details['message'], $details['sqlstate'], $details['errno'])) {
             return self::LOCK_RETRYABLE;
+        }
+
+        if ($this->matchesRuntimeWarning($details['message'])) {
+            return self::RUNTIME_WARNING;
+        }
+
+        if ($this->matchesSchemaCompatibilityWarning($details['message'], $details['sqlstate'], $details['errno'])) {
+            return self::SCHEMA_COMPATIBILITY_WARNING;
         }
 
         return self::NON_RETRYABLE;
@@ -41,6 +51,10 @@ class MigrationFailureClassifier
             ['type' => 'column', 'pattern' => "/duplicate column name:? ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
             ['type' => 'index', 'pattern' => "/duplicate key name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
             ['type' => 'constraint', 'pattern' => "/duplicate foreign key constraint name ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
+            ['type' => 'column', 'pattern' => "/invalid default value for ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
+            ['type' => 'column', 'pattern' => "/column ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? cannot be not null/i", 'expects_absent' => false],
+            ['type' => 'column', 'pattern' => "/cannot change column ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
+            ['type' => 'column', 'pattern' => "/referencing column ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?/i", 'expects_absent' => false],
             ['type' => 'index', 'pattern' => "/can't drop ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]?; check that column\/key exists/i", 'expects_absent' => true],
             ['type' => 'table', 'pattern' => "/table ['`\"]?([a-zA-Z0-9_.$-]+)['`\"]? doesn't exist/i", 'expects_absent' => true],
         ];
@@ -154,6 +168,49 @@ class MigrationFailureClassifier
             }
         }
 
+        return false;
+    }
+
+    private function matchesRuntimeWarning(string $message): bool
+    {
+        return str_contains($message, 'preg_match(): unknown modifier')
+            || str_contains($message, 'preg_replace(): unknown modifier')
+            || str_contains($message, 'preg_match(): compilation failed');
+    }
+
+    /**
+     * Divergências de definição que não significam corrupção nem SQL genérico inválido.
+     *
+     * Em modo tolerant a migration permanece PENDENTE e o lote continua.
+     * Em modo strict o serviço continua tratando estas ocorrências como fatais.
+     */
+    private function matchesSchemaCompatibilityWarning(string $message, ?string $sqlstate, ?int $errno): bool
+    {
+        if ($errno === 1067 && str_contains($message, 'invalid default value for')) {
+            return str_contains($message, 'alter table') || str_contains($message, 'modify column');
+        }
+
+        if ($errno === 1830
+            && str_contains($message, 'cannot be not null: needed in a foreign key constraint')
+            && str_contains($message, 'on delete set null')) {
+            return true;
+        }
+
+        if ($errno === 1832
+            && str_contains($message, 'cannot change column')
+            && str_contains($message, 'used in a foreign key constraint')) {
+            return true;
+        }
+
+        if ($errno === 3780
+            && str_contains($message, 'referencing column')
+            && str_contains($message, 'referenced column')
+            && str_contains($message, 'are incompatible')) {
+            return true;
+        }
+
+        // SQLSTATE sozinho não é suficiente para tolerar: 42000/HY000 também
+        // abrangem erros realmente fatais. Sempre exigimos assinatura específica.
         return false;
     }
 

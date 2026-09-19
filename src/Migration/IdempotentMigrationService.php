@@ -59,6 +59,7 @@ class IdempotentMigrationService
             'warnings' => 0,
             'skipped_dry_run' => 0,
             'skipped_runtime_warning' => 0,
+            'skipped_schema_warning' => 0,
             'divergences' => [],
         ];
 
@@ -202,28 +203,69 @@ class IdempotentMigrationService
                         ]);
                     }
 
-                    if (!$strict && ($this->isRecoverableRuntimeWarning($throwable) || $this->isRecoverableSchemaConstraintMismatch($throwable))) {
+                    if (!$strict && in_array($classification, [
+                        MigrationFailureClassifier::RUNTIME_WARNING,
+                        MigrationFailureClassifier::SCHEMA_COMPATIBILITY_WARNING,
+                    ], true)) {
                         $stats['warnings']++;
-                        $stats['skipped_runtime_warning']++;
+
+                        $isSchemaWarning = $classification === MigrationFailureClassifier::SCHEMA_COMPATIBILITY_WARNING;
+                        if ($isSchemaWarning) {
+                            $stats['skipped_schema_warning']++;
+                        } else {
+                            $stats['skipped_runtime_warning']++;
+                        }
+
+                        $divergenceType = $isSchemaWarning
+                            ? 'SCHEMA_COMPATIBILITY_WARNING'
+                            : 'MIGRATION_RUNTIME_WARNING';
+
                         $stats['divergences'][] = [
                             'migration' => $name,
-                            'type' => 'MIGRATION_RUNTIME_WARNING',
+                            'type' => $divergenceType,
                             'object' => $object,
                             'note' => mb_substr($throwable->getMessage(), 0, 500),
                         ];
-                        $reporter->log('warning', 'Migration ignorada em modo tolerante por erro recuperável; mantendo pendente para correção manual.', [
-                            'migration' => $name,
-                            'error' => $throwable->getMessage(),
-                        ]);
-                        $reporter->migrationAttempt($name, 'warning_skipped', $attempt, $path, $replayFromStart, false, true, $throwable->getMessage(), [
-                            'classification' => $classification,
-                            'object' => $object,
-                            'details' => $details,
-                        ], 'updater:migrate');
 
+                        $reporter->log(
+                            'warning',
+                            $isSchemaWarning
+                                ? 'Migration mantida pendente por incompatibilidade de schema em modo tolerante; próximas migrations continuarão.'
+                                : 'Migration ignorada em modo tolerante por warning de runtime; mantendo pendente para correção manual.',
+                            [
+                                'migration' => $name,
+                                'classification' => $classification,
+                                'object' => $object,
+                                'sqlstate' => $details['sqlstate'],
+                                'errno' => $details['errno'],
+                                'error' => $throwable->getMessage(),
+                            ]
+                        );
+
+                        $reporter->migrationAttempt(
+                            $name,
+                            $isSchemaWarning ? 'schema_warning_skipped' : 'warning_skipped',
+                            $attempt,
+                            $path,
+                            $replayFromStart,
+                            false,
+                            true,
+                            $throwable->getMessage(),
+                            [
+                                'classification' => $classification,
+                                'object' => $object,
+                                'details' => $details,
+                            ],
+                            'updater:migrate'
+                        );
+
+                        // Replay remove temporariamente o registro original para reaplicar.
+                        // Em caso de warning tolerante restauramos somente esse registro
+                        // preexistente; migrations originalmente pendentes NÃO são marcadas.
                         if ($deletedForReplay && !$this->repositoryHasMigration($repository, $name)) {
                             $repository->log($name, $repository->getNextBatchNumber());
                         }
+
                         break;
                     }
 
@@ -251,24 +293,6 @@ class IdempotentMigrationService
         return $stats;
     }
 
-
-    private function isRecoverableRuntimeWarning(Throwable $throwable): bool
-    {
-        $message = mb_strtolower($throwable->getMessage());
-
-        return str_contains($message, 'preg_match(): unknown modifier')
-            || str_contains($message, 'preg_replace(): unknown modifier')
-            || str_contains($message, 'preg_match(): compilation failed');
-    }
-
-
-    private function isRecoverableSchemaConstraintMismatch(Throwable $throwable): bool
-    {
-        $message = mb_strtolower($throwable->getMessage());
-
-        return str_contains($message, 'cannot be not null: needed in a foreign key constraint')
-            && str_contains($message, 'on delete set null');
-    }
 
     private function resolvePaths(array $options): array
     {
