@@ -23,7 +23,8 @@ class GitMaintenanceStep implements PipelineStepInterface
      */
     public function shouldRun(array $context): bool
     {
-        return (bool) config('updater.git_maintenance.enabled', true);
+        return (bool) config('updater.git_maintenance.enabled', true)
+            && (bool) config('updater.git_maintenance.pipeline_enabled', false);
     }
 
     public function handle(array &$context): void

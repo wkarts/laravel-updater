@@ -34,6 +34,7 @@
             <strong>Run:</strong> #{{ (int) ($recoveryRun['id'] ?? 0) }}
             · <strong>Status:</strong> {{ $recoveryRun['status'] ?? 'running' }}
             · <strong>PID:</strong> {{ $recoveryRun['worker_pid'] ?? 'n/a' }}
+            · <strong>Etapa:</strong> {{ $recovery['current_step'] ?? $recoveryRun['current_step'] ?? 'n/a' }}
         </p>
         <p class="muted">
             Último heartbeat: {{ $recoveryRun['heartbeat_at'] ?? $recoveryRun['started_at'] ?? 'n/a' }}.

@@ -51,13 +51,23 @@ return [
     // Ativa/desativa o recurso de manutenção automática do .git
     'enabled' => (bool) env('UPDATER_GIT_MAINTENANCE_ENABLED', true),
 
+    // Nunca entra na pipeline crítica de atualização. A manutenção do .git
+    // roda somente via scheduler/comando manual.
+    'pipeline_enabled' => false,
+
     // Agenda automática via Laravel Scheduler (se o projeto executar schedule:run)
     'schedule_enabled' => (bool) env('UPDATER_GIT_MAINTENANCE_SCHEDULE_ENABLED', true),
     // daily|weekly|hourly
     'schedule_frequency' => env('UPDATER_GIT_MAINTENANCE_SCHEDULE_FREQUENCY', 'daily'),
 
+    // Limites operacionais dos comandos de manutenção.
+    'command_timeout_seconds' => (int) env('UPDATER_GIT_MAINTENANCE_COMMAND_TIMEOUT', 300),
+    'size_timeout_seconds' => (int) env('UPDATER_GIT_MAINTENANCE_SIZE_TIMEOUT', 30),
+
     // Thresholds (em MB)
     'aggressive_threshold_mb' => (int) env('UPDATER_GIT_MAINTENANCE_AGGRESSIVE_THRESHOLD_MB', 512),
+    // gc --aggressive é opt-in por ser pesado em CPU/I/O.
+    'allow_aggressive' => (bool) env('UPDATER_GIT_MAINTENANCE_ALLOW_AGGRESSIVE', false),
     'max_size_mb' => (int) env('UPDATER_GIT_MAINTENANCE_MAX_SIZE_MB', 1024),
 
     // Light mode: converte o repo para shallow quando exceder max_size_mb
@@ -148,6 +158,9 @@ return [
         'stale_after_seconds' => (int) env('UPDATER_RECOVERY_STALE_AFTER', 900),
         // Run queued que nunca chegou a iniciar o executor.
         'queued_stale_after_seconds' => (int) env('UPDATER_RECOVERY_QUEUED_STALE_AFTER', 120),
+        // Compatibilidade com v0.1.207: executor vivo preso na antiga etapa
+        // git_maintenance_pre_update/post_update pode ser encerrado e recuperado.
+        'legacy_git_maintenance_stale_after_seconds' => (int) env('UPDATER_RECOVERY_LEGACY_GIT_MAINTENANCE_STALE_AFTER', 120),
         // Guard executado no shutdown para OOM/fatal error.
         'shutdown_guard' => (bool) env('UPDATER_RECOVERY_SHUTDOWN_GUARD', true),
         // Memória reservada liberada somente no fatal handler para permitir limpeza mínima.

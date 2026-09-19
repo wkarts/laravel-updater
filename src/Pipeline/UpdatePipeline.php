@@ -33,7 +33,7 @@ class UpdatePipeline
 
             $runId = (int) ($context['run_id'] ?? 0);
             if ($runId > 0) {
-                $this->store->touchRun($runId);
+                $this->store->setRunStep($runId, $step->name());
             }
 
             $this->logger->info('pipeline.step.start', ['step' => $step->name()]);
@@ -42,7 +42,7 @@ class UpdatePipeline
                 $step->handle($context);
                 $this->executed[] = $step;
                 if ($runId > 0) {
-                    $this->store->touchRun($runId);
+                    $this->store->setRunStep($runId, null);
                 }
                 $this->logger->info('pipeline.step.success', ['step' => $step->name()]);
                 $this->store->addRunLog($runId, 'info', 'Etapa concluída com sucesso.', ['etapa' => $step->name()]);
@@ -64,9 +64,12 @@ class UpdatePipeline
         foreach (array_reverse($this->executed) as $step) {
             try {
                 if ($runId > 0) {
-                    $this->store->touchRun($runId);
+                    $this->store->setRunStep($runId, 'rollback:' . $step->name());
                 }
                 $step->rollback($context);
+                if ($runId > 0) {
+                    $this->store->setRunStep($runId, null);
+                }
                 $this->logger->warning('pipeline.step.rollback', ['step' => $step->name()]);
                 $this->store->addRunLog($runId, 'warning', 'Rollback aplicado para etapa.', ['etapa' => $step->name()]);
             } catch (Throwable $throwable) {

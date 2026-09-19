@@ -411,7 +411,10 @@ class OperationsController extends Controller
                 $message = 'Atualização enfileirada no servidor (run #' . (int) $runningRun['id'] . ').';
             } else {
                 $progress = min(95, 20 + (count($logs) * 7));
-                $message = 'Atualização em andamento no servidor (run #' . (int) $runningRun['id'] . ').';
+                $currentStep = trim((string) ($runningRun['current_step'] ?? ''));
+                $message = 'Atualização em andamento no servidor (run #' . (int) $runningRun['id'] . ')'
+                    . ($currentStep !== '' ? ' · etapa: ' . $currentStep : '')
+                    . '.';
             }
         } elseif (is_array($lastRun)) {
             $status = (string) ($lastRun['status'] ?? '');
@@ -437,6 +440,9 @@ class OperationsController extends Controller
                 'reason' => $recovery['reason'] ?? null,
                 'recovered_run_id' => $recovery['recovered_run_id'] ?? null,
                 'recovery_message' => $recovery['recovery_message'] ?? null,
+                'current_step' => $recovery['current_step'] ?? null,
+                'requires_process_termination' => (bool) ($recovery['requires_process_termination'] ?? false),
+                'error' => $recovery['recovery_error'] ?? null,
             ],
             'updated_at' => date(DATE_ATOM),
         ]);
