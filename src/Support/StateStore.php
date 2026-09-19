@@ -29,7 +29,8 @@ class StateStore
             error_json TEXT NULL,
             heartbeat_at TEXT NULL,
             worker_pid INTEGER NULL,
-            execution_mode TEXT NULL
+            execution_mode TEXT NULL,
+            current_step TEXT NULL
         )');
 
         // Colunas operacionais para detectar e recuperar execuções órfãs.
@@ -37,6 +38,7 @@ class StateStore
         $this->ensureColumn('runs', 'heartbeat_at', 'TEXT NULL');
         $this->ensureColumn('runs', 'worker_pid', 'INTEGER NULL');
         $this->ensureColumn('runs', 'execution_mode', 'TEXT NULL');
+        $this->ensureColumn('runs', 'current_step', 'TEXT NULL');
 
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS patches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -329,7 +331,7 @@ class StateStore
 
     public function startRun(int $runId, ?int $workerPid = null, ?string $executionMode = null): void
     {
-        $stmt = $this->connect()->prepare('UPDATE runs SET status=:status, finished_at=NULL, heartbeat_at=:heartbeat_at, worker_pid=:worker_pid, execution_mode=:execution_mode WHERE id=:id');
+        $stmt = $this->connect()->prepare('UPDATE runs SET status=:status, finished_at=NULL, heartbeat_at=:heartbeat_at, worker_pid=:worker_pid, execution_mode=:execution_mode, current_step=NULL WHERE id=:id');
         $stmt->execute([
             ':status' => 'running',
             ':heartbeat_at' => date(DATE_ATOM),
@@ -359,9 +361,19 @@ class StateStore
         ]);
     }
 
+    public function setRunStep(int $runId, ?string $step): void
+    {
+        $stmt = $this->connect()->prepare('UPDATE runs SET heartbeat_at=:heartbeat_at, current_step=:current_step WHERE id=:id AND status IN (\'queued\', \'running\')');
+        $stmt->execute([
+            ':heartbeat_at' => date(DATE_ATOM),
+            ':current_step' => $step !== null && trim($step) !== '' ? trim($step) : null,
+            ':id' => $runId,
+        ]);
+    }
+
     public function finishRun(int $runId, array $context, ?array $error = null): void
     {
-        $stmt = $this->connect()->prepare('UPDATE runs SET finished_at=:finished_at, status=:status, revision_before=:revision_before, revision_after=:revision_after, backup_file=:backup_file, snapshot_file=:snapshot_file, error_json=:error_json WHERE id=:id');
+        $stmt = $this->connect()->prepare('UPDATE runs SET finished_at=:finished_at, status=:status, revision_before=:revision_before, revision_after=:revision_after, backup_file=:backup_file, snapshot_file=:snapshot_file, error_json=:error_json, current_step=NULL WHERE id=:id');
         $stmt->execute([
             ':finished_at' => date(DATE_ATOM),
             ':status' => $error === null ? 'success' : 'failed',
@@ -376,7 +388,7 @@ class StateStore
 
     public function updateRunStatus(int $runId, string $status, ?array $error = null): void
     {
-        $stmt = $this->connect()->prepare('UPDATE runs SET finished_at=:finished_at, status=:status, error_json=:error_json WHERE id=:id');
+        $stmt = $this->connect()->prepare('UPDATE runs SET finished_at=:finished_at, status=:status, error_json=:error_json, current_step=NULL WHERE id=:id');
         $stmt->execute([
             ':finished_at' => date(DATE_ATOM),
             ':status' => $status,
