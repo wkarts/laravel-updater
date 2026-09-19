@@ -26,8 +26,17 @@ class StateStore
             backup_file TEXT NULL,
             snapshot_file TEXT NULL,
             options_json TEXT NULL,
-            error_json TEXT NULL
+            error_json TEXT NULL,
+            heartbeat_at TEXT NULL,
+            worker_pid INTEGER NULL,
+            execution_mode TEXT NULL
         )');
+
+        // Colunas operacionais para detectar e recuperar execuções órfãs.
+        // Compatível com bancos SQLite já existentes.
+        $this->ensureColumn('runs', 'heartbeat_at', 'TEXT NULL');
+        $this->ensureColumn('runs', 'worker_pid', 'INTEGER NULL');
+        $this->ensureColumn('runs', 'execution_mode', 'TEXT NULL');
 
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS patches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -289,14 +298,65 @@ class StateStore
 
     public function createRun(array $options): int
     {
-        $stmt = $this->connect()->prepare('INSERT INTO runs (started_at, status, options_json) VALUES (:started_at, :status, :options_json)');
+        $now = date(DATE_ATOM);
+        $stmt = $this->connect()->prepare('INSERT INTO runs (started_at, status, options_json, heartbeat_at, worker_pid, execution_mode) VALUES (:started_at, :status, :options_json, :heartbeat_at, :worker_pid, :execution_mode)');
         $stmt->execute([
-            ':started_at' => date(DATE_ATOM),
+            ':started_at' => $now,
             ':status' => 'running',
             ':options_json' => json_encode($options, JSON_UNESCAPED_UNICODE),
+            ':heartbeat_at' => $now,
+            ':worker_pid' => getmypid() ?: null,
+            ':execution_mode' => PHP_SAPI,
         ]);
 
         return (int) $this->connect()->lastInsertId();
+    }
+
+    public function createQueuedRun(array $options): int
+    {
+        $now = date(DATE_ATOM);
+        $stmt = $this->connect()->prepare('INSERT INTO runs (started_at, status, options_json, heartbeat_at, worker_pid, execution_mode) VALUES (:started_at, :status, :options_json, :heartbeat_at, NULL, :execution_mode)');
+        $stmt->execute([
+            ':started_at' => $now,
+            ':status' => 'queued',
+            ':options_json' => json_encode($options, JSON_UNESCAPED_UNICODE),
+            ':heartbeat_at' => $now,
+            ':execution_mode' => 'queued',
+        ]);
+
+        return (int) $this->connect()->lastInsertId();
+    }
+
+    public function startRun(int $runId, ?int $workerPid = null, ?string $executionMode = null): void
+    {
+        $stmt = $this->connect()->prepare('UPDATE runs SET status=:status, finished_at=NULL, heartbeat_at=:heartbeat_at, worker_pid=:worker_pid, execution_mode=:execution_mode WHERE id=:id');
+        $stmt->execute([
+            ':status' => 'running',
+            ':heartbeat_at' => date(DATE_ATOM),
+            ':worker_pid' => $workerPid ?: (getmypid() ?: null),
+            ':execution_mode' => $executionMode ?: PHP_SAPI,
+            ':id' => $runId,
+        ]);
+    }
+
+    public function setRunWorker(int $runId, ?int $workerPid, string $executionMode): void
+    {
+        $stmt = $this->connect()->prepare('UPDATE runs SET worker_pid=:worker_pid, execution_mode=:execution_mode, heartbeat_at=:heartbeat_at WHERE id=:id');
+        $stmt->execute([
+            ':worker_pid' => $workerPid,
+            ':execution_mode' => $executionMode,
+            ':heartbeat_at' => date(DATE_ATOM),
+            ':id' => $runId,
+        ]);
+    }
+
+    public function touchRun(int $runId): void
+    {
+        $stmt = $this->connect()->prepare('UPDATE runs SET heartbeat_at=:heartbeat_at WHERE id=:id AND status IN (\'queued\', \'running\')');
+        $stmt->execute([
+            ':heartbeat_at' => date(DATE_ATOM),
+            ':id' => $runId,
+        ]);
     }
 
     public function finishRun(int $runId, array $context, ?array $error = null): void
@@ -509,7 +569,7 @@ class StateStore
 
     public function activeRun(): ?array
     {
-        $stmt = $this->connect()->query("SELECT * FROM runs WHERE status = 'running' AND (finished_at IS NULL OR finished_at = '') ORDER BY id DESC LIMIT 1");
+        $stmt = $this->connect()->query("SELECT * FROM runs WHERE status IN ('queued', 'running') AND (finished_at IS NULL OR finished_at = '') ORDER BY id DESC LIMIT 1");
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
         return $row ?: null;
