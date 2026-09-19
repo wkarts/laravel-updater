@@ -51,6 +51,7 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->name('updater.runs.show');
 
                 Route::post('/updates/execute', [OperationsController::class, 'executeUpdate'])->name('updater.updates.execute');
+                Route::post('/updates/recover', [OperationsController::class, 'recoverUpdate'])->name('updater.updates.recover');
                 Route::post('/runs/{id}/approve', [OperationsController::class, 'approveAndExecute'])->whereNumber('id')->name('updater.runs.approve');
                 Route::get('/updates/progress/status', [OperationsController::class, 'updateProgressStatus'])->name('updater.updates.progress.status');
 
