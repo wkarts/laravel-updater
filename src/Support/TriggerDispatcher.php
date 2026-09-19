@@ -31,15 +31,7 @@ class TriggerDispatcher
             );
         }
 
-        $forceSync = (bool) ($options['sync'] ?? false);
-        $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
-
-        // Atualização REAL iniciada pela UI nunca pode depender de queue=sync,
-        // FPM ou do ciclo de vida da requisição. Mesmo que o administrador tenha
-        // configurado trigger=queue/sync, a UI força executor destacado no SO.
-        if ((bool) ($options['allow_http'] ?? false) && !(bool) ($options['dry_run'] ?? false)) {
-            $driver = $this->detachedUiDriver();
-        }
+        $driver = $this->resolveUpdateDriver($options);
 
         $options['dispatch_driver'] = $driver;
         $options['dispatch_sapi'] = PHP_SAPI;
@@ -350,6 +342,23 @@ class TriggerDispatcher
         exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
 
         return (int) $exitCode === 0;
+    }
+
+    /** @param array<string,mixed> $options */
+    private function resolveUpdateDriver(array $options): string
+    {
+        $forceSync = (bool) ($options['sync'] ?? false);
+        $isDryRun = (bool) ($options['dry_run'] ?? false);
+
+        $driver = ($forceSync || $isDryRun) ? 'sync' : $this->resolveDriver();
+
+        // Solicitação HTTP real nunca pode cair em queue=sync, sync-dispatch
+        // ou execução inline. O update é destacado no SO e continua sem o browser.
+        if ((bool) ($options['allow_http'] ?? false) && !$isDryRun) {
+            return $this->detachedUiDriver();
+        }
+
+        return $driver;
     }
 
     private function detachedUiDriver(): string
