@@ -87,9 +87,32 @@ class ManagerController extends Controller
     {
         $this->ensureAdmin();
 
+        /** @var UpdateRecoveryManager $recovery */
+        $recovery = app(UpdateRecoveryManager::class);
+        $state = $recovery->inspect();
+
+        if ((bool) ($state['active'] ?? false)) {
+            if (!(bool) ($state['recoverable'] ?? false)) {
+                return back()->withErrors([
+                    'lock' => 'Existe uma execução com sinais de atividade. O lock não foi removido para evitar duas atualizações simultâneas.',
+                ]);
+            }
+
+            $runId = (int) (($state['run']['id'] ?? 0));
+            $recovery->recoverActive(
+                'Recuperação administrativa ao limpar lock: ' . (string) ($state['reason'] ?? 'execução órfã'),
+                false
+            );
+
+            return back()->with(
+                'status',
+                'Execução órfã #' . $runId . ' recuperada. Run encerrada, manutenção removida e lock liberado.'
+            );
+        }
+
         app(UpdaterLockTools::class)->forceClear('system-update');
 
-        return back()->with('status', 'Lock de atualização limpo. Se houver uma execução em andamento, ela poderá falhar.');
+        return back()->with('status', 'Lock residual de atualização limpo com segurança.');
     }
 
     public function usersIndex()
