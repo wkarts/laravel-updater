@@ -91,6 +91,27 @@ class StateStoreTest extends TestCase
         $this->assertContains('heartbeat_at', $names);
         $this->assertContains('worker_pid', $names);
         $this->assertContains('execution_mode', $names);
+        $this->assertContains('current_step', $names);
+
+        @unlink($path);
+    }
+
+    public function testRunMantemEtapaAtualParaDiagnosticoERecovery(): void
+    {
+        $path = sys_get_temp_dir() . '/updater_test_' . uniqid() . '.sqlite';
+        $store = new StateStore($path);
+        $store->ensureSchema();
+
+        $runId = $store->createRun(['update_type' => 'git_ff_only']);
+        $store->setRunStep($runId, 'git_update');
+
+        $running = $store->findRun($runId);
+        $this->assertSame('git_update', $running['current_step']);
+        $this->assertNotEmpty($running['heartbeat_at']);
+
+        $store->finishRun($runId, []);
+        $finished = $store->findRun($runId);
+        $this->assertNull($finished['current_step']);
 
         @unlink($path);
     }
