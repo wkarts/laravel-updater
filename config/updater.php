@@ -158,6 +158,9 @@ return [
         'stale_after_seconds' => (int) env('UPDATER_RECOVERY_STALE_AFTER', 900),
         // Run queued que nunca chegou a iniciar o executor.
         'queued_stale_after_seconds' => (int) env('UPDATER_RECOVERY_QUEUED_STALE_AFTER', 120),
+        // Compatibilidade com v0.1.207: executor vivo preso na antiga etapa
+        // git_maintenance_pre_update/post_update pode ser encerrado e recuperado.
+        'legacy_git_maintenance_stale_after_seconds' => (int) env('UPDATER_RECOVERY_LEGACY_GIT_MAINTENANCE_STALE_AFTER', 120),
         // Guard executado no shutdown para OOM/fatal error.
         'shutdown_guard' => (bool) env('UPDATER_RECOVERY_SHUTDOWN_GUARD', true),
         // Memória reservada liberada somente no fatal handler para permitir limpeza mínima.
