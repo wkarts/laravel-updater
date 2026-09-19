@@ -34,13 +34,22 @@ class TriggerDispatcher
         $forceSync = (bool) ($options['sync'] ?? false);
         $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
 
-        if (!$this->isAnyUpdateCommandAvailable()) {
-            // Atualização real disparada pela UI nunca deve cair para execução inline.
-            // Isso desacopla Git/Composer/backup/migrations do request HTTP/PHP-FPM.
-            if ((bool) ($options['allow_http'] ?? false) || $driver !== 'sync') {
+        $modernCommandAvailable = $this->isUpdateCommandAvailable();
+
+        // A UI só pode iniciar a implementação moderna, que aceita --run-id e
+        // persiste PID/heartbeat. O comando legado não possui contrato suficiente
+        // para recuperação segura e, portanto, não pode ser usado por HTTP.
+        if ((bool) ($options['allow_http'] ?? false) && !$modernCommandAvailable) {
+            throw new \RuntimeException(
+                'Executor CLI moderno do Laravel Updater indisponível. O update não será executado dentro da requisição HTTP '
+                . 'nem será encaminhado ao comando legado. Valide "php artisan system:update:run --help".'
+            );
+        }
+
+        if (!$modernCommandAvailable && !$this->isLegacyUpdateCommandAvailable()) {
+            if ($driver !== 'sync') {
                 throw new \RuntimeException(
-                    'Executor CLI do Laravel Updater indisponível. O update não será executado dentro da requisição HTTP. '
-                    . 'Valide o comando "php artisan system:update:run --help".'
+                    'Executor CLI do Laravel Updater indisponível. Valide "php artisan system:update:run --help".'
                 );
             }
 
