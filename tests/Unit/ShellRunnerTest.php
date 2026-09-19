@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Tests\Unit;
 
+use Argws\LaravelUpdater\Exceptions\UpdaterException;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use PHPUnit\Framework\TestCase;
 
@@ -54,4 +55,46 @@ class ShellRunnerTest extends TestCase
 
         $this->assertSame('base64:test-key', $result['stdout']);
     }
+    public function testRunDrenaStdoutEStderrSemDeadlock(): void
+    {
+        $runner = new ShellRunner();
+
+        $code = <<<'PHP'
+for ($i = 0; $i < 256; $i++) {
+    fwrite(STDERR, str_repeat('E', 4096));
+}
+fwrite(STDOUT, 'ok');
+PHP;
+
+        $result = $runner->run(['php', '-r', $code]);
+
+        $this->assertSame(0, $result['exit_code']);
+        $this->assertSame('ok', $result['stdout']);
+        $this->assertGreaterThan(500000, strlen($result['stderr']));
+    }
+
+    public function testRunWithTimeoutInterrompeProcessoTravado(): void
+    {
+        $runner = new ShellRunner();
+
+        $this->expectException(UpdaterException::class);
+        $this->expectExceptionMessage('Comando excedeu timeout');
+
+        $runner->runWithTimeout(['php', '-r', 'sleep(3);'], null, [], 1);
+    }
+
+    public function testGitRecebeAmbienteNaoInterativo(): void
+    {
+        $runner = new ShellRunner();
+
+        $reflection = new \ReflectionClass($runner);
+        $method = $reflection->getMethod('withCommandEnvironment');
+        $method->setAccessible(true);
+
+        $env = $method->invoke($runner, ['git', 'fetch', 'origin'], []);
+
+        $this->assertSame('0', $env['GIT_TERMINAL_PROMPT']);
+        $this->assertSame('Never', $env['GCM_INTERACTIVE']);
+    }
+
 }
