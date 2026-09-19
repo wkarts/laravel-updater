@@ -100,4 +100,58 @@ class MigrationFailureClassifierTest extends TestCase
 
         $this->assertSame(MigrationFailureClassifier::NON_RETRYABLE, $classifier->classify($ex));
     }
+    public function testClassificaInvalidDefaultValueComoSchemaCompatibilityWarning(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception(
+            "SQLSTATE[42000]: Syntax error or access violation: 1067 Invalid default value for 'status' "
+            . "(Connection: mysql, SQL: ALTER TABLE `bank_statement_transactions` MODIFY COLUMN `status` "
+            . "enum('pending','reconciled','ignored') NULL DEFAULT 'pendente')"
+        );
+
+        $this->assertSame(
+            MigrationFailureClassifier::SCHEMA_COMPATIBILITY_WARNING,
+            $classifier->classify($ex)
+        );
+
+        $object = $classifier->inferObject($ex);
+        $this->assertSame('column', $object['type']);
+        $this->assertSame('status', $object['name']);
+        $this->assertSame('bank_statement_transactions', $object['table']);
+    }
+
+    public function testClassificaFkSetNullComNotNullComoSchemaCompatibilityWarning(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception(
+            "SQLSTATE[HY000]: General error: 1830 Column 'usuario_id' cannot be NOT NULL: "
+            . "needed in a foreign key constraint 'fk_teste_usuario' SET NULL "
+            . "(Connection: mysql, SQL: ALTER TABLE `teste` MODIFY COLUMN `usuario_id` INT NOT NULL)"
+        );
+
+        $this->assertSame(
+            MigrationFailureClassifier::SCHEMA_COMPATIBILITY_WARNING,
+            $classifier->classify($ex)
+        );
+    }
+
+    public function testMantemErroSqlGenericoComoNonRetryable(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception(
+            "SQLSTATE[42000]: Syntax error or access violation: 1064 You have an error in your SQL syntax "
+            . "(Connection: mysql, SQL: ALTER TABLE `x` BROKEN SQL)"
+        );
+
+        $this->assertSame(MigrationFailureClassifier::NON_RETRYABLE, $classifier->classify($ex));
+    }
+
+    public function testClassificaWarningDeRegexComoRuntimeWarning(): void
+    {
+        $classifier = new MigrationFailureClassifier();
+        $ex = new Exception('preg_match(): Unknown modifier ]');
+
+        $this->assertSame(MigrationFailureClassifier::RUNTIME_WARNING, $classifier->classify($ex));
+    }
+
 }
