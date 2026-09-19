@@ -12,7 +12,6 @@ use Argws\LaravelUpdater\Pipeline\Steps\CacheClearStep;
 use Argws\LaravelUpdater\Pipeline\Steps\FullBackupStep;
 use Argws\LaravelUpdater\Pipeline\Steps\ComposerInstallStep;
 use Argws\LaravelUpdater\Pipeline\Steps\GitUpdateStep;
-use Argws\LaravelUpdater\Pipeline\Steps\GitMaintenanceStep;
 use Argws\LaravelUpdater\Pipeline\Steps\Psr4SanitizeStep;
 use Argws\LaravelUpdater\Pipeline\Steps\HealthCheckStep;
 use Argws\LaravelUpdater\Pipeline\Steps\LockStep;
@@ -47,19 +46,11 @@ class UpdaterKernel
 
     public static function makePipeline(array $services): UpdatePipeline
     {
-        // Regra operacional: update real sempre entra em manutenção desde o início da pipeline.
-        // A exceção para manter o painel acessível segue no MaintenanceMode via --except (quando suportado).
-        $maintenanceEarly = true;
-
+        // A janela de indisponibilidade começa somente após o backup FULL.
+        // Manutenção do repositório Git (gc/prune/aggressive) NÃO pertence ao
+        // caminho crítico da atualização; continua disponível via scheduler/manual.
         $steps = [
             new LockStep($services['lock'], (int) config('updater.lock.timeout', 600)),
-        ];
-
-        if ($maintenanceEarly) {
-            $steps[] = new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null);
-        }
-
-        $steps = array_merge($steps, [
             new FullBackupStep(
                 $services['backup'],
                 $services['files'],
@@ -68,17 +59,9 @@ class UpdaterKernel
                 (array) config('updater.snapshot', []),
                 (bool) config('updater.backup.enabled', true)
             ),
+            new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null),
             new PreUpdateCommandsStep($services['shell']),
-        ]);
-
-        if (!$maintenanceEarly) {
-            $steps[] = new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null);
-        }
-
-        $steps = array_merge($steps, [
-            new GitMaintenanceStep($services['git_maintenance'], 'pre_update'),
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
-            new GitMaintenanceStep($services['git_maintenance'], 'post_update'),
             new Psr4SanitizeStep($services['psr4_sanitizer'], $services['store'], $services['logger']),
             new ComposerInstallStep($services['shell']),
             new MigrateStep($services['shell']),
@@ -89,7 +72,7 @@ class UpdaterKernel
             new PostUpdateCommandsStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
             new MaintenanceOffStep($services['shell'], $services['lock']),
-        ]);
+        ];
 
         return new UpdatePipeline($steps, $services['logger'], $services['store']);
     }
