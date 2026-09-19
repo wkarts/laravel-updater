@@ -11,74 +11,97 @@ use Symfony\Component\Process\Process;
 
 class TriggerDispatcher
 {
-    public function __construct(private readonly string $driver, private readonly StateStore $store)
-    {
+    public function __construct(
+        private readonly string $driver,
+        private readonly StateStore $store,
+        private readonly UpdateRecoveryManager $recovery
+    ) {
     }
 
     public function triggerUpdate(array $options = []): ?int
     {
+        // Antes de bloquear uma nova atualização, reconcilia runs órfãs deixadas
+        // por fatal error, OOM, reboot ou processo executor encerrado.
+        $this->recovery->reconcile();
 
         if ($this->store->hasActiveRun()) {
-            throw new \RuntimeException("Já existe uma execução em andamento.");
+            $activeId = $this->store->activeRunId();
+            throw new \RuntimeException(
+                'Já existe uma execução em andamento' . ($activeId ? ' (run #' . $activeId . ')' : '') . '.'
+            );
         }
+
         $forceSync = (bool) ($options['sync'] ?? false);
         $driver = ($forceSync || (bool) ($options['dry_run'] ?? false)) ? 'sync' : $this->resolveDriver();
 
-        // Se não houver nenhum comando de update disponível, força execução inline.
-        // Isso evita o cenário onde a UI fica em "running" para sempre porque o updater tentou
-        // disparar um comando inexistente em background.
-        if ($driver !== 'sync' && !$this->isAnyUpdateCommandAvailable()) {
+        if (!$this->isAnyUpdateCommandAvailable()) {
+            // Atualização real disparada pela UI nunca deve cair para execução inline.
+            // Isso desacopla Git/Composer/backup/migrations do request HTTP/PHP-FPM.
+            if ((bool) ($options['allow_http'] ?? false) || $driver !== 'sync') {
+                throw new \RuntimeException(
+                    'Executor CLI do Laravel Updater indisponível. O update não será executado dentro da requisição HTTP. '
+                    . 'Valide o comando "php artisan system:update:run --help".'
+                );
+            }
+
             return $this->runUpdateInline($options);
         }
 
-        if ($driver === 'queue' && function_exists('dispatch')) {
-            dispatch(new RunUpdateJob($options));
+        $runId = $this->store->createQueuedRun($options);
+        $options['run_id'] = $runId;
 
-            return null;
-        }
+        try {
+            if ($driver === 'queue' && function_exists('dispatch')) {
+                $this->store->setRunWorker($runId, null, 'queue');
+                dispatch(new RunUpdateJob($options));
 
-        $args = $this->buildUpdateCommandArgs($options);
-
-        if ($driver === 'sync') {
-            if (!$this->isAnyUpdateCommandAvailable()) {
-                return $this->runUpdateInline($options);
+                return $runId;
             }
 
-            $before = (int) (($this->store->lastRun()['id'] ?? 0));
-            if (class_exists(Process::class)) {
-                $process = new Process($args, $this->resolveProjectBasePath());
-                $process->setTimeout(null);
-                $process->run();
+            $args = $this->buildUpdateCommandArgs($options);
 
-                if (!$process->isSuccessful()) {
-                    $output = trim(($process->getErrorOutput() ?: '') . "\n" . ($process->getOutput() ?: ''));
-                    if (str_contains(strtolower($output), 'there are no commands defined in the "system:update" namespace')) {
-                        return $this->runUpdateInline($options);
+            if ($driver === 'sync') {
+                $this->store->setRunWorker($runId, getmypid() ?: null, 'sync-dispatch');
+
+                if (class_exists(Process::class)) {
+                    $process = new Process($args, $this->resolveProjectBasePath());
+                    $process->setTimeout(null);
+                    $process->run();
+
+                    if (!$process->isSuccessful()) {
+                        $output = trim(($process->getErrorOutput() ?: '') . "\n" . ($process->getOutput() ?: ''));
+                        throw new \RuntimeException('Falha ao executar atualização: ' . $output);
                     }
-                    throw new \RuntimeException('Falha ao executar atualização: ' . $output);
-                }
-            } else {
-                exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
-                if ((int) $exitCode !== 0) {
-                    $joined = trim(implode("\n", $output));
-                    if (str_contains(strtolower($joined), 'there are no commands defined in the "system:update" namespace')) {
-                        return $this->runUpdateInline($options);
+                } else {
+                    $output = [];
+                    $exitCode = 0;
+                    exec(implode(' ', array_map('escapeshellarg', $args)), $output, $exitCode);
+                    if ((int) $exitCode !== 0) {
+                        throw new \RuntimeException('Falha ao executar atualização em modo sync. ' . trim(implode("\n", $output)));
                     }
-                    throw new \RuntimeException('Falha ao executar atualização em modo sync. ' . $joined);
                 }
+
+                return $runId;
             }
 
-            $after = (int) (($this->store->lastRun()['id'] ?? 0));
+            // Atualização real: processo destacado no servidor. A resposta HTTP pode
+            // terminar, o navegador pode fechar e o update continua normalmente.
+            $pid = $this->spawnBackground($args);
+            $this->store->setRunWorker($runId, $pid, $driver);
 
-            return $after > $before ? $after : null;
+            return $runId;
+        } catch (\Throwable $e) {
+            $run = $this->store->findRun($runId);
+            if (is_array($run) && in_array((string) ($run['status'] ?? ''), ['queued', 'running'], true)) {
+                $this->store->updateRunStatus($runId, 'failed', ['message' => $e->getMessage()]);
+                $this->store->addRunLog($runId, 'error', 'Falha ao iniciar executor da atualização.', [
+                    'erro' => $e->getMessage(),
+                    'driver' => $driver,
+                ]);
+            }
+
+            throw $e;
         }
-
-        // Background execution (non-blocking) to avoid freezing the UI.
-        // - On Linux/macOS: run in shell background.
-        // - On Windows: prefer Symfony Process start(), otherwise fallback to cmd.exe "start /B".
-        $this->spawnBackground($args);
-
-        return null;
     }
 
     private function resolveUpdateCommandName(): string
@@ -180,6 +203,7 @@ class TriggerDispatcher
 
     public function triggerRollback(): void
     {
+        $this->recovery->reconcile();
 
         if ($this->store->hasActiveRun()) {
             throw new \RuntimeException("Já existe uma execução em andamento.");
@@ -330,7 +354,31 @@ class TriggerDispatcher
      */
     private function spawnBackground(array $args): ?int
     {
-        // Prefer Symfony Process when available.
+        // Unix: destaque real do processo no SO. Não mantém pipes ligados ao
+        // PHP-FPM/request e devolve o PID do executor.
+        if (!$this->isWindows()) {
+            $basePath = $this->resolveProjectBasePath();
+            $command = 'cd ' . escapeshellarg($basePath)
+                . ' && nohup ' . implode(' ', array_map('escapeshellarg', $args))
+                . ' > /dev/null 2>&1 < /dev/null & echo $!';
+
+            $pid = trim((string) @shell_exec($command));
+            if ($pid !== '' && ctype_digit($pid)) {
+                return (int) $pid;
+            }
+
+            // Ambientes com shell_exec desabilitado ainda podem usar Symfony Process.
+            if (class_exists(Process::class)) {
+                $process = new Process($args, $basePath);
+                $process->disableOutput();
+                $process->start();
+
+                return $process->getPid() ?: null;
+            }
+
+            throw new \RuntimeException('Não foi possível destacar o executor de atualização no servidor.');
+        }
+
         if (class_exists(Process::class)) {
             $process = new Process($args, $this->resolveProjectBasePath());
             $process->disableOutput();
@@ -339,21 +387,10 @@ class TriggerDispatcher
             return $process->getPid() ?: null;
         }
 
-        if ($this->isWindows()) {
-            // Fallback for Windows without symfony/process: use cmd.exe start /B to detach.
-            // Example: cmd /C start "" /B "php" "artisan" "system:update:run" "--force"
-            $cmd = $this->buildWindowsDetachedCommand($args);
-            // popen/pclose avoids blocking even when exec() would wait.
-            @pclose(@popen($cmd, 'r'));
+        $cmd = $this->buildWindowsDetachedCommand($args);
+        @pclose(@popen($cmd, 'r'));
 
-            return null;
-        }
-
-        // Linux/macOS fallback
-        $cmd = implode(' ', array_map('escapeshellarg', $args)) . ' > /dev/null 2>&1 & echo $!';
-        $pid = trim((string) @shell_exec($cmd));
-
-        return $pid !== '' ? (int) $pid : null;
+        return null;
     }
 
     /**
@@ -393,6 +430,10 @@ class TriggerDispatcher
 
         if (!empty($options['profile_id'])) {
             $args[] = '--profile-id=' . (int) $options['profile_id'];
+        }
+
+        if (!empty($options['run_id'])) {
+            $args[] = '--run-id=' . (int) $options['run_id'];
         }
 
         if ((bool) ($options['allow_http'] ?? false)) {
