@@ -14,7 +14,7 @@ class OperationsControllerUpdateNavigationTest extends TestCase
 
         $this->assertIsString($source);
         $this->assertStringContainsString(
-            "Atualização #' . $runId . ' iniciada com sucesso. Acompanhe o progresso nesta tela.",
+            'Atualização #\' . $runId . \' iniciada com sucesso. Acompanhe o progresso nesta tela.',
             $source
         );
         $this->assertStringContainsString(
@@ -29,7 +29,7 @@ class OperationsControllerUpdateNavigationTest extends TestCase
 
         $this->assertIsString($source);
         $this->assertStringContainsString(
-            "Atualização #' . $runId . ' aprovada e iniciada com sucesso. Acompanhe o progresso nesta tela.",
+            'Atualização #\' . $runId . \' aprovada e iniciada com sucesso. Acompanhe o progresso nesta tela.',
             $source
         );
     }
