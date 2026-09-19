@@ -164,7 +164,11 @@ class UpdaterServiceProvider extends ServiceProvider
 
         
         $this->app->singleton(GitMaintenance::class, function ($app) {
-            return new GitMaintenance($app->make(ShellRunner::class), (array) config('updater'));
+            return new GitMaintenance(
+                $app->make(ShellRunner::class),
+                (array) config('updater'),
+                $app->make(LoggerInterface::class)
+            );
         });
 
 $this->app->singleton(UpdaterKernel::class, function () {
