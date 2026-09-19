@@ -447,6 +447,16 @@ class UpdateRecoveryManager
                     return false;
                 }
 
+                $statPath = $procDir . '/stat';
+                if (is_readable($statPath)) {
+                    $stat = @file_get_contents($statPath);
+                    if (is_string($stat) && preg_match('/^\d+\s+\(.+\)\s+([A-Z])\s/', $stat, $match) === 1) {
+                        if (in_array($match[1], ['Z', 'X'], true)) {
+                            return false;
+                        }
+                    }
+                }
+
                 $cmdlinePath = $procDir . '/cmdline';
                 if (is_readable($cmdlinePath)) {
                     $cmdline = @file_get_contents($cmdlinePath);
