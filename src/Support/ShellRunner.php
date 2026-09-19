@@ -41,36 +41,43 @@ class ShellRunner
             throw new UpdaterException('Comando inválido: vazio.');
         }
 
-        $workingDirectory = $this->resolveWorkingDirectory($cwd, $command);
-
-        // Em ambientes não-interativos (Supervisor, cron, PHP-FPM), o PATH pode vir reduzido.
-        // Isso causa exit code 127 (command not found) mesmo com o binário instalado.
-        // Também fazemos merge com o ambiente já existente do processo para não perder variáveis do host.
-        $env = $this->normalizeEnv($env, $workingDirectory ?: '.');
-
-        $descriptor = [1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-        $process = @proc_open($command, $descriptor, $pipes, $workingDirectory ?: '.', $env);
-
-        if (!is_resource($process)) {
-            // Quando o executável não existe (ex.: composer não está no PATH), o proc_open pode falhar.
-            throw new UpdaterException('Falha ao iniciar comando de sistema (binário ausente ou sem permissão).');
-        }
-
-        $stdout = stream_get_contents($pipes[1]) ?: '';
-        $stderr = stream_get_contents($pipes[2]) ?: '';
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-
-        $exitCode = proc_close($process);
+        // Usa o mesmo executor multiplexado de runWithTimeout() para evitar
+        // deadlock quando o processo escreve muito em STDERR enquanto o PHP
+        // aguarda STDOUT (comportamento comum em git fetch/gc).
+        //
+        // Para Git, Composer e Artisan o timeout é resolvido automaticamente.
+        // Demais comandos preservam o comportamento legado sem timeout quando
+        // UPDATER_TIMEOUT_DEFAULT=0.
+        $timeout = $this->guessTimeoutSeconds($command) ?? 0;
+        $result = $this->runWithTimeout($command, $cwd, $env, $timeout);
 
         return [
-            'command' => implode(' ', $command),
-            'stdout' => trim($stdout),
-            'stderr' => trim($stderr),
-            'exit_code' => $exitCode,
+            'command' => (string) ($result['cmd'] ?? $this->formatCommandForLog($command)),
+            'stdout' => trim((string) ($result['stdout'] ?? '')),
+            'stderr' => trim((string) ($result['stderr'] ?? '')),
+            'exit_code' => (int) ($result['code'] ?? 0),
         ];
     }
 
+
+    /**
+     * Garante execução não interativa de Git em processos de servidor.
+     *
+     * @param array<int,string> $command
+     * @param array<string,string> $env
+     * @return array<string,string>
+     */
+    private function withCommandEnvironment(array $command, array $env): array
+    {
+        $binary = strtolower(basename((string) ($command[0] ?? '')));
+
+        if ($binary === 'git' || $binary === 'git.exe') {
+            $env['GIT_TERMINAL_PROMPT'] = $env['GIT_TERMINAL_PROMPT'] ?? '0';
+            $env['GCM_INTERACTIVE'] = $env['GCM_INTERACTIVE'] ?? 'Never';
+        }
+
+        return $env;
+    }
 
     /** @param array<int,string> $command */
     
@@ -95,6 +102,7 @@ class ShellRunner
         ];
 
         $workingDirectory = $this->resolveWorkingDirectory($cwd, $command);
+        $env = $this->withCommandEnvironment($command, $env);
 
         $process = @proc_open(
             $command,
@@ -136,7 +144,7 @@ class ShellRunner
                 break;
             }
 
-            if ((microtime(true) - $start) >= $timeoutSeconds) {
+            if ($timeoutSeconds > 0 && (microtime(true) - $start) >= $timeoutSeconds) {
                 @proc_terminate($process);
                 usleep(250000);
                 $statusAfter = proc_get_status($process);
