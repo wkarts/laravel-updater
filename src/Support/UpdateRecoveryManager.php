@@ -53,7 +53,7 @@ class UpdateRecoveryManager
         $reference = $heartbeat !== '' ? $heartbeat : $startedAt;
         $timestamp = $reference !== '' ? strtotime($reference) : false;
         $age = $timestamp !== false ? max(0, time() - $timestamp) : 0;
-        $alive = $pid > 0 ? $this->isProcessAlive($pid) : null;
+        $alive = $pid > 0 ? $this->isProcessAlive($pid, (int) ($run['id'] ?? 0)) : null;
 
         $runningStaleAfter = max(60, (int) config('updater.recovery.stale_after_seconds', 900));
         $queuedStaleAfter = max(30, (int) config('updater.recovery.queued_stale_after_seconds', 120));
@@ -263,7 +263,7 @@ class UpdateRecoveryManager
         ], true);
     }
 
-    private function isProcessAlive(int $pid): ?bool
+    private function isProcessAlive(int $pid, int $runId = 0): ?bool
     {
         if ($pid <= 0) {
             return null;
@@ -273,11 +273,55 @@ class UpdateRecoveryManager
             return true;
         }
 
-        if (PHP_OS_FAMILY !== 'Windows' && function_exists('posix_kill')) {
-            return @posix_kill($pid, 0);
+        if (PHP_OS_FAMILY !== 'Windows') {
+            if (function_exists('posix_kill') && !@posix_kill($pid, 0)) {
+                return false;
+            }
+
+            // Linux: /proc é mais confiável que depender da extensão posix.
+            $procDir = '/proc/' . $pid;
+            if (is_dir('/proc')) {
+                if (!is_dir($procDir)) {
+                    return false;
+                }
+
+                $cmdlinePath = $procDir . '/cmdline';
+                if (is_readable($cmdlinePath)) {
+                    $cmdline = @file_get_contents($cmdlinePath);
+                    if (is_string($cmdline) && $cmdline !== '') {
+                        $cmdline = str_replace("\0", ' ', $cmdline);
+
+                        // Para executores modernos, o PID deve continuar pertencendo
+                        // ao artisan do updater e ao run correspondente. Isso evita
+                        // falso positivo quando o SO recicla um PID antigo.
+                        if (str_contains($cmdline, 'system:update:run')) {
+                            if ($runId <= 0 || str_contains($cmdline, '--run-id=' . $runId)) {
+                                return true;
+                            }
+
+                            return false;
+                        }
+
+                        return false;
+                    }
+                }
+
+                // Existe em /proc, mas cmdline pode ser inacessível por política do SO.
+                return true;
+            }
+
+            if (function_exists('exec')) {
+                $output = [];
+                $exit = 1;
+                @exec('kill -0 ' . (int) $pid . ' 2>/dev/null', $output, $exit);
+
+                return $exit === 0;
+            }
+
+            return function_exists('posix_kill') ? true : null;
         }
 
-        if (PHP_OS_FAMILY === 'Windows' && function_exists('shell_exec')) {
+        if (function_exists('shell_exec')) {
             $output = @shell_exec('tasklist /FI "PID eq ' . $pid . '" /NH 2>NUL');
             if (is_string($output)) {
                 $normalized = strtolower($output);
