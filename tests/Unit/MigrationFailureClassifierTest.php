@@ -125,7 +125,7 @@ class MigrationFailureClassifierTest extends TestCase
         $classifier = new MigrationFailureClassifier();
         $ex = new Exception(
             "SQLSTATE[HY000]: General error: 1830 Column 'usuario_id' cannot be NOT NULL: "
-            . "needed in a foreign key constraint 'fk_teste_usuario' SET NULL "
+            . "needed in a foreign key constraint 'fk_teste_usuario' ON DELETE SET NULL "
             . "(Connection: mysql, SQL: ALTER TABLE `teste` MODIFY COLUMN `usuario_id` INT NOT NULL)"
         );
 
