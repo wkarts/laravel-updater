@@ -14,6 +14,7 @@ use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
+use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,7 +31,8 @@ class OperationsController extends Controller
         private readonly BackupDriverInterface $backupDriver,
         private readonly FileManager $fileManager,
         private readonly ArchiveManager $archiveManager,
-        private readonly BackupCloudUploader $cloudUploader
+        private readonly BackupCloudUploader $cloudUploader,
+        private readonly UpdateRecoveryManager $recovery
     ) {
     }
 
@@ -216,6 +218,7 @@ class OperationsController extends Controller
 
         try {
             $result = $dispatcher->triggerManualBackup($type, $runId);
+            $this->stateStore->setRunWorker($runId, isset($result['pid']) ? (int) $result['pid'] : null, 'manual-backup');
             $this->managerStore->setRuntimeOption('backup_active_job', [
                 'run_id' => $runId,
                 'type' => $type,
@@ -372,10 +375,23 @@ class OperationsController extends Controller
 
     public function updateProgressStatus(): JsonResponse
     {
-        $runningStmt = $this->stateStore->pdo()->query("SELECT * FROM runs WHERE status = 'running' ORDER BY id DESC LIMIT 1");
+        $recovery = $this->recovery->reconcile();
+
+        $runningStmt = $this->stateStore->pdo()->query(
+            "SELECT * FROM runs
+             WHERE status IN ('queued', 'running')
+               AND (options_json IS NULL OR options_json NOT LIKE '%\"manual_backup\"%')
+             ORDER BY id DESC LIMIT 1"
+        );
         $runningRun = $runningStmt->fetch(\PDO::FETCH_ASSOC) ?: null;
 
-        $lastRun = $this->stateStore->lastRun();
+        $lastStmt = $this->stateStore->pdo()->query(
+            "SELECT * FROM runs
+             WHERE options_json IS NULL OR options_json NOT LIKE '%\"manual_backup\"%'
+             ORDER BY id DESC LIMIT 1"
+        );
+        $lastRun = $lastStmt->fetch(\PDO::FETCH_ASSOC) ?: null;
+
         $targetRunId = (int) ($runningRun['id'] ?? $lastRun['id'] ?? 0);
 
         $logs = [];
@@ -389,8 +405,14 @@ class OperationsController extends Controller
         $message = 'Aguardando execução.';
 
         if ($runningRun !== null) {
-            $progress = min(95, 20 + (count($logs) * 7));
-            $message = 'Atualização em andamento (run #' . (int) $runningRun['id'] . ').';
+            $status = (string) ($runningRun['status'] ?? 'running');
+            if ($status === 'queued') {
+                $progress = 5;
+                $message = 'Atualização enfileirada no servidor (run #' . (int) $runningRun['id'] . ').';
+            } else {
+                $progress = min(95, 20 + (count($logs) * 7));
+                $message = 'Atualização em andamento no servidor (run #' . (int) $runningRun['id'] . ').';
+            }
         } elseif (is_array($lastRun)) {
             $status = (string) ($lastRun['status'] ?? '');
             if ($status === 'success' || $status === 'DRY_RUN') {
@@ -398,7 +420,9 @@ class OperationsController extends Controller
                 $message = $status === 'DRY_RUN' ? 'Dry-run concluído.' : 'Atualização concluída com sucesso.';
             } elseif ($status === 'failed') {
                 $progress = 100;
-                $message = 'Atualização falhou. Verifique os detalhes.';
+                $message = isset($recovery['recovered_run_id'])
+                    ? 'Execução travada recuperada. Você já pode iniciar uma nova atualização.'
+                    : 'Atualização falhou. Verifique os detalhes.';
             }
         }
 
@@ -408,8 +432,44 @@ class OperationsController extends Controller
             'message' => $message,
             'run' => $runningRun ?? $lastRun,
             'logs' => $logs,
+            'recovery' => [
+                'recoverable' => (bool) ($recovery['recoverable'] ?? false),
+                'reason' => $recovery['reason'] ?? null,
+                'recovered_run_id' => $recovery['recovered_run_id'] ?? null,
+                'recovery_message' => $recovery['recovery_message'] ?? null,
+            ],
             'updated_at' => date(DATE_ATOM),
         ]);
+    }
+
+    public function recoverUpdate(Request $request): RedirectResponse
+    {
+        $state = $this->recovery->inspect();
+
+        if (!($state['active'] ?? false)) {
+            return redirect()->route('updater.section', ['section' => 'updates'])
+                ->with('status', 'Não existe execução de atualização presa no momento.');
+        }
+
+        if (!($state['recoverable'] ?? false)) {
+            return redirect()->route('updater.section', ['section' => 'updates'])
+                ->withErrors([
+                    'update' => 'A execução ainda possui sinais de processo ativo e não foi encerrada por segurança.',
+                ]);
+        }
+
+        $runId = (int) (($state['run']['id'] ?? 0));
+        $reason = 'Recuperação manual pela UI: ' . (string) ($state['reason'] ?? 'execução órfã');
+
+        $this->recovery->recoverActive($reason, false);
+
+        $this->managerStore->addAuditLog($this->actorId($request), 'update_recovery', [
+            'run_id' => $runId,
+            'reason' => $reason,
+        ], $request->ip(), $request->userAgent());
+
+        return redirect()->route('updater.section', ['section' => 'updates'])
+            ->with('status', 'Execução travada recuperada. Lock e manutenção foram liberados; uma nova atualização pode ser iniciada.');
     }
 
     public function progressStatus(): JsonResponse
