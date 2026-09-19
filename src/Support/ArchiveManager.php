@@ -248,21 +248,33 @@ class ArchiveManager
 
         @unlink($target7z);
 
-        $files = [];
-        foreach ($this->collectFiles($sourceDir, $exclude) as [, $relativePath]) {
-            $files[] = $relativePath;
-        }
-
-        if ($files === []) {
-            throw new RuntimeException('Nenhum arquivo encontrado para compactação 7z.');
-        }
-
         $listFile = tempnam(sys_get_temp_dir(), 'updater-7z-list-');
         if (!is_string($listFile) || $listFile === '') {
             throw new RuntimeException('Falha ao preparar lista de arquivos para 7z.');
         }
 
-        file_put_contents($listFile, implode(PHP_EOL, $files));
+        $listHandle = @fopen($listFile, 'wb');
+        if (!is_resource($listHandle)) {
+            @unlink($listFile);
+            throw new RuntimeException('Falha ao abrir lista temporária para 7z.');
+        }
+
+        $fileCount = 0;
+        try {
+            foreach ($this->collectFiles($sourceDir, $exclude) as [, $relativePath]) {
+                if (fwrite($listHandle, $relativePath . PHP_EOL) === false) {
+                    throw new RuntimeException('Falha ao gravar lista temporária para 7z.');
+                }
+                $fileCount++;
+            }
+        } finally {
+            @fclose($listHandle);
+        }
+
+        if ($fileCount === 0) {
+            @unlink($listFile);
+            throw new RuntimeException('Nenhum arquivo encontrado para compactação 7z.');
+        }
 
         $cmd = $this->isWindows()
             ? '7z a -t7z -mx=5 ' . escapeshellarg($target7z) . ' @' . escapeshellarg($listFile)
@@ -333,10 +345,14 @@ class ArchiveManager
         return strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
     }
 
-    /** @return array<int,array{0:string,1:string}> */
-    private function collectFiles(string $sourceDir, array $exclude): array
+    /**
+     * Itera arquivos sob demanda para manter o consumo de memória constante,
+     * inclusive em aplicações com grande quantidade de arquivos.
+     *
+     * @return \Generator<int,array{0:string,1:string}>
+     */
+    private function collectFiles(string $sourceDir, array $exclude): \Generator
     {
-        $items = [];
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($sourceDir, RecursiveDirectoryIterator::SKIP_DOTS),
             RecursiveIteratorIterator::SELF_FIRST
@@ -357,10 +373,8 @@ class ArchiveManager
                 continue;
             }
 
-            $items[] = [$fullPath, $relativePath];
+            yield [$fullPath, $relativePath];
         }
-
-        return $items;
     }
 
 
