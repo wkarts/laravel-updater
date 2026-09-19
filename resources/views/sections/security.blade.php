@@ -44,6 +44,7 @@
                 <strong>Run ativa:</strong> #{{ (int) ($run['id'] ?? 0) }}
                 · <strong>Status:</strong> {{ $run['status'] ?? 'n/a' }}
                 · <strong>PID:</strong> {{ $run['worker_pid'] ?? 'n/a' }}
+                · <strong>Etapa:</strong> {{ $recovery['current_step'] ?? $run['current_step'] ?? 'n/a' }}
             </p>
             <p class="muted">
                 Heartbeat: {{ $run['heartbeat_at'] ?? $run['started_at'] ?? 'n/a' }}.
