@@ -141,6 +141,19 @@ return [
         'driver' => env('UPDATER_TRIGGER_DRIVER', 'auto'),
     ],
 
+    'recovery' => [
+        'enabled' => (bool) env('UPDATER_RECOVERY_ENABLED', true),
+        'auto_recover' => (bool) env('UPDATER_RECOVERY_AUTO', true),
+        // Run running sem PID/heartbeat confiável: limite para compatibilidade com versões antigas.
+        'stale_after_seconds' => (int) env('UPDATER_RECOVERY_STALE_AFTER', 900),
+        // Run queued que nunca chegou a iniciar o executor.
+        'queued_stale_after_seconds' => (int) env('UPDATER_RECOVERY_QUEUED_STALE_AFTER', 120),
+        // Guard executado no shutdown para OOM/fatal error.
+        'shutdown_guard' => (bool) env('UPDATER_RECOVERY_SHUTDOWN_GUARD', true),
+        // Memória reservada liberada somente no fatal handler para permitir limpeza mínima.
+        'reserve_memory_kb' => (int) env('UPDATER_RECOVERY_RESERVE_MEMORY_KB', 2048),
+    ],
+
     'preflight' => [
         'min_free_disk_mb' => (int) env('UPDATER_MIN_FREE_DISK_MB', 200),
         'require_clean_git' => (bool) env('UPDATER_REQUIRE_CLEAN_GIT', true),

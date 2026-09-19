@@ -7,6 +7,7 @@ namespace Argws\LaravelUpdater\Drivers;
 use Argws\LaravelUpdater\Contracts\BackupDriverInterface;
 use Argws\LaravelUpdater\Exceptions\BackupException;
 use Argws\LaravelUpdater\Support\FileManager;
+use Argws\LaravelUpdater\Support\GzipStream;
 use Argws\LaravelUpdater\Support\ShellRunner;
 
 class MysqlBackupDriver implements BackupDriverInterface
@@ -47,14 +48,11 @@ class MysqlBackupDriver implements BackupDriverInterface
             throw new BackupException($result['stderr'] ?: 'Falha ao gerar backup MySQL. Verifique caminho do mysqldump (UPDATER_MYSQLDUMP_BINARY).');
         }
 
-        if ((bool) ($this->backupConfig['compress'] ?? false) && function_exists('gzencode')) {
+        if ((bool) ($this->backupConfig['compress'] ?? false) && function_exists('gzopen')) {
             $compressed = $file . '.gz';
-            $content = file_get_contents($file);
-            if ($content !== false) {
-                file_put_contents($compressed, gzencode($content, 9));
-                @unlink($file);
-                $file = $compressed;
-            }
+            GzipStream::compressFile($file, $compressed, 9);
+            @unlink($file);
+            $file = $compressed;
         }
 
         $this->files->deleteOldFiles($path, (int) ($this->backupConfig['keep'] ?? 10));
@@ -71,12 +69,12 @@ class MysqlBackupDriver implements BackupDriverInterface
                 throw new BackupException('Falha ao criar arquivo temporário de restore.');
             }
 
-            $raw = file_get_contents($filePath);
-            $decoded = $raw !== false ? gzdecode($raw) : false;
-            if ($decoded === false) {
-                throw new BackupException('Falha ao descompactar backup MySQL.');
+            try {
+                GzipStream::decompressFile($filePath, $tmp);
+            } catch (\Throwable $e) {
+                @unlink($tmp);
+                throw new BackupException('Falha ao descompactar backup MySQL: ' . $e->getMessage(), previous: $e);
             }
-            file_put_contents($tmp, $decoded);
             $source = $tmp;
         }
 

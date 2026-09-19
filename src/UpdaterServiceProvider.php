@@ -48,6 +48,7 @@ use Argws\LaravelUpdater\Support\Totp;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Argws\LaravelUpdater\Support\UiPermission;
 use Argws\LaravelUpdater\Support\UpdaterLockTools;
+use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Artisan;
@@ -94,6 +95,13 @@ class UpdaterServiceProvider extends ServiceProvider
         $this->app->singleton(Totp::class, fn () => new Totp());
         $this->app->singleton(UiPermission::class, fn () => new UiPermission());
         $this->app->singleton(UpdaterLockTools::class, fn () => new UpdaterLockTools());
+        $this->app->singleton(UpdateRecoveryManager::class, function () {
+            return new UpdateRecoveryManager(
+                $this->app->make(StateStore::class),
+                $this->app->make(UpdaterLockTools::class),
+                $this->app->make(ShellRunner::class)
+            );
+        });
 
         $this->app->singleton(LockInterface::class, function () {
             if ((string) config('updater.lock.driver', 'file') === 'cache') {
@@ -147,7 +155,11 @@ class UpdaterServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(TriggerDispatcher::class, function () {
-            return new TriggerDispatcher((string) config('updater.trigger.driver', 'queue'), $this->app->make(StateStore::class));
+            return new TriggerDispatcher(
+                (string) config('updater.trigger.driver', 'queue'),
+                $this->app->make(StateStore::class),
+                $this->app->make(UpdateRecoveryManager::class)
+            );
         });
 
         
@@ -178,7 +190,8 @@ $this->app->singleton(UpdaterKernel::class, function () {
                 $this->app->make(PreflightChecker::class),
                 $services['store'],
                 $services['logger'],
-                $this->app->make(RunReportMailer::class)
+                $this->app->make(RunReportMailer::class),
+                $this->app->make(UpdateRecoveryManager::class)
             );
 
             $this->app->instance('updater.kernel', $kernel);

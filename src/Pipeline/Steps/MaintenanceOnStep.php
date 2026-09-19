@@ -209,6 +209,12 @@ class MaintenanceOnStep implements PipelineStepInterface
 
     public function rollback(array &$context): void
     {
+        // A manutenção soft não é removida por `artisan up`.
+        // Em qualquer falha da pipeline precisamos limpar explicitamente a chave,
+        // senão a aplicação permanece em 503 mesmo após o rollback.
+        Cache::forget(SoftMaintenanceMiddleware::CACHE_KEY);
+
         $this->shellRunner->run(['php', 'artisan', 'up']);
+        $context['maintenance'] = false;
     }
 }

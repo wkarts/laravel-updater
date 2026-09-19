@@ -27,6 +27,7 @@ use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\PreflightChecker;
 use Argws\LaravelUpdater\Support\RunReportMailer;
 use Argws\LaravelUpdater\Support\StateStore;
+use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -39,7 +40,8 @@ class UpdaterKernel
         private readonly PreflightChecker $preflight,
         private readonly StateStore $store,
         private readonly LoggerInterface $logger,
-        private readonly RunReportMailer $reportMailer
+        private readonly RunReportMailer $reportMailer,
+        private readonly UpdateRecoveryManager $recovery
     ) {
     }
 
@@ -114,15 +116,18 @@ class UpdaterKernel
     {
         $this->environmentDetector->ensureCli((bool) ($options['allow_http'] ?? false));
         $this->store->ensureSchema();
+
         $isDryRun = (bool) ($options['dry_run'] ?? false);
-        if (!$isDryRun) {
-            $this->preflight->validate($options);
-            // OBS: o bootstrap do repositório (git init/remote/fetch) é responsabilidade do CodeDriver.
-            // Não bloqueie a pipeline aqui, pois instalações via ZIP/FTP não possuem .git inicialmente.
-            // Se o auto-init estiver desativado, a falha ocorrerá no step git_update com mensagem mais específica.
+        $requestedRunId = (int) ($options['run_id'] ?? 0);
+        $existingRun = $requestedRunId > 0 ? $this->store->findRun($requestedRunId) : null;
+
+        if (is_array($existingRun) && in_array((string) ($existingRun['status'] ?? ''), ['queued', 'running'], true)) {
+            $runId = $requestedRunId;
+            $this->store->startRun($runId, getmypid() ?: null, PHP_SAPI);
+        } else {
+            $runId = $this->store->createRun($options);
         }
 
-        $runId = $this->store->createRun($options);
         $context = [
             'run_id' => $runId,
             'options' => $options,
@@ -130,7 +135,15 @@ class UpdaterKernel
             'idempotency_key' => hash('sha256', $runId . ':' . now()->timestamp),
         ];
 
+        $this->recovery->registerFatalGuard($runId);
+
         try {
+            if (!$isDryRun) {
+                $this->preflight->validate($options);
+                // O bootstrap do repositório (git init/remote/fetch) é responsabilidade do CodeDriver.
+                // Se o auto-init estiver desativado, a falha ocorrerá no step git_update.
+            }
+
             if ($isDryRun) {
                 $status = $this->codeDriver->statusUpdates();
                 $context['dry_run_plan'] = [
@@ -156,8 +169,10 @@ class UpdaterKernel
                 $context['status'] = 'success';
                 $this->store->finishRun($runId, $context);
             }
+
             $this->logger->info('updater.run.success', $context);
             $this->reportMailer->sendIfEnabled($context, (string) $context['status']);
+
             return $context;
         } catch (Throwable $throwable) {
             $context['status'] = 'failed';
@@ -165,7 +180,10 @@ class UpdaterKernel
             $this->store->finishRun($runId, $context, ['message' => mb_substr($throwable->getMessage(), 0, 1000)]);
             $this->logger->error('updater.run.failed', $context);
             $this->reportMailer->sendIfEnabled($context, 'failed');
+
             throw $throwable;
+        } finally {
+            $this->recovery->disarmFatalGuard($runId);
         }
     }
 

@@ -30,6 +30,7 @@ class UpdateRunCommand extends Command
         {--replay-migrations-from-start : Reaplica migrations desde o início (modo idempotente)}
         {--source-id= : ID da fonte a ativar antes da execução}
         {--profile-id= : ID do perfil a ativar antes da execução}
+        {--run-id= : ID de uma execução previamente criada pela UI/dispatcher}
         {--pre-command=* : Comando pré-update (pode repetir)}
         {--post-command=* : Comando pós-update (pode repetir)}';
     protected $description = 'Executa a atualização completa do sistema.';
@@ -93,6 +94,7 @@ class UpdateRunCommand extends Command
             'replay_migrations_from_start' => (bool) $this->option('replay-migrations-from-start'),
             'source_id' => $sourceId > 0 ? $sourceId : null,
             'profile_id' => $profileId > 0 ? $profileId : null,
+            'run_id' => (int) ($this->option('run-id') ?: 0),
             'rollback_on_fail' => (bool) ($profile['rollback_on_fail'] ?? true),
             'snapshot_include_vendor' => (bool) ($profile['snapshot_include_vendor'] ?? config('updater.snapshot.include_vendor', false)),
             'snapshot_compression' => (string) ($profile['snapshot_compression'] ?? config('updater.snapshot.compression', 'zip')),

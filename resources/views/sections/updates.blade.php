@@ -25,6 +25,34 @@
     @endif
 </div>
 
+@php($recovery = $recoveryState ?? [])
+@if((bool) ($recovery['active'] ?? false))
+    @php($recoveryRun = $recovery['run'] ?? [])
+    <div class="card" style="margin-top:14px; border-left:4px solid {{ ($recovery['recoverable'] ?? false) ? '#dc2626' : '#f59e0b' }};">
+        <h3>Estado da execução atual</h3>
+        <p>
+            <strong>Run:</strong> #{{ (int) ($recoveryRun['id'] ?? 0) }}
+            · <strong>Status:</strong> {{ $recoveryRun['status'] ?? 'running' }}
+            · <strong>PID:</strong> {{ $recoveryRun['worker_pid'] ?? 'n/a' }}
+        </p>
+        <p class="muted">
+            Último heartbeat: {{ $recoveryRun['heartbeat_at'] ?? $recoveryRun['started_at'] ?? 'n/a' }}.
+            @if(!empty($recovery['reason']))
+                {{ $recovery['reason'] }}
+            @endif
+        </p>
+
+        @if((bool) ($recovery['recoverable'] ?? false))
+            <form method="POST" action="{{ route('updater.updates.recover') }}" onsubmit="return confirm('Recuperar esta execução travada? O run será marcado como falha e o lock/manutenção serão liberados.');">
+                @csrf
+                <button class="btn" type="submit">Recuperar execução travada</button>
+            </form>
+        @else
+            <p class="muted">O processo ainda apresenta sinais de atividade; a recuperação forçada foi bloqueada por segurança.</p>
+        @endif
+    </div>
+@endif
+
 <div class="card" style="margin-top:14px;">
     <h3>Executar atualização</h3>
     <p class="muted" style="margin-bottom:10px;">Você pode cadastrar várias fontes, mas apenas <strong>UMA</strong> deve ficar ativa por vez para evitar conflitos.</p>

@@ -10,6 +10,7 @@ use Argws\LaravelUpdater\Kernel\UpdaterKernel;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\GitMaintenance;
 use Argws\LaravelUpdater\Support\UpdaterLockTools;
+use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\UiPermission;
 use Argws\LaravelUpdater\Support\ReleaseNotesResolver;
@@ -36,6 +37,7 @@ class ManagerController extends Controller
                 'availableTags' => $this->availableTags(),
                 'fullUpdateEnabled' => (bool) config('updater.full_update.enabled', false),
                 'defaultUpdateMode' => $this->defaultUpdateMode(),
+                'recoveryState' => app(UpdateRecoveryManager::class)->reconcile(),
             ]),
             'runs' => view('laravel-updater::sections.runs', [
                 'runs' => app(UpdaterKernel::class)->stateStore()->recentRuns(100),
@@ -58,6 +60,7 @@ class ManagerController extends Controller
                 'gitSizeBytes' => app(GitMaintenance::class)->sizeBytes(),
                 'gitMaintenanceEnabled' => (bool) config('updater.git_maintenance.enabled', true),
                 'lockInfo' => app(UpdaterLockTools::class)->info('system-update'),
+                'recoveryState' => app(UpdateRecoveryManager::class)->inspect(),
             ]),
             'migrations' => redirect()->route('updater.migrations.index'),
             'seeds' => redirect()->route('updater.seeds.index'),
@@ -84,9 +87,32 @@ class ManagerController extends Controller
     {
         $this->ensureAdmin();
 
+        /** @var UpdateRecoveryManager $recovery */
+        $recovery = app(UpdateRecoveryManager::class);
+        $state = $recovery->inspect();
+
+        if ((bool) ($state['active'] ?? false)) {
+            if (!(bool) ($state['recoverable'] ?? false)) {
+                return back()->withErrors([
+                    'lock' => 'Existe uma execução com sinais de atividade. O lock não foi removido para evitar duas atualizações simultâneas.',
+                ]);
+            }
+
+            $runId = (int) (($state['run']['id'] ?? 0));
+            $recovery->recoverActive(
+                'Recuperação administrativa ao limpar lock: ' . (string) ($state['reason'] ?? 'execução órfã'),
+                false
+            );
+
+            return back()->with(
+                'status',
+                'Execução órfã #' . $runId . ' recuperada. Run encerrada, manutenção removida e lock liberado.'
+            );
+        }
+
         app(UpdaterLockTools::class)->forceClear('system-update');
 
-        return back()->with('status', 'Lock de atualização limpo. Se houver uma execução em andamento, ela poderá falhar.');
+        return back()->with('status', 'Lock residual de atualização limpo com segurança.');
     }
 
     public function usersIndex()

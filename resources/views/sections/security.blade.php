@@ -35,6 +35,36 @@
         </form>
     </div>
 
+    @php($recovery = $recoveryState ?? [])
+    <div class="card">
+        <h3>Recuperação da atualização</h3>
+        @if((bool) ($recovery['active'] ?? false))
+            @php($run = $recovery['run'] ?? [])
+            <p>
+                <strong>Run ativa:</strong> #{{ (int) ($run['id'] ?? 0) }}
+                · <strong>Status:</strong> {{ $run['status'] ?? 'n/a' }}
+                · <strong>PID:</strong> {{ $run['worker_pid'] ?? 'n/a' }}
+            </p>
+            <p class="muted">
+                Heartbeat: {{ $run['heartbeat_at'] ?? $run['started_at'] ?? 'n/a' }}.
+                @if(!empty($recovery['reason']))
+                    {{ $recovery['reason'] }}
+                @endif
+            </p>
+
+            @if((bool) ($recovery['recoverable'] ?? false))
+                <form method="POST" action="{{ route('updater.updates.recover') }}" onsubmit="return confirm('Recuperar a execução órfã? A run será encerrada como falha e lock/manutenção serão liberados.');">
+                    @csrf
+                    <button class="btn btn-primary" type="submit">Recuperar execução órfã</button>
+                </form>
+            @else
+                <p class="muted">O executor ainda apresenta sinais de atividade. A recuperação automática não será forçada.</p>
+            @endif
+        @else
+            <p class="muted">Nenhuma execução de atualização está bloqueando o sistema.</p>
+        @endif
+    </div>
+
     <div class="card">
         <h3>Lock de atualização</h3>
         <p class="muted">

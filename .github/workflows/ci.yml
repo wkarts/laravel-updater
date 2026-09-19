@@ -60,6 +60,11 @@ jobs:
           COMPOSER_NO_INTERACTION: 1
           COMPOSER_NO_AUDIT: 1
           COMPOSER_PROCESS_TIMEOUT: 0
+          # Matriz de compatibilidade: Laravel 10/11 permanecem suportados pelo pacote,
+          # mas versões hoje testáveis possuem advisories e Composer 2.10 bloqueia
+          # resolução por padrão. Desabilitar o bloqueio apenas no CI permite executar
+          # os testes sem alterar a política de segurança do composer.json do pacote.
+          COMPOSER_NO_BLOCKING: 1
         run: composer update --prefer-dist
 
       - name: PHPUnit
