@@ -53,4 +53,46 @@ class StateStoreTest extends TestCase
         @unlink($path);
     }
 
+    public function testQueuedRunPodeSerIniciadoComPidEHeartbeat(): void
+    {
+        $path = sys_get_temp_dir() . '/updater_test_' . uniqid() . '.sqlite';
+        $store = new StateStore($path);
+        $store->ensureSchema();
+
+        $runId = $store->createQueuedRun(['update_type' => 'git_ff_only']);
+        $queued = $store->findRun($runId);
+
+        $this->assertSame('queued', $queued['status']);
+        $this->assertNotEmpty($queued['heartbeat_at']);
+        $this->assertTrue($store->hasActiveRun());
+
+        $store->startRun($runId, 12345, 'cli-test');
+        $running = $store->findRun($runId);
+
+        $this->assertSame('running', $running['status']);
+        $this->assertSame(12345, (int) $running['worker_pid']);
+        $this->assertSame('cli-test', $running['execution_mode']);
+
+        $store->updateRunStatus($runId, 'failed', ['message' => 'teste']);
+        $this->assertFalse($store->hasActiveRun());
+
+        @unlink($path);
+    }
+
+    public function testEnsureSchemaCriaColunasDeRecuperacaoNasRuns(): void
+    {
+        $path = sys_get_temp_dir() . '/updater_test_' . uniqid() . '.sqlite';
+        $store = new StateStore($path);
+        $store->ensureSchema();
+
+        $columns = $store->pdo()->query("PRAGMA table_info('runs')")->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        $names = array_map(static fn (array $column): string => (string) ($column['name'] ?? ''), $columns);
+
+        $this->assertContains('heartbeat_at', $names);
+        $this->assertContains('worker_pid', $names);
+        $this->assertContains('execution_mode', $names);
+
+        @unlink($path);
+    }
+
 }
