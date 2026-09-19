@@ -130,11 +130,12 @@ class OperationsController extends Controller
         }
 
         if ($runId !== null) {
-            return redirect()->route('updater.runs.show', ['id' => $runId])
-                ->with('status', 'Atualização iniciada com sucesso.');
+            return redirect()->route('updater.section', ['section' => 'updates'])
+                ->with('status', 'Atualização #' . $runId . ' iniciada com sucesso. Acompanhe o progresso nesta tela.');
         }
 
-        return back()->with('status', 'Atualização disparada com sucesso.');
+        return redirect()->route('updater.section', ['section' => 'updates'])
+            ->with('status', 'Atualização disparada com sucesso. Acompanhe o progresso nesta tela.');
     }
 
     public function approveAndExecute(int $id, Request $request, TriggerDispatcher $dispatcher): RedirectResponse
@@ -186,12 +187,12 @@ class OperationsController extends Controller
         session()->forget('updater_pending_approval_' . $id);
 
         if ($runId !== null) {
-            return redirect()->route('updater.runs.show', ['id' => $runId])
-                ->with('status', 'Atualização aprovada e iniciada com sucesso.');
+            return redirect()->route('updater.section', ['section' => 'updates'])
+                ->with('status', 'Atualização #' . $runId . ' aprovada e iniciada com sucesso. Acompanhe o progresso nesta tela.');
         }
 
-        return redirect()->route('updater.section', ['section' => 'runs'])
-            ->with('status', 'Atualização aprovada e disparada com sucesso.');
+        return redirect()->route('updater.section', ['section' => 'updates'])
+            ->with('status', 'Atualização aprovada e disparada com sucesso. Acompanhe o progresso nesta tela.');
     }
 
     public function runDetails(int $id)
