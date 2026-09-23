@@ -209,6 +209,11 @@ class MigrationFailureClassifier
             return true;
         }
 
+        if (str_contains($message, 'alteração depende de fk ativa')
+            || str_contains($message, 'alteracao depende de fk ativa')) {
+            return true;
+        }
+
         // SQLSTATE sozinho não é suficiente para tolerar: 42000/HY000 também
         // abrangem erros realmente fatais. Sempre exigimos assinatura específica.
         return false;
