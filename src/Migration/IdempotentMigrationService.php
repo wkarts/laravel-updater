@@ -29,7 +29,15 @@ class IdempotentMigrationService
         $shouldReconcileAlreadyExists = $reconcileAlreadyExists || $replayFromStart;
         $lockRetries = max(0, (int) ($options['retry_locks'] ?? 2));
         $retrySleepBase = max(1, (int) ($options['retry_sleep_base'] ?? 3));
-        $schemaCompatibility = (array) ($options['schema_compatibility'] ?? (function_exists('config') ? config('updater.migrate.schema_compatibility', []) : []));
+        $schemaCompatibility = (array) ($options['schema_compatibility'] ?? []);
+        if ($schemaCompatibility === [] && $this->schemaCompatibilityResolver !== null && function_exists('config')) {
+            try {
+                $schemaCompatibility = (array) config('updater.migrate.schema_compatibility', []);
+            } catch (Throwable) {
+                // Compatibilidade com testes/unitários onde o helper config() existe sem container Laravel inicializado.
+                $schemaCompatibility = [];
+            }
+        }
         $schemaCompatibilityEnabled = (bool) ($schemaCompatibility['enabled'] ?? true);
         $schemaCompatibilityAutoRepair = (bool) ($schemaCompatibility['auto_repair'] ?? true);
 
