@@ -28,6 +28,7 @@ use Argws\LaravelUpdater\Migration\IdempotentMigrationService;
 use Argws\LaravelUpdater\Migration\MigrationDriftDetector;
 use Argws\LaravelUpdater\Migration\MigrationFailureClassifier;
 use Argws\LaravelUpdater\Migration\MigrationReconciler;
+use Argws\LaravelUpdater\Migration\SchemaCompatibilityResolver;
 use Argws\LaravelUpdater\Support\ArchiveManager;
 use Argws\LaravelUpdater\Support\AuthStore;
 use Argws\LaravelUpdater\Support\BackupCloudUploader;
@@ -145,12 +146,19 @@ class UpdaterServiceProvider extends ServiceProvider
         $this->app->singleton(MigrationFailureClassifier::class, fn () => new MigrationFailureClassifier());
         $this->app->singleton(MigrationDriftDetector::class, fn () => new MigrationDriftDetector($this->app['db']));
         $this->app->singleton(MigrationReconciler::class, fn () => new MigrationReconciler($this->app['db'], $this->app->make(StateStore::class)));
+        $this->app->singleton(SchemaCompatibilityResolver::class, function () {
+            return new SchemaCompatibilityResolver(
+                $this->app['db'],
+                (string) config('updater.migrate.schema_compatibility.journal_path', storage_path('app/updater/schema-repairs'))
+            );
+        });
         $this->app->singleton(IdempotentMigrationService::class, function () {
             return new IdempotentMigrationService(
                 $this->app->make('migrator'),
                 $this->app->make(MigrationFailureClassifier::class),
                 $this->app->make(MigrationReconciler::class),
-                $this->app->make(MigrationDriftDetector::class)
+                $this->app->make(MigrationDriftDetector::class),
+                $this->app->make(SchemaCompatibilityResolver::class)
             );
         });
 
