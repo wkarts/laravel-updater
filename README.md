@@ -534,6 +534,37 @@ php artisan updater:migrate --force --mode=strict
 php artisan updater:migrate --force --dry-run
 ```
 
+### Schema Compatibility Resolver
+
+O migrador pode reparar automaticamente incompatibilidades seguras de schema em bancos legados sem adivinhar o tipo da coluna.
+
+Casos suportados:
+- MySQL errno 3780: FK incompatível após uma migration tentar perder atributos do tipo real;
+- MySQL errno 1830/1832 em alterações de coluna vinculada a FK;
+- guards de migration que reportam `Alteração depende de FK ativa (...): tabela.coluna`.
+
+Política de segurança:
+- usa `SHOW CREATE TABLE` como fonte de verdade do DDL atual;
+- preserva tipo real, inclusive `INT UNSIGNED`, default, comment e demais atributos presentes no DDL;
+- aplica automaticamente apenas o alvo seguro `NOT NULL -> NULL`;
+- captura, remove temporariamente e recria as FKs exatamente com a definição encontrada no banco;
+- valida coluna e constraints antes de reconciliar a migration;
+- grava journal em `storage/app/updater/schema-repairs` e recupera FK pendente na próxima execução caso haja interrupção entre operações DDL;
+- não reescreve arquivos PHP de migrations no servidor.
+
+Configuração:
+
+```dotenv
+UPDATER_MIGRATE_SCHEMA_COMPATIBILITY=true
+UPDATER_MIGRATE_SCHEMA_AUTO_REPAIR=true
+UPDATER_MIGRATE_SCHEMA_SAFE_ONLY=true
+UPDATER_MIGRATE_SCHEMA_PRESERVE_TYPE=true
+UPDATER_MIGRATE_SCHEMA_PRESERVE_UNSIGNED=true
+UPDATER_MIGRATE_SCHEMA_PRESERVE_FKS=true
+```
+
+Quando o reparo é verificado, a migration é reconciliada no histórico e o fluxo segue para a próxima migration. Alterações destrutivas, redução de tamanho, perda de precisão ou reparos cuja intenção não possa ser comprovada continuam fora do auto-repair.
+
 ### Retry/backoff de lock/deadlock
 Para falhas `LOCK_RETRYABLE` (deadlock, lock wait timeout, metadata lock), o updater aplica retry com backoff progressivo
 (`retry_sleep_base * 2^(tentativa-1) + (tentativa-1)`), por exemplo base=3: `3s`, `7s`, `15s`.
