@@ -62,8 +62,19 @@ class ArchiveManager
         @unlink($tmpZip);
 
         $attempts = 0;
-        while ($attempts < 2) {
+        $maxAttempts = 3;
+        $lastCloseError = null;
+
+        while ($attempts < $maxAttempts) {
             $attempts++;
+
+            // O arquivo ZIP só é materializado de fato no close(). Recrie o diretório
+            // antes de cada tentativa porque rotinas externas de limpeza podem remover
+            // diretórios temporários enquanto um snapshot grande está em andamento.
+            if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+                throw new RuntimeException('Não foi possível recriar diretório para backup compactado.');
+            }
+
             $zip = new ZipArchive();
             if ($zip->open($tmpZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
                 throw new RuntimeException('Não foi possível criar arquivo de backup compactado.');
@@ -71,20 +82,74 @@ class ArchiveManager
 
             $i = 0;
             foreach ($this->collectFiles($sourceDir, $exclude) as [$fullPath, $relativePath]) {
-                $zip->addFile($fullPath, $relativePath);
+                // Arquivos de runtime podem desaparecer entre a iteração e addFile().
+                // Nesse caso eles não são essenciais ao snapshot e devem ser ignorados.
+                if (!is_file($fullPath) || !is_readable($fullPath)) {
+                    continue;
+                }
+
+                try {
+                    $added = @$zip->addFile($fullPath, $relativePath);
+                } catch (\Throwable $addError) {
+                    clearstatcache(true, $fullPath);
+
+                    if (!is_file($fullPath)) {
+                        continue;
+                    }
+
+                    throw new RuntimeException(
+                        'Falha ao adicionar arquivo ao ZIP: ' . $relativePath . '. ' . $addError->getMessage(),
+                        previous: $addError
+                    );
+                }
+
+                if ($added !== true) {
+                    clearstatcache(true, $fullPath);
+
+                    if (!is_file($fullPath)) {
+                        continue;
+                    }
+
+                    throw new RuntimeException('Falha ao adicionar arquivo ao ZIP: ' . $relativePath . '.');
+                }
+
                 if ((++$i % 400) === 0) {
                     $this->touchTimeLimit();
                 }
             }
 
-            if ($zip->close()) {
+            $closed = false;
+            try {
+                // Em aplicações Laravel, warnings do ZipArchive::close() são convertidos
+                // em ErrorException. Precisamos capturá-los para que o retry realmente rode.
+                $closed = $this->closeZipArchive($zip);
+            } catch (\Throwable $closeError) {
+                $lastCloseError = $closeError;
+                $closed = false;
+            } finally {
+                unset($zip);
+            }
+
+            clearstatcache(true, $tmpZip);
+
+            if ($closed && is_file($tmpZip) && filesize($tmpZip) > 0) {
                 break;
             }
 
             @unlink($tmpZip);
-            if ($attempts >= 2) {
-                throw new RuntimeException('Falha ao finalizar arquivo ZIP de backup (close).');
+
+            if ($attempts >= $maxAttempts) {
+                $detail = $lastCloseError?->getMessage();
+                throw new RuntimeException(
+                    'Falha ao finalizar arquivo ZIP de backup após ' . $maxAttempts . ' tentativas'
+                    . ($detail ? ': ' . $detail : '.'),
+                    previous: $lastCloseError
+                );
             }
+
+            // Nova tentativa reenumera os arquivos. Assim, um cache/sessão que sumiu
+            // durante o close anterior deixa de entrar no ZIP seguinte.
+            usleep(150000);
         }
 
         if (!is_file($tmpZip)) {
@@ -377,6 +442,14 @@ class ArchiveManager
         }
     }
 
+
+    /**
+     * Isolado para permitir teste determinístico do retry de close().
+     */
+    protected function closeZipArchive(ZipArchive $zip): bool
+    {
+        return @$zip->close();
+    }
 
     private function disableTimeLimit(): void
     {
