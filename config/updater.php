@@ -189,6 +189,16 @@ return [
         'report_path' => env('UPDATER_MIGRATE_REPORT_PATH', storage_path('logs/updater-migrate-{timestamp}.log')),
         'paths' => [],
 
+        'schema_compatibility' => [
+            'enabled' => (bool) env('UPDATER_MIGRATE_SCHEMA_COMPATIBILITY', true),
+            'auto_repair' => (bool) env('UPDATER_MIGRATE_SCHEMA_AUTO_REPAIR', true),
+            'safe_only' => (bool) env('UPDATER_MIGRATE_SCHEMA_SAFE_ONLY', true),
+            'preserve_existing_type' => (bool) env('UPDATER_MIGRATE_SCHEMA_PRESERVE_TYPE', true),
+            'preserve_unsigned' => (bool) env('UPDATER_MIGRATE_SCHEMA_PRESERVE_UNSIGNED', true),
+            'preserve_foreign_keys' => (bool) env('UPDATER_MIGRATE_SCHEMA_PRESERVE_FKS', true),
+            'journal_path' => env('UPDATER_MIGRATE_SCHEMA_JOURNAL_PATH', storage_path('app/updater/schema-repairs')),
+        ],
+
         // Compatibilidade retroativa
         'strict_mode' => (bool) env('UPDATER_MIGRATE_STRICT_MODE', false),
         'max_retries' => (int) env('UPDATER_MIGRATE_MAX_RETRIES', 3),
