@@ -13,7 +13,8 @@ class IdempotentMigrationService
         private readonly Migrator $migrator,
         private readonly MigrationFailureClassifier $classifier,
         private readonly MigrationReconciler $reconciler,
-        private readonly MigrationDriftDetector $driftDetector
+        private readonly MigrationDriftDetector $driftDetector,
+        private readonly SchemaCompatibilityResolver $schemaCompatibilityResolver
     ) {
     }
 
@@ -28,6 +29,9 @@ class IdempotentMigrationService
         $shouldReconcileAlreadyExists = $reconcileAlreadyExists || $replayFromStart;
         $lockRetries = max(0, (int) ($options['retry_locks'] ?? 2));
         $retrySleepBase = max(1, (int) ($options['retry_sleep_base'] ?? 3));
+        $schemaCompatibility = (array) ($options['schema_compatibility'] ?? (function_exists('config') ? config('updater.migrate.schema_compatibility', []) : []));
+        $schemaCompatibilityEnabled = (bool) ($schemaCompatibility['enabled'] ?? true);
+        $schemaCompatibilityAutoRepair = (bool) ($schemaCompatibility['auto_repair'] ?? true);
 
         $repository = $this->migrator->getRepository();
         if (!$repository->repositoryExists()) {
@@ -60,10 +64,27 @@ class IdempotentMigrationService
             'skipped_dry_run' => 0,
             'skipped_runtime_warning' => 0,
             'skipped_schema_warning' => 0,
+            'schema_repaired' => 0,
+            'schema_recovery' => 0,
             'divergences' => [],
         ];
 
         $runId = $reporter->runId();
+
+        if ($schemaCompatibilityEnabled && !$dryRun) {
+            try {
+                $recovery = $this->schemaCompatibilityResolver->recoverIncompleteRepairs(is_string($connection) ? $connection : null);
+                $stats['schema_recovery'] += (int) ($recovery['recovered'] ?? 0);
+                if (($recovery['checked'] ?? 0) > 0) {
+                    $reporter->log('warning', 'Schema Compatibility recuperou journal pendente antes das migrations.', $recovery);
+                }
+            } catch (Throwable $recoveryError) {
+                $reporter->log('error', 'Falha ao recuperar reparo estrutural pendente.', [
+                    'error' => $recoveryError->getMessage(),
+                ]);
+                throw $recoveryError;
+            }
+        }
 
         $reporter->log('info', 'Iniciando updater:migrate.', [
             'mode' => $mode,
@@ -207,9 +228,61 @@ class IdempotentMigrationService
                         MigrationFailureClassifier::RUNTIME_WARNING,
                         MigrationFailureClassifier::SCHEMA_COMPATIBILITY_WARNING,
                     ], true)) {
-                        $stats['warnings']++;
-
                         $isSchemaWarning = $classification === MigrationFailureClassifier::SCHEMA_COMPATIBILITY_WARNING;
+
+                        if ($isSchemaWarning && $schemaCompatibilityEnabled && $schemaCompatibilityAutoRepair) {
+                            $repair = $this->schemaCompatibilityResolver->repair(
+                                $throwable,
+                                is_string($connection) ? $connection : null
+                            );
+
+                            if (($repair['repaired'] ?? false) === true) {
+                                if (!$this->repositoryHasMigration($repository, $name)) {
+                                    $repository->log($name, $repository->getNextBatchNumber());
+                                }
+
+                                $stats['schema_repaired']++;
+                                $stats['reconciled']++;
+                                $stats['divergences'][] = [
+                                    'migration' => $name,
+                                    'type' => 'SCHEMA_COMPATIBILITY_REPAIRED',
+                                    'object' => $object,
+                                    'note' => ($repair['table'] ?? '') . '.' . ($repair['column'] ?? ''),
+                                ];
+
+                                $reporter->log('warning', 'Migration reparada automaticamente preservando o DDL real da coluna e suas FKs.', [
+                                    'migration' => $name,
+                                    'repair' => $repair,
+                                ]);
+
+                                $reporter->migrationAttempt(
+                                    $name,
+                                    'schema_repaired',
+                                    $attempt,
+                                    $path,
+                                    $replayFromStart,
+                                    true,
+                                    true,
+                                    null,
+                                    [
+                                        'classification' => $classification,
+                                        'object' => $object,
+                                        'details' => $details,
+                                        'repair' => $repair,
+                                    ],
+                                    'updater:migrate'
+                                );
+
+                                break;
+                            }
+
+                            $reporter->log('warning', 'Schema Compatibility não aplicou reparo automático; mantendo comportamento tolerante.', [
+                                'migration' => $name,
+                                'repair' => $repair,
+                            ]);
+                        }
+
+                        $stats['warnings']++;
                         if ($isSchemaWarning) {
                             $stats['skipped_schema_warning']++;
                         } else {
