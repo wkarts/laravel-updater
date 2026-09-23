@@ -14,7 +14,7 @@ class IdempotentMigrationService
         private readonly MigrationFailureClassifier $classifier,
         private readonly MigrationReconciler $reconciler,
         private readonly MigrationDriftDetector $driftDetector,
-        private readonly SchemaCompatibilityResolver $schemaCompatibilityResolver
+        private readonly ?SchemaCompatibilityResolver $schemaCompatibilityResolver = null
     ) {
     }
 
@@ -71,7 +71,7 @@ class IdempotentMigrationService
 
         $runId = $reporter->runId();
 
-        if ($schemaCompatibilityEnabled && !$dryRun) {
+        if ($schemaCompatibilityEnabled && !$dryRun && $this->schemaCompatibilityResolver !== null) {
             try {
                 $recovery = $this->schemaCompatibilityResolver->recoverIncompleteRepairs(is_string($connection) ? $connection : null);
                 $stats['schema_recovery'] += (int) ($recovery['recovered'] ?? 0);
@@ -230,7 +230,7 @@ class IdempotentMigrationService
                     ], true)) {
                         $isSchemaWarning = $classification === MigrationFailureClassifier::SCHEMA_COMPATIBILITY_WARNING;
 
-                        if ($isSchemaWarning && $schemaCompatibilityEnabled && $schemaCompatibilityAutoRepair) {
+                        if ($isSchemaWarning && $schemaCompatibilityEnabled && $schemaCompatibilityAutoRepair && $this->schemaCompatibilityResolver !== null) {
                             $repair = $this->schemaCompatibilityResolver->repair(
                                 $throwable,
                                 is_string($connection) ? $connection : null
