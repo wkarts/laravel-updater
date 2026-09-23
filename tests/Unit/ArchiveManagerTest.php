@@ -24,4 +24,40 @@ final class ArchiveManagerTest extends TestCase
         $this->assertFileExists($target);
         $this->assertGreaterThan(0, (int) filesize($target));
     }
+    public function testCreateZipFromDirectoryRetriesWhenCloseThrowsWarningAsException(): void
+    {
+        $root = sys_get_temp_dir() . '/updater-archive-retry-test-' . uniqid('', true);
+        $sourceDir = $root . '/source';
+        @mkdir($sourceDir, 0777, true);
+        file_put_contents($sourceDir . '/input.txt', 'conteudo-estavel');
+
+        $targetBase = $root . '/out/archive';
+
+        $manager = new class extends ArchiveManager {
+            public int $closeAttempts = 0;
+
+            protected function closeZipArchive(\ZipArchive $zip): bool
+            {
+                $this->closeAttempts++;
+
+                if ($this->closeAttempts === 1) {
+                    throw new \ErrorException("ZipArchive::close(): Can't open file: No such file or directory");
+                }
+
+                return parent::closeZipArchive($zip);
+            }
+        };
+
+        $target = $manager->createArchiveFromDirectory($sourceDir, $targetBase, 'zip');
+
+        $this->assertSame(2, $manager->closeAttempts);
+        $this->assertFileExists($target);
+        $this->assertGreaterThan(0, (int) filesize($target));
+
+        $zip = new \ZipArchive();
+        $this->assertTrue($zip->open($target) === true);
+        $this->assertSame('conteudo-estavel', $zip->getFromName('input.txt'));
+        $zip->close();
+    }
+
 }
