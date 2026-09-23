@@ -11,6 +11,11 @@ class BackupExcludes
         '.git',
         'storage/app/updater',
         'storage/framework/down',
+        'storage/framework/cache',
+        'storage/framework/sessions',
+        'storage/framework/views',
+        'storage/framework/testing',
+        'bootstrap/cache',
     ];
 
     /** @return array<int,string> */
@@ -28,6 +33,11 @@ class BackupExcludes
         $excludes[] = '.git/';
         $excludes[] = 'storage/app/updater';
         $excludes[] = 'storage/framework/down';
+        $excludes[] = 'storage/framework/cache';
+        $excludes[] = 'storage/framework/sessions';
+        $excludes[] = 'storage/framework/views';
+        $excludes[] = 'storage/framework/testing';
+        $excludes[] = 'bootstrap/cache';
 
         if ($excludeStorage) {
             $excludes[] = 'storage';

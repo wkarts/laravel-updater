@@ -61,25 +61,48 @@ class FullBackupStep implements PipelineStepInterface
         $includeVendor = (bool) ($context['options']['snapshot_include_vendor'] ?? $this->snapshotConfig['include_vendor'] ?? false);
 
         $dbFile = $this->backupDriver->backup('db_full_' . date('Ymd_His'));
-        $snapshotFile = $this->createSnapshotArtifact($compression, $includeVendor);
+        $snapshotFile = '';
 
-        $backupPath = rtrim((string) config('updater.backup.path'), '/');
-        $this->fileManager->ensureDirectory($backupPath);
-        $fullBase = $backupPath . '/full_' . date('Ymd_His');
+        try {
+            $snapshotFile = $this->createSnapshotArtifact($compression, $includeVendor);
 
-        $tmpDir = rtrim(sys_get_temp_dir(), '/\\') . '/updater-full-' . uniqid('', true);
-        @mkdir($tmpDir, 0775, true);
-        @mkdir($tmpDir . '/database', 0775, true);
-        @mkdir($tmpDir . '/snapshot', 0775, true);
+            if (!is_file($dbFile) || filesize($dbFile) <= 0) {
+                throw new \RuntimeException('Backup do banco não foi gerado ou está vazio.');
+            }
 
-        @copy($dbFile, $tmpDir . '/database/' . basename($dbFile));
-        @copy($snapshotFile, $tmpDir . '/snapshot/' . basename($snapshotFile));
+            if (!is_file($snapshotFile) || filesize($snapshotFile) <= 0) {
+                throw new \RuntimeException('Snapshot da aplicação não foi gerado ou está vazio.');
+            }
 
-        $fullPath = $this->archiveManager->createArchiveFromDirectory($tmpDir, $fullBase, $compression, []);
+            $backupPath = rtrim((string) config('updater.backup.path'), '/');
+            $this->fileManager->ensureDirectory($backupPath);
+            $fullBase = $backupPath . '/full_' . date('Ymd_His');
 
-        $this->deletePath($tmpDir);
-        $this->deletePath($dbFile);
-        $this->deletePath($snapshotFile);
+            $tmpDir = rtrim(sys_get_temp_dir(), '/\\') . '/updater-full-' . uniqid('', true);
+            $this->ensureDirectory($tmpDir . '/database');
+            $this->ensureDirectory($tmpDir . '/snapshot');
+
+            $dbCopy = $tmpDir . '/database/' . basename($dbFile);
+            $snapshotCopy = $tmpDir . '/snapshot/' . basename($snapshotFile);
+
+            $this->copyArtifact($dbFile, $dbCopy, 'backup do banco');
+            $this->copyArtifact($snapshotFile, $snapshotCopy, 'snapshot da aplicação');
+
+            try {
+                $fullPath = $this->archiveManager->createArchiveFromDirectory($tmpDir, $fullBase, $compression, []);
+            } finally {
+                $this->deletePath($tmpDir);
+            }
+
+            if (!is_file($fullPath) || filesize($fullPath) <= 0) {
+                throw new \RuntimeException('Backup FULL não foi gerado ou está vazio.');
+            }
+        } finally {
+            $this->deletePath($dbFile);
+            if ($snapshotFile !== '') {
+                $this->deletePath($snapshotFile);
+            }
+        }
 
         $this->store->registerArtifact('full', $fullPath, ['run_id' => $runId]);
         $this->registerFullBackupRow($fullPath, $profileId, $runId, $context);
@@ -102,6 +125,33 @@ class FullBackupStep implements PipelineStepInterface
         );
 
         return $this->archiveManager->createArchiveFromDirectory(base_path(), $base, $compression, $excludes);
+    }
+
+    private function ensureDirectory(string $path): void
+    {
+        if (!is_dir($path) && !mkdir($path, 0775, true) && !is_dir($path)) {
+            throw new \RuntimeException('Não foi possível criar diretório temporário do backup FULL: ' . $path);
+        }
+    }
+
+    private function copyArtifact(string $source, string $target, string $label): void
+    {
+        clearstatcache(true, $source);
+
+        if (!is_file($source) || !is_readable($source)) {
+            throw new \RuntimeException('Artefato intermediário indisponível para ' . $label . ': ' . $source);
+        }
+
+        if (!@copy($source, $target)) {
+            throw new \RuntimeException('Falha ao copiar ' . $label . ' para montagem do backup FULL.');
+        }
+
+        clearstatcache(true, $target);
+
+        if (!is_file($target) || filesize($target) !== filesize($source)) {
+            @unlink($target);
+            throw new \RuntimeException('Cópia incompleta de ' . $label . ' durante montagem do backup FULL.');
+        }
     }
 
     private function registerFullBackupRow(string $fullPath, ?int $profileId, ?int $runId, array &$context): void

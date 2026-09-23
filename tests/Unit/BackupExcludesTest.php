@@ -68,4 +68,21 @@ class BackupExcludesTest extends TestCase
         $this->assertContains('bootstrap/cache', $excludes);
     }
 
+    public function testSnapshotAlwaysExcludesVolatileLaravelRuntimeDirectories(): void
+    {
+        $excludes = BackupExcludes::snapshot(
+            includeVendor: true,
+            excludeStorage: false,
+            excludeUploads: false,
+            baseExcludes: [],
+            uploadsPaths: ['public/uploads'],
+        );
+
+        $this->assertContains('storage/framework/cache', $excludes);
+        $this->assertContains('storage/framework/sessions', $excludes);
+        $this->assertContains('storage/framework/views', $excludes);
+        $this->assertContains('storage/framework/testing', $excludes);
+        $this->assertContains('bootstrap/cache', $excludes);
+    }
+
 }
