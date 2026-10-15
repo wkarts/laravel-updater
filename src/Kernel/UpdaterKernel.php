@@ -25,6 +25,7 @@ use Argws\LaravelUpdater\Pipeline\Steps\SqlPatchStep;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\PreflightChecker;
 use Argws\LaravelUpdater\Support\RunReportMailer;
+use Argws\LaravelUpdater\Support\RunDiagnosticsService;
 use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
 use Psr\Log\LoggerInterface;
@@ -159,7 +160,11 @@ class UpdaterKernel
                 $this->store->finishRun($runId, $context);
             }
 
-            $this->logger->info('updater.run.success', $context);
+            $this->store->addRunLog($runId, 'info', 'Execução finalizada com sucesso.', [
+                'run_id' => $runId,
+                'revision_after' => $context['revision_after'] ?? null,
+            ]);
+            $this->logger->info('updater.run.success', RunDiagnosticsService::sanitize($context));
             $this->reportMailer->sendIfEnabled($context, (string) $context['status']);
 
             return $context;
@@ -167,7 +172,12 @@ class UpdaterKernel
             $context['status'] = 'failed';
             $context['error'] = $throwable->getMessage();
             $this->store->finishRun($runId, $context, ['message' => mb_substr($throwable->getMessage(), 0, 1000)]);
-            $this->logger->error('updater.run.failed', $context);
+            $this->store->addRunLog($runId, 'error', 'Falha geral da execução.', [
+                'run_id' => $runId,
+                'error' => RunDiagnosticsService::sanitize($throwable->getMessage()),
+                'exception' => get_class($throwable),
+            ]);
+            $this->logger->error('updater.run.failed', RunDiagnosticsService::sanitize($context));
             $this->reportMailer->sendIfEnabled($context, 'failed');
 
             throw $throwable;

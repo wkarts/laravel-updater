@@ -21,7 +21,13 @@ class CacheClearStep implements PipelineStepInterface
     {
         foreach ($this->commandsToRun($context) as $command) {
             try {
-                $this->shellRunner->runOrFail(['php', 'artisan', $command]);
+                $startedNs = hrtime(true);
+                $result = $this->shellRunner->runOrFail(['php', 'artisan', $command]);
+                $context['cache_clear_commands'][] = [
+                    'command' => 'php artisan ' . $command,
+                    'exit_code' => (int) ($result['exit_code'] ?? 0),
+                    'duration_ms' => (int) round((hrtime(true) - $startedNs) / 1000000),
+                ];
             } catch (UpdaterException $exception) {
                 if ($command === 'route:cache' && $this->isRouteCacheDuplicateNameError($exception)) {
                     if ($this->ignoreDuplicateRouteCacheFailure()) {
