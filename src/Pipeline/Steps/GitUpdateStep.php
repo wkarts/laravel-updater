@@ -6,6 +6,7 @@ namespace Argws\LaravelUpdater\Pipeline\Steps;
 
 use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
+use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
 
@@ -198,8 +199,12 @@ class GitUpdateStep implements PipelineStepInterface
                 $this->shellRunner->runOrFail(['git', 'remote', 'set-url', 'origin', $url], $cwd, $env);
 
                 if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
+                    $this->assertValidGitReference('refs/tags/' . $requestedTag, 'tag', $cwd, $env);
                     $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
-                    $this->shellRunner->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'refs/tags/' . $requestedTag . ':refs/tags/' . $requestedTag], $cwd, $env);
+                    $this->shellRunner->runOrFail([
+                        'git', 'fetch', '--no-tags', '--depth=' . $depth, 'origin',
+                        '+refs/tags/' . $requestedTag . ':' . GitDriver::remoteTagTargetRef($requestedTag),
+                    ], $cwd, $env);
                 } else {
                     $this->shellRunner->runOrFail(['git', 'fetch', '--prune', '--depth=1', 'origin', $branch], $cwd, $env);
                 }
@@ -449,10 +454,16 @@ class GitUpdateStep implements PipelineStepInterface
         $this->shellRunner->runOrFail(['git', 'remote', 'add', 'origin', $url], $cwd, $env);
 
         if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
+            $this->assertValidGitReference('refs/tags/' . $requestedTag, 'tag', $cwd, $env);
             $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
-            $this->shellRunner->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'refs/tags/' . $requestedTag . ':refs/tags/' . $requestedTag], $cwd, $env);
+            $ref = GitDriver::remoteTagTargetRef($requestedTag);
+            $commitRef = $ref . '^{commit}';
+            $this->shellRunner->runOrFail([
+                'git', 'fetch', '--no-tags', '--depth=' . $depth, 'origin',
+                '+refs/tags/' . $requestedTag . ':' . $ref,
+            ], $cwd, $env);
             try {
-                $this->shellRunner->runOrFail(['git', 'checkout', '--detach', $requestedTag], $cwd, $env);
+                $this->shellRunner->runOrFail(['git', 'checkout', '--detach', $commitRef], $cwd, $env);
             } catch (\Throwable $e) {
                 if (!$this->shouldRetryAfterUntrackedOverwrite($e)) {
                     throw $e;
@@ -461,7 +472,7 @@ class GitUpdateStep implements PipelineStepInterface
                 $context['git_update_log'][] = 'Bootstrap/tag detectou conflito de untracked no checkout; aplicando limpeza controlada e retry.';
                 $this->forceCleanUntrackedForCheckout($context, $cwd, $env);
                 $this->quarantineUntrackedOverwriteFiles($context, $e->getMessage(), $cwd, $env);
-                $this->shellRunner->runOrFail(['git', 'checkout', '--detach', '-f', $requestedTag], $cwd, $env);
+                $this->shellRunner->runOrFail(['git', 'checkout', '--detach', '-f', $commitRef], $cwd, $env);
             }
             $this->shellRunner->runOrFail(['git', 'reset', '--hard'], $cwd, $env);
             return;
@@ -718,7 +729,11 @@ class GitUpdateStep implements PipelineStepInterface
         }
 
         $head = $this->shellRunner->run(['git', 'rev-parse', 'HEAD'], $cwd, $env);
-        $tagCommit = $this->shellRunner->run(['git', 'rev-parse', 'refs/tags/' . $tag . '^{commit}'], $cwd, $env);
+        // Uma tag local pode permanecer no commit antigo. A validação deve
+        // considerar o commit remoto buscado pelo próprio updater.
+        $tagCommit = $this->shellRunner->run([
+            'git', 'rev-parse', GitDriver::remoteTagTargetRef($tag) . '^{commit}',
+        ], $cwd, $env);
 
         if ((int) ($head['exit_code'] ?? 1) !== 0 || (int) ($tagCommit['exit_code'] ?? 1) !== 0) {
             return false;

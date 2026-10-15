@@ -11,6 +11,16 @@ use Argws\LaravelUpdater\Support\ShellRunner;
 
 class GitDriver implements CodeDriverInterface
 {
+    // As tags de canal (ex.: ui-continuous) podem mudar no remoto.
+    // Nunca atualizar refs/tags/* do cliente; somente a referência privada
+    // e controlada pelo próprio updater.
+    public const REMOTE_TAG_TARGET_PREFIX = 'refs/laravel-updater/targets/';
+
+    public static function remoteTagTargetRef(string $tag): string
+    {
+        return self::REMOTE_TAG_TARGET_PREFIX . $tag;
+    }
+
     public function __construct(private readonly ShellRunner $shellRunner, private readonly array $config)
     {
     }
@@ -216,21 +226,29 @@ class GitDriver implements CodeDriverInterface
                     throw new \RuntimeException('Modo tag ativo, mas UPDATER_GIT_TARGET_TAG não foi informado.');
                 }
 
-                $tagFetchArgs = ['git', 'fetch', '--depth=' . $depth];
-                if ($shouldPrune) {
-                    $tagFetchArgs[] = '--prune';
-                }
-                $tagFetchArgs[] = $remote;
-                $tagFetchArgs[] = 'refs/tags/' . $tag . ':refs/tags/' . $tag;
+                $this->shellRunner->runOrFailWithTimeout(
+                    ['git', 'check-ref-format', 'refs/tags/' . $tag],
+                    $path, $this->gitEnv(), $timeout
+                );
 
-                // Busca somente a tag alvo (shallow), evitando fetch amplo de refs.
+                $targetRef = self::remoteTagTargetRef($tag);
+                // O + atualiza somente o ref interno do updater, sem alterar
+                // refs/tags/* do cliente nem importar outras tags do remoto.
+                // Funciona com tags leves, anotadas e canais móveis.
+                $tagFetchArgs = [
+                    'git', 'fetch', '--no-tags', '--depth=' . max(1, $depth),
+                    $remote, '+refs/tags/' . $tag . ':' . $targetRef,
+                ];
                 $this->shellRunner->runOrFailWithTimeout($tagFetchArgs, $path, $this->gitEnv(), $timeout);
 
-                // Se existirem arquivos untracked que conflitam com o conteúdo do tag, o checkout aborta.
-                // Ex.: "untracked working tree files would be overwritten by checkout".
-                $this->quarantineUntrackedConflicts('tags/' . $tag, $path, $timeout);
+                $commitRef = $targetRef . '^{commit}';
+                // Resolve o alvo remoto, nunca a tag local potencialmente antiga.
+                $this->quarantineUntrackedConflicts($commitRef, $path, $timeout);
 
-                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/' . $tag], $path, $this->gitEnv(), $timeout);
+                $this->shellRunner->runOrFailWithTimeout(
+                    ['git', 'checkout', '--detach', '-f', $commitRef],
+                    $path, $this->gitEnv(), $timeout
+                );
                 $this->restoreSelfPackageIfMissing($selfPackageBackup);
                 $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
             } else {
@@ -797,12 +815,21 @@ class GitDriver implements CodeDriverInterface
         $targetTag = trim((string) ($config['tag'] ?? ''));
 
         if ($updateType === 'git_tag' && $targetTag !== '') {
-            $fetchTags = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', $remote], $cwd, $env);
-            if ($fetchTags['exit_code'] !== 0) {
+            $ref = self::remoteTagTargetRef($targetTag);
+            $validTag = $this->shellRunner->run(['git', 'check-ref-format', 'refs/tags/' . $targetTag], $cwd, $env);
+            if ((int) ($validTag['exit_code'] ?? 1) !== 0) {
                 return false;
             }
 
-            $checkoutTag = $this->shellRunner->run(['git', 'checkout', '--detach', '--force', $targetTag], $cwd, $env);
+            $fetchTags = $this->shellRunner->run([
+                'git', 'fetch', '--no-tags', '--depth=1', $remote,
+                '+refs/tags/' . $targetTag . ':' . $ref,
+            ], $cwd, $env);
+            if ((int) ($fetchTags['exit_code'] ?? 1) !== 0) {
+                return false;
+            }
+
+            $checkoutTag = $this->shellRunner->run(['git', 'checkout', '--detach', '--force', $ref . '^{commit}'], $cwd, $env);
             if ($checkoutTag['exit_code'] !== 0) {
                 return false;
             }
