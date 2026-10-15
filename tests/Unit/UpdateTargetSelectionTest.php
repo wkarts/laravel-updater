@@ -28,7 +28,7 @@ final class UpdateTargetSelectionTest extends TestCase
         $this->assertIsString($controller);
         $this->assertIsString($dispatcher);
         $this->assertIsString($command);
-        $this->assertStringContainsString("'target_branch' => \$targetBranch", $controller);
+        $this->assertSame(3, substr_count($controller, "'target_branch' => \$targetBranch"));
         $this->assertStringContainsString("'target_branch' => (string) (\$pending['target_branch'] ?? '')", $controller);
         $this->assertStringContainsString("'--branch=' . (string) \$options['target_branch']", $dispatcher);
         $this->assertStringContainsString("'target_branch' => \$branch", $command);
