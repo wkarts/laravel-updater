@@ -101,6 +101,7 @@ class OperationsController extends Controller
                 'source_id' => (int) $data['source_id'],
                 'update_type' => $updateType,
                 'target_tag' => $targetTag,
+                'target_branch' => $targetBranch,
                 'replay_migrations_from_start' => $replayMigrationsFromStart,
             ]);
 
@@ -118,6 +119,7 @@ class OperationsController extends Controller
                 'dry_run' => false,
                 'update_type' => $updateType,
                 'target_tag' => $targetTag,
+                'target_branch' => $targetBranch,
                 'profile_id' => (int) $data['profile_id'],
                 'source_id' => (int) $data['source_id'],
                 'sync' => false,
