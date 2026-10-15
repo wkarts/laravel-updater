@@ -13,6 +13,7 @@ use Argws\LaravelUpdater\Support\FileManager;
 use Argws\LaravelUpdater\Support\ManagerStore;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\StateStore;
+use Argws\LaravelUpdater\Support\RunDiagnosticsService;
 use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
 use Illuminate\Http\JsonResponse;
@@ -206,11 +207,46 @@ class OperationsController extends Controller
         $run = $this->stateStore->findRun($id);
         abort_if($run === null, 404);
 
+        $diagnostics = (new RunDiagnosticsService($this->stateStore))->report($id);
+
         return view('laravel-updater::runs.show', [
             'run' => $run,
-            'logs' => $this->managerStore->logs($id),
+            'diagnostics' => $diagnostics,
+            'logs' => $diagnostics['events'] ?? [],
             'pendingApproval' => session()->has('updater_pending_approval_' . $id),
         ]);
+    }
+
+    /**
+     * Exportação autenticada do SQLite do updater; não lê logs do ERP.
+     * Suporta JSON e ZIP sem modificar o banco nem criar artefatos permanentes.
+     */
+    public function downloadRunDiagnostics(int $id, string $format)
+    {
+        abort_unless(in_array($format, ['json', 'zip'], true), 404);
+        $service = new RunDiagnosticsService($this->stateStore);
+        $report = $service->report($id);
+        abort_if($report === null, 404);
+
+        $filename = 'laravel-updater-run-' . $id . '-diagnostico.' . $format;
+        if ($format === 'json') {
+            return response($service->toJson($report), 200, [
+                'Content-Type' => 'application/json; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+                'Cache-Control' => 'no-store, private',
+            ]);
+        }
+
+        try {
+            $path = $service->toZip($report);
+        } catch (RuntimeException $exception) {
+            abort(503, $exception->getMessage());
+        }
+
+        return response()->download($path, $filename, [
+            'Content-Type' => 'application/zip',
+            'Cache-Control' => 'no-store, private',
+        ])->deleteFileAfterSend(true);
     }
 
     public function backupNow(string $type, Request $request, TriggerDispatcher $dispatcher): RedirectResponse
@@ -403,9 +439,18 @@ class OperationsController extends Controller
 
         $logs = [];
         if ($targetRunId > 0) {
-            $logStmt = $this->stateStore->pdo()->prepare('SELECT * FROM updater_logs WHERE run_id = :run_id ORDER BY id DESC LIMIT 30');
+            $logStmt = $this->stateStore->pdo()->prepare('SELECT * FROM updater_logs WHERE run_id = :run_id ORDER BY id DESC LIMIT 80');
             $logStmt->execute([':run_id' => $targetRunId]);
             $logs = array_reverse($logStmt->fetchAll(\PDO::FETCH_ASSOC) ?: []);
+            foreach ($logs as &$log) {
+                $parsed = json_decode((string) ($log['context_json'] ?? ''), true);
+                $log['context_json'] = json_encode(
+                    RunDiagnosticsService::sanitize(is_array($parsed) ? $parsed : []),
+                    JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+                );
+                $log['message'] = RunDiagnosticsService::sanitize((string) $log['message']);
+            }
+            unset($log);
         }
 
         $progress = 0;
@@ -430,9 +475,13 @@ class OperationsController extends Controller
                 $message = $status === 'DRY_RUN' ? 'Dry-run concluído.' : 'Atualização concluída com sucesso.';
             } elseif ($status === 'failed') {
                 $progress = 100;
+                $error = json_decode((string) ($lastRun['error_json'] ?? ''), true);
+                $errorMessage = trim((string) ($error['message'] ?? ''));
                 $message = isset($recovery['recovered_run_id'])
                     ? 'Execução travada recuperada. Você já pode iniciar uma nova atualização.'
-                    : 'Atualização falhou. Verifique os detalhes.';
+                    : ($errorMessage !== ''
+                        ? 'Falha na atualização: ' . mb_substr((string) RunDiagnosticsService::sanitize($errorMessage), 0, 350)
+                        : 'Atualização falhou. Consulte o diagnóstico completo.');
             }
         }
 

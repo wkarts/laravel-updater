@@ -57,7 +57,9 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/maintenance/on', [UpdaterUiController::class, 'maintenanceOn'])->name('updater.maintenance.on');
                 Route::post('/maintenance/off', [UpdaterUiController::class, 'maintenanceOff'])->name('updater.maintenance.off');
 
-                Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->name('updater.runs.show');
+                Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->whereNumber('id')->name('updater.runs.show');
+                Route::get('/runs/{id}/diagnostics/{format}', [OperationsController::class, 'downloadRunDiagnostics'])
+                    ->whereNumber('id')->whereIn('format', ['json', 'zip'])->name('updater.runs.diagnostics.download');
 
                 Route::post('/updates/execute', [OperationsController::class, 'executeUpdate'])->name('updater.updates.execute');
                 Route::post('/updates/recover', [OperationsController::class, 'recoverUpdate'])->name('updater.updates.recover');
@@ -133,6 +135,10 @@ if ((bool) config('updater.ui.enabled', true)) {
             Route::post('/trigger-rollback', [UpdaterUiController::class, 'triggerRollback'])->name('updater.trigger.rollback');
             Route::post('/maintenance/on', [UpdaterUiController::class, 'maintenanceOn'])->name('updater.maintenance.on');
             Route::post('/maintenance/off', [UpdaterUiController::class, 'maintenanceOff'])->name('updater.maintenance.off');
+            // Compatibilidade com autenticação via middlewares da aplicação hospedeira.
+            Route::get('/runs/{id}', [OperationsController::class, 'runDetails'])->whereNumber('id')->name('updater.runs.show');
+            Route::get('/runs/{id}/diagnostics/{format}', [OperationsController::class, 'downloadRunDiagnostics'])
+                ->whereNumber('id')->whereIn('format', ['json', 'zip'])->name('updater.runs.diagnostics.download');
             Route::get('/migrations', [OperationsController::class, 'migrationsAuditIndex'])->name('updater.migrations.index');
             Route::get('/migrations/{migration}', [OperationsController::class, 'migrationAuditShow'])->name('updater.migrations.show');
             Route::post('/migrations/reapply', [OperationsController::class, 'reapplyMigration'])->name('updater.migrations.reapply');

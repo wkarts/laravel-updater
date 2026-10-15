@@ -14,7 +14,11 @@
                     <td>{{ $run['status'] }}</td>
                     <td>{{ $run['started_at'] }}</td>
                     <td>{{ $run['finished_at'] ?? '-' }}</td>
-                    <td class="col-actions"><a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $run['id']]) }}">Detalhes</a></td>
+                    <td class="col-actions">
+                        <a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $run['id']]) }}">Diagnóstico</a>
+                        <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'json']) }}">JSON</a>
+                        <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'zip']) }}">ZIP</a>
+                    </td>
                 </tr>
             @empty
                 <tr><td colspan="5" class="muted">Sem execuções registradas.</td></tr>

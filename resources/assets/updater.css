@@ -1063,3 +1063,28 @@ input[type="checkbox"]:disabled { opacity: .55; cursor: not-allowed; }
     .audit-filters {
         grid-template-columns: 1fr;
     }
+
+
+/* Diagnóstico de execuções: estilos isolados, light padrão e dark por tokens. */
+.run-report-header { display: grid; gap: 14px; }
+.run-report-top { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
+.run-report-top h3 { margin-bottom: 4px; }
+.run-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; margin-top: 12px; }
+.run-metrics > div { display: grid; gap: 6px; padding: 12px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.run-metrics span { color: var(--muted); font-size: 12px; }
+.run-metrics strong { font-size: 13px; overflow-wrap: anywhere; }
+.run-pill { display: inline-flex; padding: 4px 9px; font-size: 12px; border-radius: 999px; font-weight: 700; background: var(--surface-soft); border: 1px solid var(--line); color: var(--text); }
+.run-pill-ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, var(--line)); }
+.run-pill-failed { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
+.run-error-panel { padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--line)); border-left: 4px solid var(--danger); background: var(--surface-soft); border-radius: 10px; overflow-wrap: anywhere; }
+.run-error-panel strong { color: var(--danger); }
+.run-error-panel p { line-height: 1.5; margin: 8px 0; overflow-wrap: anywhere; }
+.run-revisions { line-height: 1.7; overflow-wrap: anywhere; }
+.run-stage-table td, .run-event-table td { vertical-align: top; }
+.run-events-wrap { max-height: 640px; overflow: auto; }
+.run-event-error { background: color-mix(in srgb, var(--danger) 5%, var(--surface)); }
+.run-event-details { max-width: 100%; }
+.run-event-details summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+.run-event-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; margin: 8px 0; padding: 11px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 8px; font-size: 12px; line-height: 1.55; max-width: min(82vw, 880px); }
+.run-stage-table th, .run-event-table th { white-space: nowrap; }
+@media (max-width: 780px) { .run-report-top { flex-direction: column; } .run-stage-table, .run-event-table { min-width: 750px; } }

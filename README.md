@@ -684,3 +684,28 @@ Também é possível definir:
 - O backup local continua concluindo mesmo se o upload em nuvem falhar.
 - Upload manual por item de backup continua disponível na seção de backups.
 - Configurações de nuvem são persistidas em runtime no banco do updater (`updater_runtime_settings`).
+
+
+## Diagnóstico de execuções (JSON e ZIP)
+
+Na página **Execuções → Diagnóstico** cada execução exibe o erro original antes do
+rollback, status de cada etapa, duração, rollback executado, logs com contexto e
+migrations relacionadas. O painel de progresso também exibe os nomes das etapas e
+a causa da falha.
+
+Para baixar pela própria interface autenticada:
+
+- \`GET /_updater/runs/{id}/diagnostics/json\` — relatório estruturado em JSON.
+- \`GET /_updater/runs/{id}/diagnostics/zip\` — \`diagnostico.json\`,
+  \`eventos.jsonl\`, \`etapas.json\`, \`migrations.json\` e \`README.txt\`.
+
+A exportação lê somente os registros do **Laravel Updater** em seu SQLite. Não
+inclui \`.env\`, dumps, arquivos dos clientes ou logs do ERP. Senhas, tokens e
+URLs de credenciais são ocultados. Os últimos 5.000 eventos por execução são
+incluídos e o resumo informa se houve truncamento; a tela mostra até 300.
+Arquivos ZIP são temporários e removidos após o download.
+
+Para evitar rota de saúde ausente após a troca do próprio pacote, \`route:cache\`
+é executado após os comandos posteriores. Em um HTTP 404 na rota interna o
+healthcheck ainda tenta regenerar o cache **uma única vez**, sem liberar o lock,
+e só marca sucesso após receber a resposta JSON esperada.
