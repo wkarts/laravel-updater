@@ -70,7 +70,9 @@ class GitDriver implements CodeDriverInterface
         $config = $this->runtimeConfig();
         $remote = (string) ($config['remote'] ?? 'origin');
         $branch = (string) ($config['branch'] ?? 'main');
-        $this->shellRunner->runOrFail(['git', 'fetch', $remote, $branch], $this->cwd(), $this->gitEnv());
+        // A consulta de commits não deve importar tags locais: tags mutáveis no remoto
+        // podem divergir das tags locais e gerar "would clobber existing tag".
+        $this->shellRunner->runOrFail(['git', 'fetch', '--no-tags', $remote, $branch], $this->cwd(), $this->gitEnv());
 
         $local = trim($this->shellRunner->runOrFail(['git', 'rev-parse', 'HEAD'], $this->cwd(), $this->gitEnv())['stdout']);
         $remoteHead = trim($this->shellRunner->runOrFail(['git', 'rev-parse', "{$remote}/{$branch}"], $this->cwd(), $this->gitEnv())['stdout']);
@@ -101,12 +103,34 @@ class GitDriver implements CodeDriverInterface
 
         $config = $this->runtimeConfig();
         $remote = (string) ($config['remote'] ?? 'origin');
-        $this->shellRunner->runOrFail(['git', 'fetch', '--tags', $remote], $this->cwd(), $this->gitEnv());
+        // Consulta somente leitura: não reescreve, apaga ou importa tags locais.
+        // Conserva a ordenação Git por versão (inclusive pre-releases).
+        $output = $this->shellRunner->runOrFail(
+            ['git', 'ls-remote', '--sort=-version:refname', '--tags', '--refs', $remote],
+            $this->cwd(),
+            $this->gitEnv()
+        )['stdout'];
 
-        $output = $this->shellRunner->runOrFail(['git', 'tag', '--list', '--sort=-version:refname'], $this->cwd(), $this->gitEnv())['stdout'];
-        $tags = array_values(array_filter(array_map('trim', explode("\n", (string) $output))));
+        $tags = [];
+        foreach (preg_split('/\r\n|\r|\n/', (string) $output) ?: [] as $line) {
+            $parts = preg_split('/\s+/', trim($line), 2);
+            $ref = (string) ($parts[1] ?? '');
+            if (!str_starts_with($ref, 'refs/tags/')) {
+                continue;
+            }
 
-        return array_slice($tags, 0, max(1, $limit));
+            $tag = substr($ref, strlen('refs/tags/'));
+            if ($tag === '' || in_array($tag, $tags, true)) {
+                continue;
+            }
+
+            $tags[] = $tag;
+            if (count($tags) >= max(1, $limit)) {
+                break;
+            }
+        }
+
+        return $tags;
     }
 
     public function resolveRemoteTagLatest(): ?string
