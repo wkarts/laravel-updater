@@ -310,6 +310,7 @@ class GitDriver implements CodeDriverInterface
                 } elseif ($mode === 'full' || $mode === 'pull') {
                     // Full: força o branch local igual ao remoto
                     $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
+                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
                     $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
                 } else {
                     throw new \RuntimeException('UPDATER_GIT_DEFAULT_UPDATE_MODE inválido: ' . $mode);
