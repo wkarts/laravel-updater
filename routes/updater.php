@@ -6,7 +6,16 @@ use Argws\LaravelUpdater\Http\Controllers\AuthController;
 use Argws\LaravelUpdater\Http\Controllers\ManagerController;
 use Argws\LaravelUpdater\Http\Controllers\OperationsController;
 use Argws\LaravelUpdater\Http\Controllers\UpdaterUiController;
+use Argws\LaravelUpdater\Http\Controllers\UpdaterHealthController;
 use Illuminate\Support\Facades\Route;
+
+// Endpoint mínimo, sem autenticação, separado da UI: precisa responder durante
+// manutenção soft ou nativa, inclusive se o painel estiver desativado.
+$healthPrefix = trim((string) config('updater.ui.prefix', '_updater'), '/');
+if ((bool) config('updater.healthcheck.enabled', true) && $healthPrefix !== '') {
+    Route::get($healthPrefix . '/health', UpdaterHealthController::class)
+        ->name('updater.health');
+}
 
 if ((bool) config('updater.ui.enabled', true)) {
     $prefix = trim((string) config('updater.ui.prefix', '_updater'), '/');

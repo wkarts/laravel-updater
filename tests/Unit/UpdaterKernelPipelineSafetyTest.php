@@ -16,6 +16,22 @@ class UpdaterKernelPipelineSafetyTest extends TestCase
         $this->assertStringNotContainsString('new GitMaintenanceStep(', $source);
     }
 
+    public function testHealthcheckMantemMaintenanceELockAteValidacao(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../../src/Kernel/UpdaterKernel.php');
+        $this->assertIsString($source);
+
+        $maintenance = strpos($source, 'new MaintenanceOnStep(');
+        $health = strpos($source, 'new HealthCheckStep(');
+        $release = strpos($source, 'new MaintenanceOffStep(');
+
+        $this->assertNotFalse($maintenance);
+        $this->assertNotFalse($health);
+        $this->assertNotFalse($release);
+        $this->assertLessThan($health, $maintenance);
+        $this->assertLessThan($release, $health);
+    }
+
     public function testBackupAconteceAntesDaManutencaoEDoGitUpdate(): void
     {
         $source = file_get_contents(__DIR__ . '/../../src/Kernel/UpdaterKernel.php');

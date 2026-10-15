@@ -613,6 +613,28 @@ Controle por `.env`:
 ```dotenv
 UPDATER_CACHE_IGNORE_ROUTE_CACHE_DUPLICATE_NAME=true
 ```
+### Healthcheck durante a manutenção
+
+O Laravel Updater oferece `GET /_updater/health` (ou `/<UPDATER_UI_PREFIX>/health`), uma rota
+pública **somente leitura**, sem sessões, comandos nem dados sensíveis. Ela informa apenas
+`{"updater_health":true,"status":"ok"}` (HTTP 200) ou `status: unhealthy` (HTTP 503).
+
+Quando a URL configurada para healthcheck é igual à `APP_URL` e a pipeline está
+em manutenção, a verificação usa automaticamente essa rota para não interpretar
+a página de manutenção HTTP 503 como indisponibilidade da aplicação. A verificação
+acontece **antes de liberar a manutenção e o lock**; URLs personalizadas continuam
+sendo usadas sem modificação, mantendo a exigência de HTTP 200.
+
+Opcionalmente, ative a consulta ao banco padrão durante o healthcheck:
+
+```env
+UPDATER_HEALTHCHECK_CHECK_DATABASE=true
+```
+
+A consulta HTTP registra código de resposta e tempo decorrido, sem expor corpo da
+resposta ou informações de conexão nos logs. Se a aplicação usa um prefixo de URL
+customizado, a rota utiliza o mesmo `UPDATER_UI_PREFIX`.
+
 ### Healthcheck em localhost durante update
 Para evitar falso negativo em ambientes onde `APP_URL`/healthcheck fica em `localhost`, o updater ignora healthcheck local por padrão.
 
