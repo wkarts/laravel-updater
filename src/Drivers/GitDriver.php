@@ -90,7 +90,7 @@ class GitDriver implements CodeDriverInterface
             return [
                 'local' => 'N/A',
                 'remote' => 'N/A',
-                'behind_by_commits' => $assumedCommits,
+                'behind_by_commits' => $assumeBehind ? $assumedCommits : 0,
                 'ahead_by_commits' => 0,
                 'has_updates' => $assumeBehind,
                 'latest_tag' => null,
@@ -310,7 +310,6 @@ class GitDriver implements CodeDriverInterface
                 } elseif ($mode === 'full' || $mode === 'pull') {
                     // Full: força o branch local igual ao remoto
                     $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $remote . '/' . $branch], $path, $this->gitEnv(), $timeout);
-                    $this->restoreSelfPackageIfMissing($selfPackageBackup);
                     $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
                 } else {
                     throw new \RuntimeException('UPDATER_GIT_DEFAULT_UPDATE_MODE inválido: ' . $mode);
