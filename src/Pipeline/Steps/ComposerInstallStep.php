@@ -46,7 +46,14 @@ class ComposerInstallStep implements PipelineStepInterface
         }
 
         try {
-            $this->shellRunner->runOrFail([...$composerCmd, 'install', '--no-interaction', '--prefer-dist', '--optimize-autoloader'], $projectPath);
+            $startedNs = hrtime(true);
+            $result = $this->shellRunner->runOrFail([...$composerCmd, 'install', '--no-interaction', '--prefer-dist', '--optimize-autoloader'], $projectPath);
+            $context['composer_install_result'] = [
+                'exit_code' => (int) ($result['exit_code'] ?? 0),
+                'duration_ms' => (int) round((hrtime(true) - $startedNs) / 1000000),
+                'stdout_tail' => mb_substr((string) ($result['stdout'] ?? ''), -6000),
+                'stderr_tail' => mb_substr((string) ($result['stderr'] ?? ''), -6000),
+            ];
         } catch (Throwable $e) {
             // Ambiente sem composer no PATH/binário inválido: segue com vendor já existente.
             if ($this->isComposerUnavailableError($e) && $this->hasHealthyVendor($projectPath)) {

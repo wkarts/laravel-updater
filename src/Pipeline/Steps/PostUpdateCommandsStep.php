@@ -37,8 +37,16 @@ class PostUpdateCommandsStep implements PipelineStepInterface
                 continue;
             }
 
-            $this->shellRunner->runOrFail(['bash', '-lc', $line]);
+            $startedNs = hrtime(true);
+            $result = $this->shellRunner->runOrFail(['bash', '-lc', $line]);
             $context['post_update_commands_log'][] = $line . ': executado';
+            $context['post_update_command_results'][] = [
+                'command' => $line,
+                'exit_code' => (int) ($result['exit_code'] ?? 0),
+                'duration_ms' => (int) round((hrtime(true) - $startedNs) / 1000000),
+                'stdout_tail' => mb_substr((string) ($result['stdout'] ?? ''), -6000),
+                'stderr_tail' => mb_substr((string) ($result['stderr'] ?? ''), -6000),
+            ];
         }
     }
 

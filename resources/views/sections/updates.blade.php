@@ -141,6 +141,7 @@
     <h3>Progresso da atualização/rollback</h3>
     <div class="progress-track"><div class="progress-fill" id="update-progress-fill" style="width:0%"></div></div>
     <p id="update-progress-message" class="muted">Aguardando execução.</p>
+    <a id="update-progress-details" class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => 0]) }}" hidden>Ver diagnóstico da execução</a>
     <ul id="update-progress-logs" class="muted update-progress-logs" style="margin:0; padding-left:18px;"></ul>
 </div>
 @endsection

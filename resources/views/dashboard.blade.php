@@ -40,7 +40,46 @@
     </div>
     <div class="card dashboard-status-card">
         <h3>Status do sistema</h3>
-        <pre class="muted" style="white-space: pre-wrap;">{{ json_encode($status, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</pre>
+        @php
+            $last = (array) ($status['last_run'] ?? []);
+            $lastError = json_decode((string) ($last['error_json'] ?? ''), true);
+            // Opções da execução e error_json originais podem conter segredos em JSON
+            // serializado. O dashboard expõe só metadados operacionais selecionados.
+            $safeStatus = [
+                'enabled' => (bool) ($status['enabled'] ?? false),
+                'mode' => $status['mode'] ?? null,
+                'channel' => $status['channel'] ?? null,
+                'revision' => $status['revision'] ?? null,
+                'last_run' => [
+                    'id' => $last['id'] ?? null,
+                    'status' => $last['status'] ?? null,
+                    'started_at' => $last['started_at'] ?? null,
+                    'finished_at' => $last['finished_at'] ?? null,
+                    'revision_before' => $last['revision_before'] ?? null,
+                    'revision_after' => $last['revision_after'] ?? null,
+                ],
+            ];
+        @endphp
+        <div class="run-metrics">
+            <div><span>Atualizador</span><strong>{{ ($status['enabled'] ?? false) ? 'Ativo' : 'Inativo' }}</strong></div>
+            <div><span>Canal</span><strong>{{ $status['channel'] ?? '-' }}</strong></div>
+            <div><span>Última execução</span><strong>{{ !empty($last['id']) ? '#' . $last['id'] : '-' }}</strong></div>
+            <div><span>Resultado</span><strong>{{ $last['status'] ?? 'Nenhuma' }}</strong></div>
+        </div>
+        <p class="muted run-revisions">Revisão instalada: <code>{{ $status['revision'] ?? '-' }}</code></p>
+        @if(($last['status'] ?? '') === 'failed')
+            <div class="run-error-panel">
+                <strong>Última atualização falhou</strong>
+                <p>{{ \Argws\LaravelUpdater\Support\RunDiagnosticsService::sanitize((string) ($lastError['message'] ?? 'Confira o diagnóstico da execução.')) }}</p>
+                @if(!empty($last['id']))
+                    <a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $last['id']]) }}">Ver causa e etapas da execução #{{ $last['id'] }}</a>
+                @endif
+            </div>
+        @endif
+        <details class="run-event-details">
+            <summary>Visualizar JSON técnico do status</summary>
+            <pre>{{ json_encode($safeStatus, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) }}</pre>
+        </details>
     </div>
 </div>
 

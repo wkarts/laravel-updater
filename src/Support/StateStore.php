@@ -199,6 +199,9 @@ class StateStore
             created_at TEXT NOT NULL
         )');
 
+        // Busca de logs por execução: evita varredura em instalações antigas com muitos runs.
+        $this->connect()->exec('CREATE INDEX IF NOT EXISTS idx_updater_logs_run_id_id ON updater_logs(run_id, id)');
+
         $this->connect()->exec('CREATE TABLE IF NOT EXISTS updater_api_tokens (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -414,7 +417,7 @@ class StateStore
             ':level' => $level,
             ':message' => $message,
             ':context_json' => json_encode($context, JSON_UNESCAPED_UNICODE),
-            ':created_at' => date(DATE_ATOM),
+            ':created_at' => (new \DateTimeImmutable())->format('Y-m-d\\TH:i:s.uP'),
         ]);
     }
 

@@ -25,6 +25,7 @@ use Argws\LaravelUpdater\Pipeline\Steps\SqlPatchStep;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
 use Argws\LaravelUpdater\Support\PreflightChecker;
 use Argws\LaravelUpdater\Support\RunReportMailer;
+use Argws\LaravelUpdater\Support\RunDiagnosticsService;
 use Argws\LaravelUpdater\Support\StateStore;
 use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
 use Psr\Log\LoggerInterface;
@@ -68,8 +69,10 @@ class UpdaterKernel
             new SeedStep($services['shell'], $services['store']),
             new SqlPatchStep((string) config('updater.patches.path'), $services['store']),
             new BuildAssetsStep($services['shell'], (bool) config('updater.build_assets', false)),
-            new CacheClearStep($services['shell']),
+            // Scripts posteriores podem atualizar vendor/provedores; gerar cache de
+            // rotas apenas depois deles evita readiness 404 por rota desatualizada.
             new PostUpdateCommandsStep($services['shell']),
+            new CacheClearStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
             new MaintenanceOffStep($services['shell'], $services['lock']),
         ];
@@ -137,7 +140,7 @@ class UpdaterKernel
                     'versao_atual' => $this->codeDriver->currentRevision(),
                     'versao_alvo' => $status['remote'] ?? null,
                     'diff_commits' => $status['behind_by_commits'] ?? 0,
-                    'steps' => ['lock','backup_full','pre_update_commands','maintenance_on','git_update','psr4_sanitize','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','post_update_commands','health_check','maintenance_off'],
+                    'steps' => ['lock','backup_full','pre_update_commands','maintenance_on','git_update','psr4_sanitize','composer_install','migrate','seed','sql_patch','build_assets','post_update_commands','cache_clear','health_check','maintenance_off'],
                     'comandos_simulados' => [
                         'git fetch origin <branch>',
                         'git rev-list --count HEAD..origin/<branch>',
@@ -157,7 +160,11 @@ class UpdaterKernel
                 $this->store->finishRun($runId, $context);
             }
 
-            $this->logger->info('updater.run.success', $context);
+            $this->store->addRunLog($runId, 'info', 'Execução finalizada com sucesso.', [
+                'run_id' => $runId,
+                'revision_after' => $context['revision_after'] ?? null,
+            ]);
+            $this->logger->info('updater.run.success', RunDiagnosticsService::sanitize($context));
             $this->reportMailer->sendIfEnabled($context, (string) $context['status']);
 
             return $context;
@@ -165,7 +172,12 @@ class UpdaterKernel
             $context['status'] = 'failed';
             $context['error'] = $throwable->getMessage();
             $this->store->finishRun($runId, $context, ['message' => mb_substr($throwable->getMessage(), 0, 1000)]);
-            $this->logger->error('updater.run.failed', $context);
+            $this->store->addRunLog($runId, 'error', 'Falha geral da execução.', [
+                'run_id' => $runId,
+                'error' => RunDiagnosticsService::sanitize($throwable->getMessage()),
+                'exception' => get_class($throwable),
+            ]);
+            $this->logger->error('updater.run.failed', RunDiagnosticsService::sanitize($context));
             $this->reportMailer->sendIfEnabled($context, 'failed');
 
             throw $throwable;

@@ -58,6 +58,7 @@
     const progressFill = document.getElementById('update-progress-fill');
     const progressMessage = document.getElementById('update-progress-message');
     const progressLogs = document.getElementById('update-progress-logs');
+    const progressDetails = document.getElementById('update-progress-details');
     const updateButtons = document.querySelectorAll('[data-update-action="1"]');
 
     function toggleUpdateButtons(disabled) {
@@ -74,9 +75,19 @@
         }
 
         progressLogs.innerHTML = '';
-        (logs || []).slice(-8).forEach(function (log) {
+        (logs || []).slice(-20).forEach(function (log) {
+            let context = {};
+            try {
+                context = typeof log.context_json === 'string' ? JSON.parse(log.context_json) : (log.context_json || {});
+            } catch (_ignored) {
+                context = {};
+            }
             const li = document.createElement('li');
-            li.textContent = '[' + (log.level || 'info') + '] ' + (log.message || '');
+            const step = context.etapa ? ' [' + context.etapa + ']' : '';
+            const error = context.erro || context.error;
+            const duration = context.duration_ms !== undefined ? ' (' + context.duration_ms + ' ms)' : '';
+            li.textContent = '[' + (log.level || 'info') + ']' + step + ' ' +
+                (log.message || '') + (error ? ': ' + error : '') + duration;
             progressLogs.appendChild(li);
         });
     }
@@ -113,6 +124,11 @@
                 progressFill.style.width = Math.max(0, Math.min(100, progress)) + '%';
                 progressMessage.textContent = data.message || 'Aguardando execução.';
                 renderLogs(data.logs || []);
+                if (progressDetails && data.run && Number(data.run.id) > 0) {
+                    progressDetails.hidden = false;
+                    progressDetails.href = progressDetails.href.replace(/\/runs\/\d+(?:\?.*)?$/, '/runs/' + Number(data.run.id));
+                    progressDetails.textContent = 'Ver diagnóstico completo da execução #' + Number(data.run.id);
+                }
                 toggleUpdateButtons(Boolean(data.active));
             })
             .catch(function () {});
