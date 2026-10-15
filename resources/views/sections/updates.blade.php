@@ -84,6 +84,12 @@
         </div>
 
         <div>
+            <label for="target_branch">Branch alvo (opcional)</label>
+            <input id="target_branch" name="target_branch" type="text" value="{{ old('target_branch', '') }}" maxlength="255" placeholder="{{ $activeSource['branch'] ?? 'main' }}" autocomplete="off">
+            <p class="muted">Deixe em branco para usar a branch configurada na fonte selecionada. Informe outra branch para esta execução.</p>
+        </div>
+
+        <div>
             <label for="update_mode">Modo de atualização</label>
             <select id="update_mode" name="update_mode" required onchange="document.getElementById('tag-wrapper').style.display = this.value === 'tag' ? 'block' : 'none';">
                 <option value="merge" @selected(old('update_mode', $defaultUpdateMode ?? 'merge') === 'merge')>merge (prioridade)</option>
@@ -95,14 +101,15 @@
             </select>
         </div>
 
-        <div id="tag-wrapper" style="display:{{ old('update_mode') === 'tag' ? 'block' : 'none' }};">
+        <div id="tag-wrapper" style="display:{{ old('update_mode', $defaultUpdateMode ?? 'merge') === 'tag' ? 'block' : 'none' }};">
             <label for="target_tag">Tag alvo</label>
-            <select id="target_tag" name="target_tag">
-                <option value="">Selecione uma tag</option>
+            <input id="target_tag" name="target_tag" type="text" list="available-tags" value="{{ old('target_tag', '') }}" maxlength="120" placeholder="Ex.: v1.2.3-rc.1" autocomplete="off">
+            <datalist id="available-tags">
                 @foreach($availableTags as $tag)
-                    <option value="{{ $tag }}" @selected(old('target_tag') === $tag)>{{ $tag }}</option>
+                    <option value="{{ $tag }}"></option>
                 @endforeach
-            </select>
+            </datalist>
+            <p class="muted">Use a tag exata da release, inclusive sufixos como <code>-alpha.1</code>, <code>-beta.2</code> ou <code>-rc.1</code>. Você também pode digitá-la quando não aparecer nas sugestões.</p>
         </div>
 
         <div>

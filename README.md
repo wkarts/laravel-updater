@@ -314,10 +314,21 @@ O teste executa `git ls-remote` para validar acesso e listar versões/tags remot
 
 1. Vá em **Atualizações** (`/_updater/updates`).
 2. Selecione o perfil e a fonte.
-3. Escolha o modo (`merge`, `ff-only`, `tag`, `full update` se habilitado).
-4. Mantenha **Dry-run antes** marcado (padrão).
-5. Clique em **Simular (Dry-run)**.
-6. Na tela da execução, clique em **Aprovar e executar** e informe a senha de admin.
+3. Opcionalmente informe uma branch alvo. Em branco, o updater usa a branch configurada na fonte selecionada.
+4. Escolha o modo (`merge`, `ff-only`, `tag`, `full update` se habilitado).
+   - Para uma release de pré-lançamento, escolha `tag` e digite a tag exata, por exemplo `v1.2.3-rc.1`. As tags sugeridas são atalhos; tags fora da lista também podem ser digitadas.
+5. Mantenha **Dry-run antes** marcado (padrão).
+6. Clique em **Simular (Dry-run)**.
+7. Na tela da execução, clique em **Aprovar e executar** e informe a senha de admin.
+
+No CLI, a branch alternativa pode ser informada com `--branch`; para pré-release, use `--update-type=git_tag` e `--tag` com a tag completa:
+
+```bash
+php artisan system:update:run --update-type=git_tag --tag=v1.2.3-rc.1
+php artisan system:update:run --update-type=git_merge --branch=develop
+```
+
+O status de pré-release do GitHub não muda o mecanismo de checkout: o updater aplica a referência Git exata associada à tag.
 
 > O backup FULL é obrigatório antes da atualização real via UI.
 

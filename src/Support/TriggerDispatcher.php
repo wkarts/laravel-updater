@@ -488,6 +488,10 @@ class TriggerDispatcher
             $args[] = '--tag=' . (string) $options['target_tag'];
         }
 
+        if (!empty($options['target_branch'])) {
+            $args[] = '--branch=' . (string) $options['target_branch'];
+        }
+
         if (!empty($options['source_id'])) {
             $args[] = '--source-id=' . (int) $options['source_id'];
         }

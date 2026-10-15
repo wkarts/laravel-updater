@@ -25,6 +25,7 @@ class UpdateRunCommand extends Command
         {--dry-run : Executa apenas simulação (sem alterações)}
         {--update-type= : Tipo de update (git_merge|git_ff_only|git_tag|zip_release)}
         {--tag= : Tag alvo para update por tag}
+        {--branch= : Branch alvo para esta execução (opcional)}
         {--allow-http : Permite execução disparada via HTTP/UI}
         {--strict-migrate : Não reconcilia drift de migrations}
         {--replay-migrations-from-start : Reaplica migrations desde o início (modo idempotente)}
@@ -71,6 +72,8 @@ class UpdateRunCommand extends Command
             config(['updater.git.tag' => $tag]);
         }
 
+        $branch = trim((string) ($this->option('branch') ?: ''));
+
         $seeders = (array) $this->option('seeder');
         if (is_string($this->option('seeders')) && trim((string) $this->option('seeders')) !== '') {
             $seeders = array_merge($seeders, array_map('trim', explode(',', (string) $this->option('seeders'))));
@@ -89,6 +92,7 @@ class UpdateRunCommand extends Command
             'dry_run' => (bool) $this->option('dry-run'),
             'update_type' => $updateType,
             'target_tag' => $tag,
+            'target_branch' => $branch,
             'allow_http' => (bool) $this->option('allow-http'),
             'strict_migrate' => (bool) $this->option('strict-migrate'),
             'replay_migrations_from_start' => (bool) $this->option('replay-migrations-from-start'),

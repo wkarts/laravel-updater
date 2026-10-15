@@ -43,6 +43,7 @@ class OperationsController extends Controller
             'source_id' => ['required', 'integer'],
             'update_mode' => ['required', 'in:merge,ff-only,tag,full-update'],
             'target_tag' => ['nullable', 'string', 'max:120'],
+            'target_branch' => ['nullable', 'string', 'max:255'],
             'dry_run_before' => ['nullable', 'boolean'],
             'replay_migrations_from_start' => ['nullable', 'boolean'],
         ], [
@@ -56,6 +57,7 @@ class OperationsController extends Controller
 
         $updateType = $this->mapUpdateType((string) $data['update_mode']);
         $targetTag = trim((string) ($data['target_tag'] ?? ''));
+        $targetBranch = trim((string) ($data['target_branch'] ?? ''));
 
         if ($updateType === 'git_tag' && $targetTag === '') {
             return back()->withErrors(['target_tag' => 'Selecione uma tag para atualizar por tag.'])->withInput();
@@ -75,6 +77,7 @@ class OperationsController extends Controller
                     'allow_dirty' => false,
                     'update_type' => $updateType,
                     'target_tag' => $targetTag,
+                'target_branch' => $targetBranch,
                     'profile_id' => (int) $data['profile_id'],
                     'source_id' => (int) $data['source_id'],
                     'sync' => false,
@@ -170,6 +173,7 @@ class OperationsController extends Controller
                 'dry_run' => false,
                 'update_type' => (string) ($pending['update_type'] ?? 'git_merge'),
                 'target_tag' => (string) ($pending['target_tag'] ?? ''),
+                'target_branch' => (string) ($pending['target_branch'] ?? ''),
                 'profile_id' => (int) ($pending['profile_id'] ?? 0),
                 'source_id' => (int) ($pending['source_id'] ?? 0),
                 'replay_migrations_from_start' => (bool) ($pending['replay_migrations_from_start'] ?? false),
