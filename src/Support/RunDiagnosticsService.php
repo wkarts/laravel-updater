@@ -265,7 +265,7 @@ final class RunDiagnosticsService
             foreach ($value as $key => $item) {
                 // Argumentos arbitrários de comandos podem conter segredos sem rótulo.
                 // Registra o comando-base, mas nunca seus argumentos inteiros.
-                if ($key === 'pre_update_commands' || $key === 'post_update_commands') {
+                if (in_array($key, ['pre_update_commands', 'post_update_commands', 'post_update_commands_log'], true)) {
                     $items = is_array($item) ? $item : [$item];
                     $result[$key] = array_map(
                         static fn ($line) => self::commandSummary((string) $line),
@@ -319,11 +319,25 @@ final class RunDiagnosticsService
 
     private static function commandSummary(string $line): string
     {
+        // Argumentos arbitrários podem ser chaves sem rótulo. Mantém só o
+        // executável e o subcomando reconhecido; nunca serializa o comando integral.
         $line = preg_replace('/\s+/', ' ', trim($line)) ?? '';
-        $parts = preg_split('/\s+/', $line, 4);
-        $prefix = implode(' ', array_slice($parts ?: [], 0, 3));
+        $parts = preg_split('/\s+/', $line) ?: [];
+        if ($parts === []) {
+            return '[comando não informado]';
+        }
 
-        return self::sanitize($prefix) . (count($parts ?: []) > 3 ? ' [argumentos omitidos]' : '');
+        $head = [basename($parts[0])];
+        if (in_array(strtolower($head[0]), ['composer', 'composer2', 'git', 'npm', 'pnpm', 'yarn', 'php'], true)
+            && isset($parts[1]) && preg_match('/^[a-z][a-z0-9:_-]*$/i', $parts[1])) {
+            $head[] = $parts[1];
+            if (strtolower($head[0]) === 'php' && strtolower($parts[1]) === 'artisan'
+                && isset($parts[2]) && preg_match('/^[a-z][a-z0-9:_-]*$/i', $parts[2])) {
+                $head[] = $parts[2];
+            }
+        }
+
+        return implode(' ', $head) . (count($parts) > count($head) ? ' [argumentos omitidos]' : '');
     }
 
     private function eventType(string $message): string

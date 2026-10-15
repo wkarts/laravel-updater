@@ -134,6 +134,21 @@ final class RunDiagnosticsServiceTest extends TestCase
         self::assertStringContainsString('[argumentos omitidos]', $json);
     }
 
+    public function testLogsDeComandosLegadosNaoExibemSegredosPosicionais(): void
+    {
+        $result = RunDiagnosticsService::sanitize([
+            'post_update_commands_log' => [
+                'curl https://example.org -H Authorization:privateToken123: executado',
+                'echo ULTRA_SECRET_456: executado',
+            ],
+            'command' => 'echo ULTRA_SECRET_456',
+        ]);
+
+        $json = json_encode($result, JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString('ULTRA_SECRET_456', $json);
+        self::assertStringNotContainsString('privateToken123', $json);
+    }
+
     public function testDetalhesPorEtapaNaoCopiamContextoCompleto(): void
     {
         $context = [
