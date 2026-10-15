@@ -31,6 +31,7 @@ final class RunDiagnosticsRoutesTest extends TestCase
         self::assertStringContainsString('Baixar ZIP', $runView);
         self::assertStringContainsString('Baixar JSON', $runView);
         self::assertStringContainsString('Última atualização falhou', $dashboard);
+        self::assertStringNotContainsString('sanitize($status)', $dashboard);
         self::assertStringContainsString('context.erro || context.error', $js);
     }
 }

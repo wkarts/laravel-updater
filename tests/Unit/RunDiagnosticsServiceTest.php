@@ -120,6 +120,20 @@ final class RunDiagnosticsServiceTest extends TestCase
         }
     }
 
+    public function testOpcaoJsonSerializadaESegredosPosicionaisNaoSaoExportados(): void
+    {
+        $result = RunDiagnosticsService::sanitize([
+            'options_json' => '{"auth_password":"ULTRA_SECRET_456","token":"BAD_TOKEN_123"}',
+            'post_update_commands' => ['composer config --auth http-basic.example.com user ULTRA_SECRET_456'],
+            'command' => 'composer config --auth http-basic.example.com user ULTRA_SECRET_456',
+        ]);
+
+        $json = json_encode($result, JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString('ULTRA_SECRET_456', $json);
+        self::assertStringNotContainsString('BAD_TOKEN_123', $json);
+        self::assertStringContainsString('[argumentos omitidos]', $json);
+    }
+
     public function testDetalhesPorEtapaNaoCopiamContextoCompleto(): void
     {
         $context = [

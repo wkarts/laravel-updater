@@ -263,6 +263,20 @@ final class RunDiagnosticsService
         if (is_array($value)) {
             $result = [];
             foreach ($value as $key => $item) {
+                // Argumentos arbitrários de comandos podem conter segredos sem rótulo.
+                // Registra o comando-base, mas nunca seus argumentos inteiros.
+                if ($key === 'pre_update_commands' || $key === 'post_update_commands') {
+                    $items = is_array($item) ? $item : [$item];
+                    $result[$key] = array_map(
+                        static fn ($line) => self::commandSummary((string) $line),
+                        $items
+                    );
+                    continue;
+                }
+                if ($key === 'command' && is_string($item)) {
+                    $result[$key] = self::commandSummary($item);
+                    continue;
+                }
                 if (is_string($key) && preg_match(
                     '/pass(word)?|token|secret|api[_-]?key|authorization|credential|private[_-]?key|access[_-]?key|cookie|encryption[_-]?key|signature/i',
                     $key
@@ -285,6 +299,13 @@ final class RunDiagnosticsService
         }
 
         $value = mb_substr($value, 0, 10000);
+        // Strings JSON legadas são desserializadas para higienização por nome de chave.
+        if (in_array(substr(ltrim($value), 0, 1), ['{', '['], true)) {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                return self::sanitize($decoded, $depth + 1);
+            }
+        }
         $value = preg_replace('~(https?://)[^/\s@:]+:[^/\s@]+@~i', '$1[REDACTED]@', $value) ?? $value;
         $value = preg_replace('/\b(Bearer\s+)[a-z0-9._~+\/=-]+/i', '$1[REDACTED]', $value) ?? $value;
         $value = preg_replace(
@@ -294,6 +315,15 @@ final class RunDiagnosticsService
         ) ?? $value;
 
         return $value;
+    }
+
+    private static function commandSummary(string $line): string
+    {
+        $line = preg_replace('/\s+/', ' ', trim($line)) ?? '';
+        $parts = preg_split('/\s+/', $line, 4);
+        $prefix = implode(' ', array_slice($parts ?: [], 0, 3));
+
+        return self::sanitize($prefix) . (count($parts ?: []) > 3 ? ' [argumentos omitidos]' : '');
     }
 
     private function eventType(string $message): string

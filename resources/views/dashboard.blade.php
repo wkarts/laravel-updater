@@ -43,7 +43,22 @@
         @php
             $last = (array) ($status['last_run'] ?? []);
             $lastError = json_decode((string) ($last['error_json'] ?? ''), true);
-            $safeStatus = \Argws\LaravelUpdater\Support\RunDiagnosticsService::sanitize($status);
+            // Opções da execução e error_json originais podem conter segredos em JSON
+            // serializado. O dashboard expõe só metadados operacionais selecionados.
+            $safeStatus = [
+                'enabled' => (bool) ($status['enabled'] ?? false),
+                'mode' => $status['mode'] ?? null,
+                'channel' => $status['channel'] ?? null,
+                'revision' => $status['revision'] ?? null,
+                'last_run' => [
+                    'id' => $last['id'] ?? null,
+                    'status' => $last['status'] ?? null,
+                    'started_at' => $last['started_at'] ?? null,
+                    'finished_at' => $last['finished_at'] ?? null,
+                    'revision_before' => $last['revision_before'] ?? null,
+                    'revision_after' => $last['revision_after'] ?? null,
+                ],
+            ];
         @endphp
         <div class="run-metrics">
             <div><span>Atualizador</span><strong>{{ ($status['enabled'] ?? false) ? 'Ativo' : 'Inativo' }}</strong></div>
