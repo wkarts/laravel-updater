@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Argws\\LaravelUpdater\\Tests\\Unit;
+namespace Argws\LaravelUpdater\Tests\Unit;
 
-use PHPUnit\\Framework\\TestCase;
+use PHPUnit\Framework\TestCase;
 
 final class UpdateTargetSelectionTest extends TestCase
 {
@@ -28,9 +28,9 @@ final class UpdateTargetSelectionTest extends TestCase
         $this->assertIsString($controller);
         $this->assertIsString($dispatcher);
         $this->assertIsString($command);
-        $this->assertStringContainsString("'target_branch' => \\$targetBranch", $controller);
-        $this->assertStringContainsString("'target_branch' => (string) (\\$pending['target_branch'] ?? '')", $controller);
-        $this->assertStringContainsString("'--branch=' . (string) \\$options['target_branch']", $dispatcher);
-        $this->assertStringContainsString("'target_branch' => \\$branch", $command);
+        $this->assertStringContainsString("'target_branch' => \$targetBranch", $controller);
+        $this->assertStringContainsString("'target_branch' => (string) (\$pending['target_branch'] ?? '')", $controller);
+        $this->assertStringContainsString("'--branch=' . (string) \$options['target_branch']", $dispatcher);
+        $this->assertStringContainsString("'target_branch' => \$branch", $command);
     }
 }
