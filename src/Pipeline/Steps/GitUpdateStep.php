@@ -33,6 +33,9 @@ class GitUpdateStep implements PipelineStepInterface
         $isDryRun = (bool) ($context['options']['dry_run'] ?? false);
         $requestedUpdateType = trim((string) ($context['options']['update_type'] ?? config('updater.git.update_type', 'git_ff_only')));
         $requestedTag = trim((string) ($context['options']['target_tag'] ?? config('updater.git.tag', '')));
+        $requestedBranch = $requestedUpdateType === 'git_tag'
+            ? ''
+            : trim((string) ($context['options']['target_branch'] ?? ''));
 
         $configuredCwd = (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
         $cwd = $this->resolveGitWorkingDirectory($configuredCwd);
@@ -49,13 +52,16 @@ class GitUpdateStep implements PipelineStepInterface
         if ($requestedTag !== '') {
             $context['git_update_log'][] = sprintf('tag solicitada: %s', $requestedTag);
         }
+        if ($requestedBranch !== '') {
+            $context['git_update_log'][] = sprintf('branch solicitada: %s', $requestedBranch);
+        }
 
         config(['updater.git.update_type' => $requestedUpdateType]);
         if ($requestedTag !== '') {
             config(['updater.git.tag' => $requestedTag]);
         }
 
-        $this->prepareSourceContext($context, $requestedUpdateType, $requestedTag, $cwd, $env, $isDryRun);
+        $this->prepareSourceContext($context, $requestedUpdateType, $requestedTag, $requestedBranch, $cwd, $env, $isDryRun);
 
         if (!$isDryRun && $this->shellRunner !== null) {
             $this->autoStashWorkingTree($context, $cwd, $env);
@@ -150,8 +156,13 @@ class GitUpdateStep implements PipelineStepInterface
         $this->restoreDotEnv($context);
     }
 
-    private function prepareSourceContext(array &$context, string $requestedUpdateType, string $requestedTag, string $cwd, array $env, bool $isDryRun): void
+    private function prepareSourceContext(array &$context, string $requestedUpdateType, string $requestedTag, string $requestedBranch, string $cwd, array $env, bool $isDryRun): void
     {
+        if ($requestedBranch !== '') {
+            $this->assertValidGitReference('refs/heads/' . $requestedBranch, 'branch', $cwd, $env);
+            config(['updater.git.branch' => $requestedBranch]);
+        }
+
         $activeSource = $this->managerStore?->activeSource();
         if (!is_array($activeSource) || $this->shellRunner === null) {
             return;
@@ -159,11 +170,19 @@ class GitUpdateStep implements PipelineStepInterface
 
         $sourceType = (string) ($activeSource['type'] ?? 'git_ff_only');
         $url = (string) ($activeSource['repo_url'] ?? '');
-        $branch = (string) ($activeSource['branch'] ?? config('updater.git.branch', 'main'));
+        $branch = $requestedBranch !== ''
+            ? $requestedBranch
+            : trim((string) ($activeSource['branch'] ?? config('updater.git.branch', 'main')));
+        if ($branch === '') {
+            $branch = 'main';
+        }
+
+        $this->assertValidGitReference('refs/heads/' . $branch, 'branch', $cwd, $env);
+        config(['updater.git.branch' => $branch]);
 
         if ($url !== '' && !$isDryRun) {
             $url = $this->injectSourceCredentials($activeSource, $url);
-            config(['updater.git.remote_url' => $url, 'updater.git.branch' => $branch]);
+            config(['updater.git.remote_url' => $url]);
 
             if (!$this->isGitRepository($cwd, $env)) {
                 $autoInit = (bool) config('updater.git.auto_init', false);
@@ -180,7 +199,7 @@ class GitUpdateStep implements PipelineStepInterface
 
                 if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
                     $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
-                    $this->shellRunner->run(['git', 'fetch', '--depth=' . $depth, 'origin', 'tag', $requestedTag], $cwd, $env);
+                    $this->shellRunner->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'refs/tags/' . $requestedTag . ':refs/tags/' . $requestedTag], $cwd, $env);
                 } else {
                     $this->shellRunner->runOrFail(['git', 'fetch', '--prune', '--depth=1', 'origin', $branch], $cwd, $env);
                 }
@@ -190,6 +209,18 @@ class GitUpdateStep implements PipelineStepInterface
         $context['source_id'] = (int) ($activeSource['id'] ?? 0);
         $context['source_name'] = (string) ($activeSource['name'] ?? '');
         $context['source_type'] = $sourceType;
+    }
+
+    private function assertValidGitReference(string $reference, string $label, string $cwd, array $env): void
+    {
+        if ($this->shellRunner === null) {
+            throw new \RuntimeException('ShellRunner indisponível para validar a referência Git.');
+        }
+
+        $result = $this->shellRunner->run(['git', 'check-ref-format', $reference], $cwd, $env);
+        if (!is_array($result) || (int) ($result['exit_code'] ?? 1) !== 0) {
+            throw new \RuntimeException('Referência de ' . $label . ' inválida: ' . $reference);
+        }
     }
 
     private function injectSourceCredentials(array $source, string $url): string
@@ -419,7 +450,7 @@ class GitUpdateStep implements PipelineStepInterface
 
         if ($requestedUpdateType === 'git_tag' && $requestedTag !== '') {
             $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
-            $this->shellRunner->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'tag', $requestedTag], $cwd, $env);
+            $this->shellRunner->runOrFail(['git', 'fetch', '--depth=' . $depth, 'origin', 'refs/tags/' . $requestedTag . ':refs/tags/' . $requestedTag], $cwd, $env);
             try {
                 $this->shellRunner->runOrFail(['git', 'checkout', '--detach', $requestedTag], $cwd, $env);
             } catch (\Throwable $e) {
