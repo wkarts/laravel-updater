@@ -214,12 +214,12 @@ class GitUpdateStep implements PipelineStepInterface
     private function assertValidGitReference(string $reference, string $label, string $cwd, array $env): void
     {
         if ($this->shellRunner === null) {
-            throw new \\RuntimeException('ShellRunner indisponível para validar a referência Git.');
+            throw new \RuntimeException('ShellRunner indisponível para validar a referência Git.');
         }
 
         $result = $this->shellRunner->run(['git', 'check-ref-format', $reference], $cwd, $env);
         if (!is_array($result) || (int) ($result['exit_code'] ?? 1) !== 0) {
-            throw new \\RuntimeException('Referência de ' . $label . ' inválida: ' . $reference);
+            throw new \RuntimeException('Referência de ' . $label . ' inválida: ' . $reference);
         }
     }
 
