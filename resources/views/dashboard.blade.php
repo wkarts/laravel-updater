@@ -72,7 +72,9 @@
                 <strong>Última atualização falhou</strong>
                 <p>{{ \Argws\LaravelUpdater\Support\RunDiagnosticsService::sanitize((string) ($lastError['message'] ?? 'Confira o diagnóstico da execução.')) }}</p>
                 @if(!empty($last['id']))
-                    <a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $last['id']]) }}">Ver causa e etapas da execução #{{ $last['id'] }}</a>
+                    @if(\Illuminate\Support\Facades\Route::has('updater.runs.show'))
+                        <a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $last['id']]) }}">Ver causa e etapas da execução #{{ $last['id'] }}</a>
+                    @endif
                 @endif
             </div>
         @endif
