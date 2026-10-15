@@ -39,7 +39,7 @@ final class RunViewsCachedRoutesTest extends TestCase
     public function testListingRendersWithoutNewDownloadRoute(): void
     {
         self::assertFalse(Route::has('updater.runs.diagnostics.download'));
-        $html = $this->app['view']->make('laravel-updater::sections.runs', ['runs' => [$this->run()]])->render();
+        $html = $this->app['view']->make('laravel-updater::sections.runs', ['runs' => [$this->runFixture()]])->render();
         self::assertStringContainsString('Histórico completo', $html);
         self::assertStringContainsString('/_updater/runs/186', $html);
         self::assertStringContainsString('download=json', $html);
@@ -50,7 +50,7 @@ final class RunViewsCachedRoutesTest extends TestCase
     {
         self::assertFalse(Route::has('updater.runs.diagnostics.download'));
         $html = $this->app['view']->make('laravel-updater::runs.show', [
-            'run' => $this->run(),
+            'run' => $this->runFixture(),
             'diagnostics' => [
                 'summary' => ['first_failed_step' => 'git_update', 'event_count' => 1],
                 'error' => ['message' => 'would clobber existing tag'],
@@ -67,7 +67,7 @@ final class RunViewsCachedRoutesTest extends TestCase
         self::assertStringContainsString('download=zip', $html);
     }
 
-    private function run(): array
+    private function runFixture(): array
     {
         return [
             'id' => 186, 'status' => 'failed', 'started_at' => '2026-10-15T17:36:28-03:00',
