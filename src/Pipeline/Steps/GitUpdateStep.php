@@ -202,7 +202,7 @@ class GitUpdateStep implements PipelineStepInterface
                     $this->assertValidGitReference('refs/tags/' . $requestedTag, 'tag', $cwd, $env);
                     $depth = max(1, (int) config('updater.git.tag_fetch_depth', 1));
                     $this->shellRunner->runOrFail([
-                        'git', 'fetch', '--no-tags', '--depth=' . $depth, 'origin',
+                        'git', 'fetch', '--no-tags', '--no-prune', '--no-prune-tags', '--refmap=', '--depth=' . $depth, 'origin',
                         '+refs/tags/' . $requestedTag . ':' . GitDriver::remoteTagTargetRef($requestedTag),
                     ], $cwd, $env);
                 } else {
@@ -403,7 +403,7 @@ class GitUpdateStep implements PipelineStepInterface
 
         $result = $this->shellRunner->run(['git', 'describe', '--tags', '--exact-match'], $cwd, $env);
         if (!is_array($result) || (int) ($result['exit_code'] ?? 1) !== 0) {
-            return null;
+            return GitDriver::fetchedTagAtHead($this->shellRunner, $cwd, $env);
         }
 
         $tag = trim((string) ($result['stdout'] ?? ''));
@@ -459,7 +459,7 @@ class GitUpdateStep implements PipelineStepInterface
             $ref = GitDriver::remoteTagTargetRef($requestedTag);
             $commitRef = $ref . '^{commit}';
             $this->shellRunner->runOrFail([
-                'git', 'fetch', '--no-tags', '--depth=' . $depth, 'origin',
+                'git', 'fetch', '--no-tags', '--no-prune', '--no-prune-tags', '--refmap=', '--depth=' . $depth, 'origin',
                 '+refs/tags/' . $requestedTag . ':' . $ref,
             ], $cwd, $env);
             try {
