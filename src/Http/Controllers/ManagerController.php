@@ -1186,14 +1186,30 @@ class ManagerController extends Controller
 
             return $status;
         } catch (\Throwable $e) {
+            // Falha remota não torna a revisão instalada desconhecida.
+            // Consultar apenas HEAD local, sem qualquer operação de rede.
+            $localRevision = 'N/A';
+            try {
+                $git = app(ShellRunner::class)->run(['git', 'rev-parse', 'HEAD'], base_path());
+                if ((int) ($git['exit_code'] ?? 1) === 0) {
+                    $revision = trim((string) ($git['stdout'] ?? ''));
+                    if ($revision !== '') {
+                        $localRevision = $revision;
+                    }
+                }
+            } catch (\Throwable) {
+                // Mantém o aviso original de falha remota.
+            }
+
             return [
-                'current_revision' => 'N/A',
+                'current_revision' => $localRevision,
                 'remote' => 'N/A',
                 'behind_by_commits' => 0,
                 'has_updates' => false,
                 'latest_tag' => null,
                 'has_update_by_tag' => false,
                 'latest_tag_release_notes_url' => null,
+                'status_unavailable' => true,
                 'warning' => 'Falha ao consultar atualizações: ' . $e->getMessage(),
             ];
         }

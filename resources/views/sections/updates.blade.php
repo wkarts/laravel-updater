@@ -7,11 +7,13 @@
     <div class="update-status-grid">
         <p><strong>Revisão atual:</strong> {{ $statusCheck['current_revision'] ?? '-' }}</p>
         <p><strong>Revisão remota:</strong> {{ $statusCheck['remote'] ?? '-' }}</p>
-        <p><strong>Commits pendentes:</strong> {{ (int) ($statusCheck['behind_by_commits'] ?? 0) }}</p>
+        <p><strong>Commits pendentes:</strong> {{ !empty($statusCheck['status_unavailable']) ? '-' : (int) ($statusCheck['behind_by_commits'] ?? 0) }}</p>
         <p><strong>Última tag remota:</strong> {{ $statusCheck['latest_tag'] ?? '-' }}</p>
     </div>
     <p><strong>Update disponível:</strong>
-        @if((bool) ($statusCheck['has_updates'] ?? false) || (bool) ($statusCheck['has_update_by_tag'] ?? false))
+        @if(!empty($statusCheck['status_unavailable']))
+            <span style="color:#b45309;font-weight:700;">INDETERMINADO</span>
+        @elseif((bool) ($statusCheck['has_updates'] ?? false) || (bool) ($statusCheck['has_update_by_tag'] ?? false))
             <span style="color:#16a34a;font-weight:700;">SIM</span>
         @else
             <span style="color:#64748b;font-weight:700;">NÃO</span>
