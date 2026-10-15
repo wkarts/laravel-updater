@@ -21,8 +21,13 @@
         </div>
         <div class="form-inline">
             <span class="run-pill run-pill-{{ $status === 'success' ? 'ok' : ($status === 'failed' ? 'failed' : 'neutral') }}">{{ strtoupper($status) }}</span>
-            <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'json']) }}">Baixar JSON</a>
-            <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'zip']) }}">Baixar ZIP</a>
+            {{-- Evita RouteNotFoundException com instalações que preservaram route:cache antigo. --}}
+            @if(\Illuminate\Support\Facades\Route::has('updater.runs.diagnostics.download'))
+                <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'json']) }}">Baixar JSON</a>
+                <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'zip']) }}">Baixar ZIP</a>
+            @else
+                <span class="muted" title="Atualize o cache de rotas após instalar o pacote.">Exportação temporariamente indisponível</span>
+            @endif
         </div>
     </div>
     @if($status === 'failed')

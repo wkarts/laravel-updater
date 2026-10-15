@@ -17,6 +17,30 @@ final class RunDiagnosticsRoutesTest extends TestCase
         self::assertStringContainsString('downloadRunDiagnostics', $routes);
     }
 
+    public function testViewsNaoDependemDeRotasNovasEmCacheLegado(): void
+    {
+        $root = dirname(__DIR__, 2) . '/resources/views/';
+        $listing = file_get_contents($root . 'sections/runs.blade.php');
+        $details = file_get_contents($root . 'runs/show.blade.php');
+        $dashboard = file_get_contents($root . 'dashboard.blade.php');
+        $updates = file_get_contents($root . 'sections/updates.blade.php');
+
+        self::assertIsString($listing);
+        self::assertIsString($details);
+        self::assertIsString($dashboard);
+        self::assertIsString($updates);
+
+        // O menu Execuções deve abrir mesmo quando o route:cache antigo não
+        // contém os links adicionados numa versão posterior do updater.
+        self::assertStringContainsString("Route::has('updater.runs.diagnostics.download')", $listing);
+        self::assertStringContainsString("Route::has('updater.runs.show')", $listing);
+        self::assertStringContainsString('Detalhes indisponíveis', $listing);
+        self::assertStringContainsString("Route::has('updater.runs.diagnostics.download')", $details);
+        self::assertStringContainsString('Exportação temporariamente indisponível', $details);
+        self::assertStringContainsString("Route::has('updater.runs.show')", $dashboard);
+        self::assertStringContainsString("Route::has('updater.runs.show')", $updates);
+    }
+
     public function testDashboardAndExecutionPageSurfaceFailureAndDownload(): void
     {
         $root = dirname(__DIR__, 2);
