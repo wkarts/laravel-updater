@@ -25,6 +25,10 @@
             @if(\Illuminate\Support\Facades\Route::has('updater.runs.diagnostics.download'))
                 <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'json']) }}">Baixar JSON</a>
                 <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'zip']) }}">Baixar ZIP</a>
+            @elseif(\Illuminate\Support\Facades\Route::has('updater.runs.show'))
+                {{-- O endpoint legado também atende ?download=json|zip. --}}
+                <a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $run['id'], 'download' => 'json']) }}">Baixar JSON</a>
+                <a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $run['id'], 'download' => 'zip']) }}">Baixar ZIP</a>
             @else
                 <span class="muted" title="Atualize o cache de rotas após instalar o pacote.">Exportação temporariamente indisponível</span>
             @endif

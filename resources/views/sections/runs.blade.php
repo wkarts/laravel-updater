@@ -29,6 +29,10 @@
                         @if($diagnosticsDownloadAvailable)
                             <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'json']) }}">JSON</a>
                             <a class="btn btn-action-sm" href="{{ route('updater.runs.diagnostics.download', ['id' => $run['id'], 'format' => 'zip']) }}">ZIP</a>
+                        @elseif($runDetailsAvailable)
+                            {{-- Usa apenas a rota antiga (de detalhes) se o cache ainda não possuir a nova. --}}
+                            <a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $run['id'], 'download' => 'json']) }}">JSON</a>
+                            <a class="btn btn-action-sm" href="{{ route('updater.runs.show', ['id' => $run['id'], 'download' => 'zip']) }}">ZIP</a>
                         @endif
                     </td>
                 </tr>

@@ -204,6 +204,13 @@ class OperationsController extends Controller
 
     public function runDetails(int $id)
     {
+        // Compatibilidade para hosts com route:cache anterior à rota específica
+        // de exportação. Usa a rota de detalhes já protegida pelo mesmo middleware.
+        $format = request()->query('download');
+        if (is_string($format) && in_array($format, ['json', 'zip'], true)) {
+            return $this->downloadRunDiagnostics($id, $format);
+        }
+
         $run = $this->stateStore->findRun($id);
         abort_if($run === null, 404);
 
