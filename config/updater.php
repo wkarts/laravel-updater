@@ -253,6 +253,8 @@ return [
         'url' => env('UPDATER_HEALTHCHECK_URL', env('APP_URL', 'http://localhost')),
         'timeout' => (int) env('UPDATER_HEALTHCHECK_TIMEOUT', 5),
         'skip_localhost' => (bool) env('UPDATER_HEALTHCHECK_SKIP_LOCALHOST', true),
+        // Readiness já verifica o boot HTTP; consulta de banco é opt-in.
+        'check_database' => (bool) env('UPDATER_HEALTHCHECK_CHECK_DATABASE', false),
     ],
 
 
