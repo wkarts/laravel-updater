@@ -77,7 +77,7 @@ class OperationsController extends Controller
                     'allow_dirty' => false,
                     'update_type' => $updateType,
                     'target_tag' => $targetTag,
-                'target_branch' => $targetBranch,
+                    'target_branch' => $targetBranch,
                     'profile_id' => (int) $data['profile_id'],
                     'source_id' => (int) $data['source_id'],
                     'sync' => false,
