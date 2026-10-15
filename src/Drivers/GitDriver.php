@@ -11,6 +11,38 @@ use Argws\LaravelUpdater\Support\ShellRunner;
 
 class GitDriver implements CodeDriverInterface
 {
+    // As tags de canal (ex.: ui-continuous) podem mudar no remoto.
+    // Nunca atualizar refs/tags/* do cliente; somente a referência privada
+    // e controlada pelo próprio updater.
+    public const REMOTE_TAG_TARGET_PREFIX = 'refs/laravel-updater/targets/';
+
+    public static function remoteTagTargetRef(string $tag): string
+    {
+        return self::REMOTE_TAG_TARGET_PREFIX . $tag;
+    }
+
+    public static function fetchedTagAtHead(ShellRunner $shell, string $cwd, array $env = []): ?string
+    {
+        // git describe --tags não consulta os refs internos. O fallback mantém
+        // a identificação da versão sem sobrescrever tags locais do cliente.
+        $result = $shell->run([
+            'git', 'for-each-ref', '--points-at=HEAD', '--sort=-version:refname',
+            '--format=%(refname)', self::REMOTE_TAG_TARGET_PREFIX,
+        ], $cwd, $env);
+        if ((int) ($result['exit_code'] ?? 1) !== 0) {
+            return null;
+        }
+        foreach (preg_split('/\R/', trim((string) ($result['stdout'] ?? ''))) ?: [] as $ref) {
+            if (str_starts_with($ref, self::REMOTE_TAG_TARGET_PREFIX)) {
+                $tag = substr($ref, strlen(self::REMOTE_TAG_TARGET_PREFIX));
+                if ($tag !== '') {
+                    return $tag;
+                }
+            }
+        }
+        return null;
+    }
+
     public function __construct(private readonly ShellRunner $shellRunner, private readonly array $config)
     {
     }
@@ -216,21 +248,38 @@ class GitDriver implements CodeDriverInterface
                     throw new \RuntimeException('Modo tag ativo, mas UPDATER_GIT_TARGET_TAG não foi informado.');
                 }
 
-                $tagFetchArgs = ['git', 'fetch', '--depth=' . $depth];
-                if ($shouldPrune) {
-                    $tagFetchArgs[] = '--prune';
-                }
-                $tagFetchArgs[] = $remote;
-                $tagFetchArgs[] = 'refs/tags/' . $tag . ':refs/tags/' . $tag;
+                $this->shellRunner->runOrFailWithTimeout(
+                    ['git', 'check-ref-format', 'refs/tags/' . $tag],
+                    $path, $this->gitEnv(), $timeout
+                );
 
-                // Busca somente a tag alvo (shallow), evitando fetch amplo de refs.
+                // Retém o HEAD anterior mesmo em checkout detached e com GC ativo.
+                // Uma única referência é reutilizada para o rollback da última troca.
+                $previous = $this->currentRevision();
+                if ($previous !== 'N/A') {
+                    $this->shellRunner->runOrFailWithTimeout([
+                        'git', 'update-ref', 'refs/laravel-updater/rollback-before-tag-update', $previous,
+                    ], $path, $this->gitEnv(), $timeout);
+                }
+
+                $targetRef = self::remoteTagTargetRef($tag);
+                // O + atualiza somente o ref interno do updater, sem alterar
+                // refs/tags/* do cliente nem importar outras tags do remoto.
+                // Funciona com tags leves, anotadas e canais móveis.
+                $tagFetchArgs = [
+                    'git', 'fetch', '--no-tags', '--no-prune', '--no-prune-tags', '--refmap=', '--depth=' . max(1, $depth),
+                    $remote, '+refs/tags/' . $tag . ':' . $targetRef,
+                ];
                 $this->shellRunner->runOrFailWithTimeout($tagFetchArgs, $path, $this->gitEnv(), $timeout);
 
-                // Se existirem arquivos untracked que conflitam com o conteúdo do tag, o checkout aborta.
-                // Ex.: "untracked working tree files would be overwritten by checkout".
-                $this->quarantineUntrackedConflicts('tags/' . $tag, $path, $timeout);
+                $commitRef = $targetRef . '^{commit}';
+                // Resolve o alvo remoto, nunca a tag local potencialmente antiga.
+                $this->quarantineUntrackedConflicts($commitRef, $path, $timeout);
 
-                $this->shellRunner->runOrFailWithTimeout(['git', 'checkout', '-f', 'tags/' . $tag], $path, $this->gitEnv(), $timeout);
+                $this->shellRunner->runOrFailWithTimeout(
+                    ['git', 'checkout', '--detach', '-f', $commitRef],
+                    $path, $this->gitEnv(), $timeout
+                );
                 $this->restoreSelfPackageIfMissing($selfPackageBackup);
                 $this->restoreVendorIfCriticalMissing($path, $vendorBackup);
             } else {
@@ -600,8 +649,12 @@ class GitDriver implements CodeDriverInterface
         $remote = (string) ($config['remote'] ?? 'origin');
         $branch = (string) ($config['branch'] ?? 'main');
 
-        // Atualiza apenas o branch alvo (shallow) e volta pro revision (hard)
-        $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--no-tags', '--prune', '--depth=' . $depth, $remote, $branch], $path, $this->gitEnv(), $timeout);
+        // Para tags, a revisão anterior é retida localmente. Não exigir uma
+        // branch remota ou conexão disponível para restaurar um commit já salvo.
+        $saved = $this->shellRunner->run(['git', 'cat-file', '-e', $revision . '^{commit}'], $path, $this->gitEnv());
+        if ((int) ($saved['exit_code'] ?? 1) !== 0) {
+            $this->shellRunner->runOrFailWithTimeout(['git', 'fetch', '--no-tags', '--prune', '--depth=' . $depth, $remote, $branch], $path, $this->gitEnv(), $timeout);
+        }
         $this->shellRunner->runOrFailWithTimeout(['git', 'reset', '--hard', $revision], $path, $this->gitEnv(), $timeout);
 
         if ((bool) env('UPDATER_GIT_AUTO_GC', true)) {
@@ -673,7 +726,7 @@ class GitDriver implements CodeDriverInterface
     {
         $result = $this->shellRunner->run(['git', 'describe', '--tags', '--exact-match'], $this->cwd(), $this->gitEnv());
         if ($result['exit_code'] !== 0) {
-            return null;
+            return self::fetchedTagAtHead($this->shellRunner, $this->cwd(), $this->gitEnv());
         }
 
         $tag = trim((string) $result['stdout']);
@@ -797,12 +850,21 @@ class GitDriver implements CodeDriverInterface
         $targetTag = trim((string) ($config['tag'] ?? ''));
 
         if ($updateType === 'git_tag' && $targetTag !== '') {
-            $fetchTags = $this->shellRunner->run(['git', 'fetch', '--tags', '--force', $remote], $cwd, $env);
-            if ($fetchTags['exit_code'] !== 0) {
+            $ref = self::remoteTagTargetRef($targetTag);
+            $validTag = $this->shellRunner->run(['git', 'check-ref-format', 'refs/tags/' . $targetTag], $cwd, $env);
+            if ((int) ($validTag['exit_code'] ?? 1) !== 0) {
                 return false;
             }
 
-            $checkoutTag = $this->shellRunner->run(['git', 'checkout', '--detach', '--force', $targetTag], $cwd, $env);
+            $fetchTags = $this->shellRunner->run([
+                'git', 'fetch', '--no-tags', '--no-prune', '--no-prune-tags', '--refmap=', '--depth=1', $remote,
+                '+refs/tags/' . $targetTag . ':' . $ref,
+            ], $cwd, $env);
+            if ((int) ($fetchTags['exit_code'] ?? 1) !== 0) {
+                return false;
+            }
+
+            $checkoutTag = $this->shellRunner->run(['git', 'checkout', '--detach', '--force', $ref . '^{commit}'], $cwd, $env);
             if ($checkoutTag['exit_code'] !== 0) {
                 return false;
             }
