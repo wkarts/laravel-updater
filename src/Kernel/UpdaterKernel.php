@@ -68,8 +68,10 @@ class UpdaterKernel
             new SeedStep($services['shell'], $services['store']),
             new SqlPatchStep((string) config('updater.patches.path'), $services['store']),
             new BuildAssetsStep($services['shell'], (bool) config('updater.build_assets', false)),
-            new CacheClearStep($services['shell']),
+            // Scripts posteriores podem atualizar vendor/provedores; gerar cache de
+            // rotas apenas depois deles evita readiness 404 por rota desatualizada.
             new PostUpdateCommandsStep($services['shell']),
+            new CacheClearStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
             new MaintenanceOffStep($services['shell'], $services['lock']),
         ];
@@ -137,7 +139,7 @@ class UpdaterKernel
                     'versao_atual' => $this->codeDriver->currentRevision(),
                     'versao_alvo' => $status['remote'] ?? null,
                     'diff_commits' => $status['behind_by_commits'] ?? 0,
-                    'steps' => ['lock','backup_full','pre_update_commands','maintenance_on','git_update','psr4_sanitize','composer_install','migrate','seed','sql_patch','build_assets','cache_clear','post_update_commands','health_check','maintenance_off'],
+                    'steps' => ['lock','backup_full','pre_update_commands','maintenance_on','git_update','psr4_sanitize','composer_install','migrate','seed','sql_patch','build_assets','post_update_commands','cache_clear','health_check','maintenance_off'],
                     'comandos_simulados' => [
                         'git fetch origin <branch>',
                         'git rev-list --count HEAD..origin/<branch>',

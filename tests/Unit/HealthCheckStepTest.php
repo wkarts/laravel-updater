@@ -75,6 +75,71 @@ final class HealthCheckStepTest extends TestCase
         self::assertSame('configured_url', $context['healthcheck']['mode']);
     }
 
+    public function testRotaInterna404ReconstroiCacheERetentaUmaVez(): void
+    {
+        $step = new class(['enabled' => true, 'url' => 'https://app.example.test']) extends HealthCheckStep {
+            public array $requests = [];
+            public int $repairs = 0;
+
+            protected function request(string $url, int $timeout): array
+            {
+                $this->requests[] = $url;
+
+                return count($this->requests) === 1
+                    ? ['status' => 404, 'body' => 'Not Found', 'duration_ms' => 12]
+                    : ['status' => 200, 'body' => '{"updater_health":true,"status":"ok"}', 'duration_ms' => 8];
+            }
+
+            protected function refreshRouteCache(): array
+            {
+                $this->repairs++;
+
+                return ['success' => true, 'exit_code' => 0, 'reason' => 'route_cache_rebuilt'];
+            }
+        };
+
+        $context = ['maintenance' => true, 'lock' => true];
+        $step->handle($context);
+
+        self::assertCount(2, $step->requests);
+        self::assertSame(1, $step->repairs);
+        self::assertSame(404, $context['healthcheck']['initial_http_status']);
+        self::assertSame(200, $context['healthcheck']['http_status']);
+        self::assertTrue($context['healthcheck']['healthy']);
+        self::assertTrue($context['maintenance']);
+        self::assertTrue($context['lock']);
+    }
+
+    public function testRotaInterna404ComCacheFalhandoContinuaBloqueandoUpdate(): void
+    {
+        $step = new class(['enabled' => true, 'url' => 'https://app.example.test']) extends HealthCheckStep {
+            public int $attempts = 0;
+
+            protected function request(string $url, int $timeout): array
+            {
+                $this->attempts++;
+
+                return ['status' => 404, 'body' => 'Not Found', 'duration_ms' => 5];
+            }
+
+            protected function refreshRouteCache(): array
+            {
+                return ['success' => false, 'exit_code' => 1, 'reason' => 'route_cache_failed'];
+            }
+        };
+
+        $context = ['maintenance' => true];
+
+        try {
+            $step->handle($context);
+            self::fail('HTTP 404 deve interromper a pipeline.');
+        } catch (UpdaterException $exception) {
+            self::assertStringContainsString('HTTP 404', $exception->getMessage());
+            self::assertSame(1, $step->attempts);
+            self::assertSame('route_cache_failed', $context['healthcheck']['route_cache_repair']['reason']);
+        }
+    }
+
     public function testHttp503AindaEUmErroRealDeSaude(): void
     {
         $step = $this->stub([

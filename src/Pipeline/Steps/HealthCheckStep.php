@@ -6,6 +6,7 @@ namespace Argws\LaravelUpdater\Pipeline\Steps;
 
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
 use Argws\LaravelUpdater\Exceptions\UpdaterException;
+use Argws\LaravelUpdater\Support\ShellRunner;
 
 class HealthCheckStep implements PipelineStepInterface
 {
@@ -34,6 +35,20 @@ class HealthCheckStep implements PipelineStepInterface
         $result = $this->request($url, $timeout);
         $status = (int) ($result['status'] ?? 0);
         $body = $result['body'] ?? false;
+        $firstStatus = $status;
+        $routeRepair = null;
+
+        // Uma instalação pode trocar o pacote nos post-update commands.
+        // Se o endpoint recém-incluído estiver ausente no cache antigo,
+        // reconstrói as rotas UMA vez, sem liberar manutenção/lock, e testa novamente.
+        if ($internal && $status === 404 && (bool) ($this->config['retry_route_cache_on_404'] ?? true)) {
+            $routeRepair = $this->refreshRouteCache();
+            if (($routeRepair['success'] ?? false) === true) {
+                $result = $this->request($url, $timeout);
+                $status = (int) ($result['status'] ?? 0);
+                $body = $result['body'] ?? false;
+            }
+        }
 
         // Respeita o contrato anterior: endpoints personalizados precisam responder HTTP 200.
         $healthy = $status === 200 && $body !== false;
@@ -50,8 +65,10 @@ class HealthCheckStep implements PipelineStepInterface
             'url' => $this->safeUrl($url),
             'mode' => $internal ? 'updater_readiness' : 'configured_url',
             'http_status' => $status,
+            'initial_http_status' => $firstStatus,
             'duration_ms' => (int) ($result['duration_ms'] ?? 0),
             'healthy' => $healthy,
+            'route_cache_repair' => $routeRepair,
         ];
 
         if ($healthy) {
@@ -75,6 +92,28 @@ class HealthCheckStep implements PipelineStepInterface
 
     public function rollback(array &$context): void
     {
+    }
+
+    /**
+     * Recria apenas o cache de rotas, sem liberar a manutenção ou executar rollback.
+     * Em falha, não mascara o HTTP original: o healthcheck continua falhando.
+     *
+     * @return array{success:bool,exit_code:int,reason:string}
+     */
+    protected function refreshRouteCache(): array
+    {
+        try {
+            $result = app(ShellRunner::class)->run(['php', 'artisan', 'route:cache']);
+            $code = (int) ($result['exit_code'] ?? 1);
+
+            return [
+                'success' => $code === 0,
+                'exit_code' => $code,
+                'reason' => $code === 0 ? 'route_cache_rebuilt' : 'route_cache_failed',
+            ];
+        } catch (\Throwable) {
+            return ['success' => false, 'exit_code' => 1, 'reason' => 'route_cache_exception'];
+        }
     }
 
     /**

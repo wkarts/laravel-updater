@@ -255,6 +255,7 @@ return [
         'skip_localhost' => (bool) env('UPDATER_HEALTHCHECK_SKIP_LOCALHOST', true),
         // Readiness já verifica o boot HTTP; consulta de banco é opt-in.
         'check_database' => (bool) env('UPDATER_HEALTHCHECK_CHECK_DATABASE', false),
+        'retry_route_cache_on_404' => (bool) env('UPDATER_HEALTHCHECK_RETRY_ROUTE_CACHE_ON_404', true),
     ],
 
 

@@ -32,6 +32,21 @@ class UpdaterKernelPipelineSafetyTest extends TestCase
         $this->assertLessThan($release, $health);
     }
 
+    public function testRouteCacheEAtualizadoDepoisDosComandosPosteriores(): void
+    {
+        $source = file_get_contents(__DIR__ . '/../../src/Kernel/UpdaterKernel.php');
+        self::assertIsString($source);
+
+        $commands = strpos($source, 'new PostUpdateCommandsStep(');
+        $cache = strpos($source, 'new CacheClearStep(');
+        $health = strpos($source, 'new HealthCheckStep(');
+        self::assertNotFalse($commands);
+        self::assertNotFalse($cache);
+        self::assertNotFalse($health);
+        self::assertLessThan($cache, $commands);
+        self::assertLessThan($health, $cache);
+    }
+
     public function testBackupAconteceAntesDaManutencaoEDoGitUpdate(): void
     {
         $source = file_get_contents(__DIR__ . '/../../src/Kernel/UpdaterKernel.php');
