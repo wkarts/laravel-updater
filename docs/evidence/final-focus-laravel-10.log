@@ -1,0 +1,10 @@
+PHPUnit 10.5.66 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.3.6
+Configuration: /workspace/scratch/db3f733b96d2/compat/laravel-10/phpunit.xml
+
+.........................................................         57 / 57 (100%)
+
+Time: 00:05.065, Memory: 38.50 MB
+
+OK (57 tests, 496 assertions)

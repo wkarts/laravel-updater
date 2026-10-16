@@ -1,0 +1,13 @@
+{
+  "expected_tests": 212,
+  "exit_code": 0,
+  "log": "/workspace/scratch/db3f733b96d2/compat/results/final-full-laravel-10.log",
+  "junit": "/workspace/scratch/db3f733b96d2/compat/results/final-full-laravel-10.xml",
+  "summary_present": true,
+  "tests": 212,
+  "assertions": 1185,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "completed": true
+}

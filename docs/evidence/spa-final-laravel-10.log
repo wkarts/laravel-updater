@@ -1,0 +1,35 @@
+PHPUnit 10.5.66 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.3.6
+Configuration: /workspace/scratch/db3f733b96d2/compat/laravel-10/phpunit.xml
+
+...................                                               19 / 19 (100%)
+
+Time: 00:00.854, Memory: 42.50 MB
+
+Native Maintenance Presentation (Argws\LaravelUpdater\Tests\Feature\NativeMaintenancePresentation)
+ ✔ Native prerendered 503 loads vue assets while admin still requires authentication
+ ✔ Native exclusions preserve host middleware and its existing rules
+
+Spa Authentication Flow (Argws\LaravelUpdater\Tests\Feature\SpaAuthenticationFlow)
+ ✔ Login rejects missing csrf and authenticated cookie guards real pages
+ ✔ Two factor login uses pending session and never returns the existing secret
+ ✔ All principal get destinations resolve to their vue pages after real login
+ ✔ Detail and edit destinations keep vue keys and approval context
+ ✔ Compiled route cache keeps new ui and api routes distinct
+
+Spa Presentation (Argws\LaravelUpdater\Tests\Feature\SpaPresentation)
+ ✔ Every namespace view uses only the vue shell and whitelisted data
+ ✔ Spa navigation runs the same routes and returns prefix aware context
+ ✔ Created api token is consumed only once
+ ✔ Denied screen is vue and does not disclose the exception message
+ ✔ Compiled assets are available without publishing
+ ✔ Published legacy override cannot execute blade or resolve removed routes
+ ✔ Maintenance remains a 503 vue page even outside updater routes
+ ✔ Old cached route names use compiled assets through their legacy endpoints
+ ✔ Backend authorization still rejects an admin with restricted permissions
+ ✔ Operational json never includes stored run options or errors
+ ✔ Host authentication sections never redirect to missing crud routes for either prefix
+ ✔ Host legacy trigger still dispatches an explicit simulation
+
+OK (19 tests, 221 assertions)

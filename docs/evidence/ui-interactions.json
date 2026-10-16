@@ -1,0 +1,107 @@
+{
+  "fixture": true,
+  "results": [
+    {
+      "test": "settings-tab",
+      "width": 320,
+      "tab": "Identidade",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 320,
+      "tab": "Comportamento",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 320,
+      "tab": "Armazenamento",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 320,
+      "tab": "Tokens de API",
+      "overflow": false
+    },
+    {
+      "test": "mobile-menu",
+      "open": true
+    },
+    {
+      "test": "settings-tab",
+      "width": 768,
+      "tab": "Identidade",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 768,
+      "tab": "Comportamento",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 768,
+      "tab": "Armazenamento",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 768,
+      "tab": "Tokens de API",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 1280,
+      "tab": "Identidade",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 1280,
+      "tab": "Comportamento",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 1280,
+      "tab": "Armazenamento",
+      "overflow": false
+    },
+    {
+      "test": "settings-tab",
+      "width": 1280,
+      "tab": "Tokens de API",
+      "overflow": false
+    },
+    {
+      "test": "token-create-reveal",
+      "revealed": true
+    },
+    {
+      "test": "token-refresh-hidden",
+      "hidden": true
+    },
+    {
+      "test": "webhook-create-secret",
+      "revealed": true
+    },
+    {
+      "test": "webhook-refresh-hidden",
+      "hidden": true,
+      "listed": true
+    },
+    {
+      "test": "internal-dialog",
+      "cancelVisible": true
+    },
+    {
+      "test": "labels-and-semantic",
+      "unlabelled": 0
+    }
+  ],
+  "errors": []
+}

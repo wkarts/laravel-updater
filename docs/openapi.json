@@ -1,0 +1,890 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Laravel Updater API",
+    "version": "0.2.0",
+    "description": "Prefixo configurável, tokens legados preservados. Atualizações reais exigem confirmação explícita. Aprovações permanecem no painel."
+  },
+  "servers": [
+    {
+      "url": "/_updater"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    },
+    {
+      "updaterToken": []
+    }
+  ],
+  "paths": {
+    "/api/status": {
+      "get": {
+        "summary": "Consultar estado",
+        "operationId": "status",
+        "description": "Escopo: status:read. Limite compartilhado por token: 60 leituras/minuto.",
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token inválido ou revogado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo insuficiente ou operação desabilitada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite excedido; Retry-After: 60.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependência temporariamente indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/check": {
+      "get": {
+        "summary": "Verificar atualizações",
+        "operationId": "check",
+        "description": "Escopo: check:read. Limite compartilhado por token: 60 leituras/minuto.",
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token inválido ou revogado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo insuficiente ou operação desabilitada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite excedido; Retry-After: 60.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependência temporariamente indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "allow_dirty",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ]
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "summary": "Consultar execuções",
+        "operationId": "runs",
+        "description": "Escopo: runs:read. Limite compartilhado por token: 60 leituras/minuto.",
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token inválido ou revogado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo insuficiente ou operação desabilitada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite excedido; Retry-After: 60.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependência temporariamente indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "description": "Valores limitados entre 1 e 100."
+          }
+        ]
+      }
+    },
+    "/api/trigger": {
+      "post": {
+        "summary": "Solicitar simulação ou atualização",
+        "operationId": "trigger",
+        "description": "Escopo: updates:simulate ou updates:apply. Limite compartilhado por token: 6 solicitações de atualização/minuto.",
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token inválido ou revogado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo insuficiente ou operação desabilitada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite excedido; Retry-After: 60.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependência temporariamente indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Perfil/fonte inexistente.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Chave conflitante, solicitação em andamento, aprovação requerida ou executor indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Corpo excede 16 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validação, confirmação ou opção remota insegura.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+            },
+            "description": "Opcional recomendado, isolado por token, retido 24h. Mesma chave e opções retornam resposta original. Mudanças ou solicitação pendente: 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Trigger"
+              },
+              "examples": {
+                "simulate": {
+                  "value": {
+                    "dry_run": true,
+                    "update_mode": "tag",
+                    "target_tag": "v1.2.0-rc.1"
+                  }
+                },
+                "apply": {
+                  "value": {
+                    "dry_run": false,
+                    "confirmation": "ATUALIZAR",
+                    "update_mode": "merge"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/release-notes": {
+      "get": {
+        "summary": "Notas da tag exata",
+        "operationId": "release_notes",
+        "description": "Escopo: releases:read. Limite compartilhado por token: 60 leituras/minuto.",
+        "responses": {
+          "200": {
+            "description": "Sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseNotes"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token inválido ou revogado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo insuficiente ou operação desabilitada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite excedido; Retry-After: 60.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependência temporariamente indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Tag inválida.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Fonte inexistente."
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "tag",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "example": "v1.2.0-rc.1"
+          },
+          {
+            "in": "query",
+            "name": "source_id",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Fonte selecionada. Na ausência, fonte ativa; nunca enviar URL ou credenciais."
+          }
+        ]
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "summary": "Especificação desta instalação",
+        "operationId": "openapi",
+        "description": "Escopo status:read.",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.0.3",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token inválido ou revogado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Escopo insuficiente ou operação desabilitada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Limite excedido; Retry-After: 60.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependência temporariamente indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/webhooks/{endpointId}": {
+      "post": {
+        "summary": "Webhook recebido assinado",
+        "operationId": "webhook_receive",
+        "description": "Somente status, check e simulate autorizados por endpoint. Não aceita apply, comandos, SQL nem seeds. Assinatura vinculada ao timestamp, identificador e corpo bruto. Idempotência por evento e endpoint. Consulte WEBHOOKS.md.",
+        "security": [
+          {
+            "webhookHmac": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "endpointId",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Updater-Timestamp",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{10}$"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Updater-Event-Id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,128}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookIncoming"
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Assinatura, timestamp ou endpoint inválido/desabilitado."
+          },
+          "409": {
+            "description": "Mesmo event ID com corpo diferente."
+          },
+          "413": {
+            "description": "Payload excede 64 KiB."
+          },
+          "415": {
+            "description": "Content-Type precisa ser application/json."
+          },
+          "422": {
+            "description": "Ação/opções fora da allowlist."
+          },
+          "429": {
+            "description": "30 requisições por endpoint/minuto ou 60 por IP/minuto."
+          },
+          "503": {
+            "description": "Serviço temporariamente indisponível."
+          },
+          "200": {
+            "description": "Evento já recebido: duplicate=true.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAccepted"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Evento aceito e persistido: duplicate=false.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookAccepted"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "updaterToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Updater-Token"
+      },
+      "webhookHmac": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Updater-Signature",
+        "description": "sha256=hex(HMAC-SHA256(secret, timestamp + . + eventId + . + rawJSON)); janela ±300 segundos."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ReleaseNotes": {
+        "type": "object",
+        "required": [
+          "tag",
+          "name",
+          "prerelease",
+          "availability"
+        ],
+        "properties": {
+          "tag": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "prerelease": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Markdown em texto; jamais HTML confiável."
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "github",
+              "gitlab",
+              "git"
+            ]
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable",
+              "temporarily_unavailable"
+            ]
+          },
+          "source_id": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "Trigger": {
+        "type": "object",
+        "properties": {
+          "profile_id": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "source_id": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "dry_run": {
+            "type": "boolean",
+            "default": false
+          },
+          "dry_run_before": {
+            "type": "boolean",
+            "default": false,
+            "description": "Se true esta chamada sempre simula; não aplica automaticamente."
+          },
+          "update_mode": {
+            "type": "string",
+            "enum": [
+              "merge",
+              "ff-only",
+              "tag",
+              "full-update"
+            ]
+          },
+          "target_tag": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "target_branch": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "confirmation": {
+            "type": "string",
+            "enum": [
+              "ATUALIZAR"
+            ],
+            "description": "Obrigatório para execução real."
+          },
+          "approval_run_id": {
+            "type": "integer",
+            "description": "Retorna 409 approval_required: aprovação exclusiva do painel."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "simulate",
+              "apply"
+            ],
+            "description": "simulate sempre simula, ainda que confirmation seja enviado."
+          }
+        },
+        "description": "seed, sql_patch, pre_update_commands, post_update_commands, commands e command não podem conter valores remotos."
+      },
+      "TriggerResult": {
+        "type": "object",
+        "required": [
+          "ok",
+          "queued",
+          "run_id",
+          "options",
+          "requested_at"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "run_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "options": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DataResult": {
+        "type": "object",
+        "required": [
+          "ok",
+          "data",
+          "requested_at"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {},
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RunsResult": {
+        "type": "object",
+        "required": [
+          "ok",
+          "count",
+          "data",
+          "requested_at"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WebhookIncoming": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "check",
+              "simulate"
+            ]
+          },
+          "profile_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Somente ação simulate."
+          }
+        }
+      },
+      "WebhookAccepted": {
+        "type": "object",
+        "required": [
+          "ok",
+          "event_id",
+          "duplicate"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "duplicate": {
+            "type": "boolean"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      }
+    }
+  }
+}
