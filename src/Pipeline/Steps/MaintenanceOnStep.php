@@ -7,29 +7,75 @@ namespace Argws\LaravelUpdater\Pipeline\Steps;
 use Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware;
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
 use Argws\LaravelUpdater\Support\MaintenanceMode;
+use Argws\LaravelUpdater\Support\ManagerStore;
+use Argws\LaravelUpdater\Support\StateStore;
+use Argws\LaravelUpdater\Support\UpdateMaintenanceState;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Illuminate\Support\Facades\Cache;
 
 class MaintenanceOnStep implements PipelineStepInterface
 {
-    public function __construct(private readonly ShellRunner $shellRunner, private readonly ?MaintenanceMode $maintenanceMode = null)
+    public function __construct(
+        private readonly ShellRunner $shellRunner,
+        private readonly ?MaintenanceMode $maintenanceMode = null,
+        private readonly ?ManagerStore $managerStore = null,
+        private readonly ?StateStore $store = null
+    )
     {
     }
 
     public function name(): string { return 'maintenance_on'; }
-    public function shouldRun(array $context): bool { return true; }
+    public function shouldRun(array $context): bool
+    {
+        return !(bool) ($context['options']['dry_run'] ?? false)
+            && UpdateMaintenanceState::enabled($this->managerStore);
+    }
 
     public function handle(array &$context): void
     {
+        // A chamada direta também deve respeitar a política, sem depender da pipeline.
+        if (!$this->shouldRun($context)) {
+            $context['maintenance_enabled'] = false;
+            $context['maintenance_owned'] = false;
+            return;
+        }
+
+        $softBefore = (bool) Cache::get(SoftMaintenanceMiddleware::CACHE_KEY, false);
+        $nativeBefore = app()->isDownForMaintenance();
+        $mode = $nativeBefore ? 'native' : ($softBefore ? 'soft' : (
+            (bool) config('updater.maintenance.soft_enabled', true) ? 'soft' : 'native'
+        ));
+        $context['maintenance_mode'] = $mode;
+        $context['maintenance_enabled'] = true;
+        $context['maintenance_owned'] = !$softBefore && !$nativeBefore;
+        $context['maintenance_preexisting'] = $softBefore || $nativeBefore;
+        $context['maintenance'] = $softBefore || $nativeBefore;
+        $context['maintenance_ownership_id'] = bin2hex(random_bytes(16));
+        UpdateMaintenanceState::recordPolicy($context, $this->store);
+
+        if (!$context['maintenance_owned']) {
+            return;
+        }
+
         // Manutenção "soft" (padrão): não usa artisan down.
         // Motivo: evita travar o próprio updater e dribla inconsistências da opção --except.
         if ((bool) config('updater.maintenance.soft_enabled', true)) {
-            Cache::forever(SoftMaintenanceMiddleware::CACHE_KEY, true);
+            Cache::forever(SoftMaintenanceMiddleware::CACHE_KEY, $context['maintenance_ownership_id']);
             $context['maintenance'] = true;
             $context['maintenance_mode'] = 'soft';
             return;
         }
 
+        try {
+            $this->enterNativeMaintenance($context);
+        } catch (\Throwable $exception) {
+            $this->rollback($context);
+            throw $exception;
+        }
+    }
+
+    private function enterNativeMaintenance(array &$context): void
+    {
         // Prefer a safe, package-provided view by default.
         // If the host app wants to keep its own errors::503, it can set UPDATER_MAINTENANCE_VIEW=errors::503
         // or updater.maintenance.render_view accordingly.
@@ -47,6 +93,7 @@ class MaintenanceOnStep implements PipelineStepInterface
         $entered = false;
 
         $downEnv = [
+            'UPDATER_MAINTENANCE_OWNER' => $context['maintenance_ownership_id'],
             'REQUEST_URI' => '/',
             'HTTP_HOST' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
             'SERVER_NAME' => parse_url((string) config('app.url', 'http://localhost'), PHP_URL_HOST) ?: 'localhost',
@@ -209,12 +256,6 @@ class MaintenanceOnStep implements PipelineStepInterface
 
     public function rollback(array &$context): void
     {
-        // A manutenção soft não é removida por `artisan up`.
-        // Em qualquer falha da pipeline precisamos limpar explicitamente a chave,
-        // senão a aplicação permanece em 503 mesmo após o rollback.
-        Cache::forget(SoftMaintenanceMiddleware::CACHE_KEY);
-
-        $this->shellRunner->run(['php', 'artisan', 'up']);
-        $context['maintenance'] = false;
+        UpdateMaintenanceState::release($context, $this->shellRunner, true, $this->store);
     }
 }

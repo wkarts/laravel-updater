@@ -734,6 +734,12 @@ class GitDriver implements CodeDriverInterface
         return $tag !== '' ? $tag : null;
     }
 
+    /** The identity reader must inspect the exact same checkout as this driver. */
+    public function workingDirectory(): string
+    {
+        return $this->cwd();
+    }
+
     private function cwd(): string
     {
         $config = $this->runtimeConfig();

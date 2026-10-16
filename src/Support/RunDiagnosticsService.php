@@ -185,6 +185,7 @@ final class RunDiagnosticsService
             'cache_clear' => ['cache_clear_warning', 'cache_clear_commands'],
             'post_update_commands' => ['post_update_commands_log', 'post_update_command_results'],
             'health_check' => ['healthcheck', 'healthcheck_warning'],
+            'maintenance_on', 'maintenance_off' => ['maintenance', 'maintenance_enabled', 'maintenance_mode', 'maintenance_owned', 'maintenance_preexisting'],
             default => [],
         };
 

@@ -26,16 +26,26 @@ const warning = computed(() => String(props.data.status?.warning || ""));
 const enabled = computed(
   () => props.data.status?.enabled === true || props.data.status?.enabled === 1,
 );
+const installedRelease = computed(
+  () => props.data.status?.installed_release ?? props.data.versionBar?.application?.installed_release ?? null,
+);
+const installedVersion = computed(
+  () => props.data.status?.installed_version ?? props.data.versionBar?.application?.installed_version ?? null,
+);
+const installedTag = computed(
+  () => installedRelease.value?.tag || props.data.versionBar?.application?.git_tag || null,
+);
 const revision = computed(() => {
   const value =
     props.data.status?.revision ||
-    props.data.versionBar?.application?.git_revision;
+    props.data.versionBar?.application?.git_revision ||
+    installedRelease.value?.git_commit_sha;
   return value && !["N/A", "n/d"].includes(String(value))
     ? String(value)
     : "Não disponível";
 });
 const versionLabel = computed(() =>
-  /^v?\d+\.\d+/.test(revision.value) ? "Versão instalada" : "Revisão instalada",
+  installedVersion.value ? "Versão instalada" : "Revisão instalada",
 );
 const packageVersion = computed(() => {
   const value = props.data.versionBar?.updater?.installed;
@@ -159,8 +169,8 @@ onUnmounted(() => {
           <span class="summary-label">{{ versionLabel }}</span>
           <div class="version-value">
             <strong
-              :class="{ revision: versionLabel === 'Revisão instalada' }"
-              >{{ revision }}</strong
+              :class="{ revision: !installedVersion }"
+              >{{ installedVersion || revision }}</strong
             ><span class="badge" :class="enabled ? 'success' : 'pending'">{{
               data.status?.enabled === undefined
                 ? "Não informado"
@@ -169,6 +179,11 @@ onUnmounted(() => {
                   : "Inativo"
             }}</span>
           </div>
+          <dl v-if="installedVersion || installedTag || installedRelease?.base_stable_tag" class="release-identity">
+            <div v-if="installedTag"><dt>Tag</dt><dd><code>{{ installedTag }}</code></dd></div>
+            <div v-if="installedRelease?.base_stable_tag"><dt>Base estável</dt><dd>{{ installedRelease.base_stable_tag }}</dd></div>
+            <div v-if="installedVersion"><dt>Commit</dt><dd><code>{{ revision }}</code></dd></div>
+          </dl>
           <span class="summary-label last-label">Última execução</span>
           <a
             v-if="last.id && can('runs.view') && route('updater.runs.show')"
@@ -623,6 +638,26 @@ onUnmounted(() => {
 }
 .version-value > strong.revision {
   font-size: 22px;
+}
+.release-identity {
+  display: grid;
+  gap: 5px;
+  max-width: 100%;
+  margin: -6px 0 15px;
+  font-size: 12px;
+}
+.release-identity > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.release-identity dt {
+  color: var(--muted);
+}
+.release-identity dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .last-label {
   margin-bottom: 3px;

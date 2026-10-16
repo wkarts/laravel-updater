@@ -456,6 +456,19 @@ class ManagerController extends Controller
         return back()->with('status', 'Parâmetros .env salvos. Execute php artisan config:clear para aplicar imediatamente.');
     }
 
+    public function saveUpdateMaintenanceSettings(Request $request): RedirectResponse
+    {
+        $request->validate(['enter_maintenance_on_update_start' => ['required', 'boolean']]);
+        $row = $this->managerStore->branding() ?? [];
+        $enabled = $request->boolean('enter_maintenance_on_update_start');
+        $row['enter_maintenance_on_update_start'] = (int) $enabled;
+        $this->managerStore->saveBranding($row);
+        $this->audit($request, $this->actorId($request), 'Política de manutenção durante atualizações atualizada.', ['enabled' => $enabled]);
+
+        return redirect()->route('updater.settings.index', ['tab' => 'maintenance'])
+            ->with('status', 'Configuração de manutenção durante atualizações salva.');
+    }
+
     public function saveBranding(Request $request): RedirectResponse
     {
         $data = $request->validate([
@@ -495,7 +508,11 @@ class ManagerController extends Controller
 
         $data['first_run_assume_behind'] = (int) $request->boolean('first_run_assume_behind');
         $data['first_run_assume_behind_commits'] = max(1, (int) ($data['first_run_assume_behind_commits'] ?? 1));
-        $data['enter_maintenance_on_update_start'] = (int) $request->boolean('enter_maintenance_on_update_start', true);
+        // The dedicated maintenance form owns this policy; identity-only saves preserve it.
+        // Explicit legacy submissions remain accepted for compatibility.
+        $data['enter_maintenance_on_update_start'] = $request->has('enter_maintenance_on_update_start')
+            ? (int) $request->boolean('enter_maintenance_on_update_start')
+            : ($row['enter_maintenance_on_update_start'] ?? null);
 
         $this->managerStore->saveBranding($data);
         $this->audit($request, $this->actorId($request), 'Branding atualizado.', ['tem_logo' => !empty($data['logo_path']), 'tem_favicon' => !empty($data['favicon_path'])]);
@@ -1251,14 +1268,14 @@ class ManagerController extends Controller
             // Falha remota não torna a revisão instalada desconhecida.
             // Consultar apenas HEAD local, sem qualquer operação de rede.
             $localRevision = 'N/A';
+            $installed = ['installed_version' => null, 'installed_release' => null];
             try {
-                $git = app(ShellRunner::class)->run(['git', 'rev-parse', 'HEAD'], base_path());
-                if ((int) ($git['exit_code'] ?? 1) === 0) {
-                    $revision = trim((string) ($git['stdout'] ?? ''));
-                    if ($revision !== '') {
-                        $localRevision = $revision;
-                    }
-                }
+                $local = app(UpdaterKernel::class)->status();
+                $localRevision = (string) ($local['revision'] ?? 'N/A');
+                $installed = [
+                    'installed_version' => $local['installed_version'] ?? null,
+                    'installed_release' => $local['installed_release'] ?? null,
+                ];
             } catch (\Throwable) {
                 // Mantém o aviso original de falha remota.
             }
@@ -1273,6 +1290,7 @@ class ManagerController extends Controller
                 'latest_tag_release_notes_url' => null,
                 'status_unavailable' => true,
                 'warning' => 'Falha ao consultar atualizações: ' . $e->getMessage(),
+                ...$installed,
             ];
         }
     }

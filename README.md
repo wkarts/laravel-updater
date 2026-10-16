@@ -421,9 +421,29 @@ php artisan system:update:run --force
 
 ---
 
+## Versão instalada no Manager
+
+O Dashboard e a página de atualizações exibem a versão instalada, a tag técnica, a base estável (quando disponível) e o commit separadamente. Os endpoints de status e check também retornam `installed_version` e `installed_release`, preservando os campos de revisão existentes.
+
+A identidade vem das referências locais instaladas ou dos arquivos `release-info.json`, `build-info.json`, `ui-build-info.json` e `public/ui-build-info.json`. Os metadados precisam conter uma versão SemVer válida e `git_commit_sha`; em instalações Git, o SHA deve coincidir com o `HEAD`. A anotação JSON de uma tag contínua usa `schema_version: 1` e pode informar `base_stable_tag`, `release_channel` e `build_number`.
+
+Quando não há uma identidade válida, o painel apresenta a revisão instalada. A versão de destino de uma atualização e a última release remota não são usadas como prova da versão instalada.
+
 ## Página de manutenção (503) e Whitelabel
 
-Durante uma atualização, o updater ativa o *maintenance mode* e exibe uma página 503 própria.
+Durante uma atualização, o updater só ativa o *maintenance mode* quando a opção **Entrar em manutenção ao iniciar a atualização** estiver habilitada. A configuração salva no Manager tem prioridade; sem configuração salva, usa `UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START`.
+
+No Manager, acesse **Configurações → Manutenção**, escolha **Ativado** ou **Desativado** e clique em **Salvar configuração**. A seção mostra o estado salvo e tem acesso direto por `/settings?tab=maintenance`, dentro do prefixo do updater. Salvar essa preferência não altera a manutenção atual; ela vale para as próximas atualizações.
+
+```dotenv
+UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START=false
+```
+
+Com a opção desabilitada, a execução não ativa a manutenção soft nem executa `artisan down`. A finalização e a recuperação também preservam a manutenção que já existia antes da execução; o lock da atualização continua sendo liberado. Os controles manuais de manutenção permanecem independentes e exigem as confirmações existentes.
+
+A flag de manutenção soft existente é restaurada após a limpeza de cache, inclusive no rollback. Essa restauração não garante ausência de uma janela transitória enquanto `optimize:clear` esvazia o cache; a opção desligada continua sem criar manutenção.
+
+Quando a opção estiver habilitada, a página 503 própria continua disponível.
 
 ### Default (sem .env)
 

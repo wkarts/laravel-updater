@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Pipeline\Steps;
 
 use Argws\LaravelUpdater\Contracts\PipelineStepInterface;
+use Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware;
+use Illuminate\Support\Facades\Cache;
 use Argws\LaravelUpdater\Exceptions\UpdaterException;
 use Argws\LaravelUpdater\Support\ShellRunner;
 
@@ -20,6 +22,7 @@ class CacheClearStep implements PipelineStepInterface
     public function handle(array &$context): void
     {
         foreach ($this->commandsToRun($context) as $command) {
+            $softMaintenance = $this->softMaintenanceState();
             try {
                 $startedNs = hrtime(true);
                 $result = $this->shellRunner->runOrFail(['php', 'artisan', $command]);
@@ -41,8 +44,9 @@ class CacheClearStep implements PipelineStepInterface
                         continue;
                     }
                 }
-
                 throw $exception;
+            } finally {
+                $this->restoreSoftMaintenance($softMaintenance);
             }
         }
     }
@@ -94,7 +98,31 @@ private function shouldRunConfigCache(): bool
 
 public function rollback(array &$context): void
     {
-        $this->shellRunner->run(['php', 'artisan', 'optimize:clear']);
+        $softMaintenance = $this->softMaintenanceState();
+        try {
+            $this->shellRunner->run(['php', 'artisan', 'optimize:clear']);
+        } finally {
+            $this->restoreSoftMaintenance($softMaintenance);
+        }
+    }
+
+    private function restoreSoftMaintenance(mixed $previous): void
+    {
+        // optimize:clear limpa também o cache da aplicação. Restaure somente
+        // a flag existente, preservando uma alteração mais recente se presente.
+        if ($previous && !$this->softMaintenanceState()) {
+            Cache::forever(SoftMaintenanceMiddleware::CACHE_KEY, $previous);
+        }
+    }
+
+    private function softMaintenanceState(): mixed
+    {
+        try {
+            return Cache::get(SoftMaintenanceMiddleware::CACHE_KEY, false);
+        } catch (\Throwable) {
+            // Mantém o uso isolado da etapa sem um container Laravel inicializado.
+            return false;
+        }
     }
 
     private function ignoreDuplicateRouteCacheFailure(): bool
