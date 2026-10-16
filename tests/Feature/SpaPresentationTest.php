@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Tests\Feature;
 
+use Argws\LaravelUpdater\Support\SpaAssets;
 use Argws\LaravelUpdater\UpdaterServiceProvider;
-use Illuminate\Routing\Router;
+use Illuminate\Routing\RouteCollection;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Orchestra\Testbench\TestCase;
 
 final class SpaPresentationTest extends TestCase
@@ -81,15 +84,86 @@ final class SpaPresentationTest extends TestCase
         $this->get('/host-page')->assertOk()->assertSeeText('Host remains independent')->assertDontSee('updater-app', false);
     }
 
-    public function testCompiledAssetsAreAvailableWithoutPublishing(): void
+    public function testCompiledAssetsAreAvailableWithoutPublishingAndWithoutStaticExtensionsInThePath(): void
     {
-        $asset = app(\Argws\LaravelUpdater\Support\SpaAssets::class)->entry();
-        self::assertNotEmpty($asset['js'], 'Production assets must be included in the Composer package.');
-        self::assertNotEmpty($asset['css'], 'The shared Vite stylesheet must be loaded even with cssCodeSplit=false.');
-        $css = $this->get(parse_url($asset['css'][0], PHP_URL_PATH))->assertOk()->assertHeader('Content-Type');
-        self::assertStringStartsWith('text/css', strtolower($css->headers->get('Content-Type')));
-        $this->get('/reviewed/panel/fixture')->assertSee('rel="stylesheet"', false);
-        $this->get(parse_url($asset['js'], PHP_URL_PATH))->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $assets = app(SpaAssets::class)->entry();
+        self::assertNotEmpty($assets['js'], 'Production assets must be included in the Composer package.');
+        self::assertNotEmpty($assets['css'], 'The shared Vite stylesheet must be loaded even with cssCodeSplit=false.');
+        foreach ([$assets['js'], ...$assets['css']] as $url) {
+            $this->assertPublicCompiledAsset($url);
+        }
+        $this->get('/reviewed/panel/fixture')->assertOk()->assertSee('rel="stylesheet"', false);
+    }
+
+    public function testExtensionlessBundlesRemainAvailableWithUiAndHealthDisabled(): void
+    {
+        config(['updater.ui.enabled' => false, 'updater.healthcheck.enabled' => false]);
+        $this->app['router']->setRoutes(new RouteCollection());
+        require dirname(__DIR__, 2) . '/routes/updater.php';
+        require dirname(__DIR__, 2) . '/routes/spa.php';
+        $this->app['router']->getRoutes()->refreshNameLookups();
+        self::assertFalse(\Illuminate\Support\Facades\Route::has('updater.index'));
+        self::assertFalse(\Illuminate\Support\Facades\Route::has('updater.health'));
+        $assets = app(SpaAssets::class)->entry();
+        foreach ([$assets['js'], ...$assets['css']] as $url) {
+            $this->assertPublicCompiledAsset($url);
+        }
+    }
+
+    public function testHashedAssetPathsAndLegacySpaQueryAliasesRemainCompatible(): void
+    {
+        $assets = app(SpaAssets::class)->entry();
+        foreach ([$assets['js'], ...$assets['css']] as $url) {
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+            $file = $query[SpaAssets::QUERY_PARAMETER];
+            $extension = pathinfo($file, PATHINFO_EXTENSION);
+            foreach ([
+                '/reviewed/panel/assets/spa/' . $file,
+                '/reviewed/panel/assets/updater.' . $extension . '?spa=1',
+            ] as $alias) {
+                $response = $this->get($alias)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+                self::assertSame(
+                    hash_file('sha256', SpaAssets::directory() . '/' . $file),
+                    hash('sha256', $this->binaryBody($response))
+                );
+            }
+        }
+    }
+
+    public function testReservedAssetQueryRejectsInvalidFilesWithoutExposingHtmlOrPackageMetadata(): void
+    {
+        $endpoint = parse_url(app(SpaAssets::class)->entry()['js'], PHP_URL_PATH);
+        foreach (['', '../assets/updater.css', '../../composer.json', '.vite/manifest.json', 'assets/missing.js', 'https://example.com/code.js', "assets/invalid\0.js"] as $file) {
+            $this->get($endpoint . '?' . http_build_query([SpaAssets::QUERY_PARAMETER => $file]))
+                ->assertNotFound()->assertDontSee('id="updater-bootstrap"', false);
+        }
+        $this->get($endpoint . '?' . http_build_query([SpaAssets::QUERY_PARAMETER => ['assets/example.js']]))
+            ->assertNotFound();
+        $this->get($endpoint)->assertNotFound();
+    }
+
+    public function testReservedAssetQueryCannotInterceptAnApiOrHostRoute(): void
+    {
+        $assets = app(SpaAssets::class)->entry();
+        $query = parse_url($assets['js'], PHP_URL_QUERY);
+        $this->get('/host-page?' . $query)->assertOk()->assertSeeText('Host remains independent')
+            ->assertDontSee('updater-app', false);
+        $this->getJson('/reviewed/panel/api/status?' . $query)->assertUnauthorized()
+            ->assertJsonPath('code', 'unauthorized');
+        $this->post('/reviewed/panel?' . $query)->assertStatus(405);
+    }
+
+    public function testLegacyAssetsStillServeThePackagedBytesWithoutPublishing(): void
+    {
+        foreach (['js' => 'application/javascript', 'css' => 'text/css'] as $extension => $mime) {
+            $response = $this->get('/reviewed/panel/assets/updater.' . $extension)
+                ->assertOk();
+            self::assertStringStartsWith($mime, (string) $response->headers->get('Content-Type'));
+            self::assertSame(
+                hash_file('sha256', dirname(__DIR__, 2) . '/resources/assets/updater.' . $extension),
+                hash('sha256', $this->binaryBody($response))
+            );
+        }
     }
 
     public function testPublishedLegacyOverrideCannotExecuteBladeOrResolveRemovedRoutes(): void
@@ -111,20 +185,47 @@ final class SpaPresentationTest extends TestCase
         $this->get('/host-page')->assertStatus(503)->assertSee('id="updater-app"', false)->assertSee('"page":"maintenance"', false);
     }
 
-    public function testOldCachedRouteNamesUseCompiledAssetsThroughTheirLegacyEndpoints(): void
+    public function testOldCachedRouteTablesServeBothBundlesBeforeOwnOrHostAuthentication(): void
     {
-        $routes = new \Illuminate\Routing\RouteCollection();
-        foreach ($this->app['router']->getRoutes() as $route) {
-            if ($route->getName() !== 'updater.spa.asset') { $routes->add($route); }
+        foreach ([true, false] as $ownAuthentication) {
+            config([
+                'updater.ui.auth.enabled' => $ownAuthentication,
+                'updater.ui.auth.auto_provision_admin' => false,
+                'updater.ui.middleware' => ['web', SpaHostRejectUnauthenticatedMiddleware::class],
+            ]);
+            $this->reloadLegacyRouteTable();
+            $assets = app(SpaAssets::class)->entry();
+            foreach ([$assets['js'], ...$assets['css']] as $url) {
+                self::assertSame('/reviewed/panel', rtrim(parse_url($url, PHP_URL_PATH), '/'));
+                $this->assertPublicCompiledAsset($url);
+            }
+            // The reserved public read must not make the normal protected page public.
+            $normalPage = $this->get('/reviewed/panel');
+            if ($ownAuthentication) {
+                $normalPage->assertRedirect('/reviewed/panel/login');
+                $query = parse_url($assets['js'], PHP_URL_QUERY);
+                $this->get('/reviewed/panel/settings?' . $query)->assertRedirect('/reviewed/panel/login');
+            } else {
+                $normalPage->assertForbidden();
+            }
         }
-        $routes->refreshNameLookups();
-        $this->app['router']->setRoutes($routes);
-        $assets = app(\Argws\LaravelUpdater\Support\SpaAssets::class)->entry();
-        self::assertStringContainsString('spa=1', $assets['js'] ?? '');
-        $url = parse_url($assets['js'], PHP_URL_PATH) . '?' . parse_url($assets['js'], PHP_URL_QUERY);
-        $this->get($url)->assertOk()->assertHeader('Content-Type', 'application/javascript');
     }
 
+    public function testOldCachedRouteFallbackAlsoUsesExistingLoginOrHealthRoutes(): void
+    {
+        config(['updater.ui.auth.enabled' => true, 'updater.ui.auth.auto_provision_admin' => false]);
+        $this->reloadLegacyRouteTable();
+        foreach ([['updater.index'], ['updater.index', 'updater.login']] as $removedRoutes) {
+            $this->removeRoutes($removedRoutes);
+            $assets = app(SpaAssets::class)->entry();
+            $expected = count($removedRoutes) === 1 ? '/reviewed/panel/login' : '/reviewed/panel/health';
+            foreach ([$assets['js'], ...$assets['css']] as $url) {
+                self::assertSame($expected, parse_url($url, PHP_URL_PATH));
+                $this->assertPublicCompiledAsset($url);
+            }
+        }
+        $this->getJson('/reviewed/panel/health')->assertOk()->assertHeader('Content-Type', 'application/json');
+    }
 
     public function testBackendAuthorizationStillRejectsAnAdminWithRestrictedPermissions(): void
     {
@@ -178,6 +279,56 @@ final class SpaPresentationTest extends TestCase
             ->assertRedirect()->assertSessionHas('status');
     }
 
+    private function reloadLegacyRouteTable(): void
+    {
+        $this->app['router']->setRoutes(new RouteCollection());
+        require dirname(__DIR__, 2) . '/routes/updater.php';
+        $this->removeRoutes(['updater.spa.entry', 'updater.spa.asset']);
+    }
+
+    private function removeRoutes(array $names): void
+    {
+        $routes = new RouteCollection();
+        foreach ($this->app['router']->getRoutes() as $route) {
+            if (!in_array($route->getName(), $names, true)) {
+                $routes->add($route);
+            }
+        }
+        $routes->refreshNameLookups();
+        $this->app['router']->setRoutes($routes);
+    }
+
+    private function assertPublicCompiledAsset(string $url): void
+    {
+        $path = (string) parse_url($url, PHP_URL_PATH);
+        self::assertDoesNotMatchRegularExpression('/\.(?:js|css)$/i', $path, 'Nginx static locations must not intercept bundle URLs.');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $file = $query[SpaAssets::QUERY_PARAMETER] ?? null;
+        self::assertIsString($file);
+        self::assertNotEmpty($file);
+        $expectedPath = SpaAssets::directory() . '/' . $file;
+        self::assertFileExists($expectedPath);
+        $response = $this->get($path . '?' . http_build_query($query));
+        $response->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $mime = str_ends_with($file, '.css') ? 'text/css' : 'application/javascript';
+        self::assertStringStartsWith($mime, (string) $response->headers->get('Content-Type'));
+        self::assertStringContainsString('immutable', (string) $response->headers->get('Cache-Control'));
+        $body = $this->binaryBody($response);
+        self::assertSame(hash_file('sha256', $expectedPath), hash('sha256', $body));
+        self::assertStringNotContainsString('id="updater-bootstrap"', $body);
+        $head = $this->call('HEAD', $path . '?' . http_build_query($query))
+            ->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        self::assertStringStartsWith($mime, (string) $head->headers->get('Content-Type'));
+    }
+
+    private function binaryBody(TestResponse $response): string
+    {
+        self::assertInstanceOf(BinaryFileResponse::class, $response->baseResponse);
+        ob_start();
+        $response->baseResponse->sendContent();
+        return (string) ob_get_clean();
+    }
+
 }
 
 
@@ -187,5 +338,15 @@ final class SpaRestrictedUserMiddleware
     {
         $request->attributes->set('updater_user', ['id' => 8, 'name' => 'Limited administrator', 'is_admin' => 1, 'permissions' => ['logs.view']]);
         return $next($request);
+    }
+
+}
+
+
+final class SpaHostRejectUnauthenticatedMiddleware
+{
+    public function handle($request, \Closure $next)
+    {
+        abort(403, 'Host authentication remains required.');
     }
 }

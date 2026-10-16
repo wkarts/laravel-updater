@@ -1,5 +1,3 @@
-> **Evolução Vue após 0.1.219:** interface em Vue 3 + TypeScript, assets de produção incluídos no Composer, API/OpenAPI e webhooks. Consulte [instalação/upgrade](docs/UPGRADE-VUE.md), [notas da candidata](docs/RELEASE-NOTES.md), [inventário](docs/ROUTE-INVENTORY.md), [conceitos visuais](docs/DESIGN-CONCEPTS.html) e [evidências](docs/VALIDATION.md). A aplicação hospedeira não precisa de Node/npm/build manual.
-
 # argws/laravel-updater
 
 Pacote Composer para autoatualização segura, idempotente e reversível de aplicações Laravel, agora com camada de **Updater Manager** (painel administrativo, auth independente, branding white-label e API de disparo).
@@ -15,6 +13,22 @@ Pacote Composer para autoatualização segura, idempotente e reversível de apli
 composer require argws/laravel-updater
 php artisan vendor:publish --tag=updater-config
 ```
+
+O painel usa Vue 3 + TypeScript. O pacote Composer inclui o manifest e os assets compilados em `resources/dist`, servidos pelos endpoints do updater. A aplicação hospedeira **não precisa de Node, npm, build nem publicação manual de assets**. O prefixo continua configurável; autenticação, permissões, sessão e CSRF permanecem no Laravel.
+
+### Upgrade a partir de 0.1.219
+
+1. Faça backup do código, SQLite operacional e configurações; preserve o `APP_KEY`.
+2. Atualize o pacote pelo Composer, execute `php artisan optimize:clear` e reconstrua os caches usados pela aplicação.
+3. Reinicie os workers e mantenha o scheduler Laravel por minuto quando usar webhooks. Confira acesso, fonte/perfil, simulação e histórico antes de aplicar uma atualização real.
+
+Credenciais antigas são cifradas gradualmente com a chave Laravel; campos vazios preservam o segredo e remoção/substituição são separadas. Overrides Blade publicados deixam de controlar a interface e precisam ser adaptados ao Vue ou ao branding do painel.
+
+**Rollback:** suspenda novos jobs, reverta o pacote e restaure o snapshot correspondente de SQLite/configuração, preservando `APP_KEY`. O código 0.1.219 não entende os novos valores cifrados; reverter só o código pode falhar. Restaurar snapshot descarta alterações posteriores. Homologue atualização, restauração e rollback numa cópia representativa antes da produção.
+
+### Build somente para mantenedores
+
+Com Node compatível com Vite 7 e npm, execute `npm ci --no-audit --no-fund` e `npm run build`. Versione `resources/dist` completo, incluindo `.vite/manifest.json`. Esse processo não faz parte da instalação na aplicação hospedeira.
 
 ## Pré-requisito obrigatório: PDO SQLite
 
@@ -35,7 +49,7 @@ extension=pdo_sqlite
 
 ### Atualização do config após update do pacote
 ### Publicação automática de config/views (equivalente ao --force)
-A partir desta versão, o updater pode sincronizar automaticamente (em execução de console) os arquivos publicados de `config` e `views` para manter o pacote atualizado, com comportamento equivalente ao `vendor:publish --force`.
+O updater pode sincronizar automaticamente (em execução de console) os arquivos publicados de `config` e as views legadas, com comportamento equivalente ao `vendor:publish --force`. Essas views são preservadas por compatibilidade; a apresentação do painel é Vue e não depende de publicá-las.
 
 Controle por `.env`:
 
@@ -58,8 +72,7 @@ php artisan vendor:publish --tag=updater-config --force
 
 > Dica: se você personaliza `config/updater.php`, recomendo versionar esse arquivo no seu repositório.
 
-> Os assets do updater são sincronizados automaticamente para `public/vendor/laravel-updater` durante o boot do pacote.
-> Assim, você não precisa rodar `php artisan vendor:publish --tag=updater-assets --force` a cada instalação/atualização.
+> A sincronização para `public/vendor/laravel-updater` conserva os assets legados. O painel Vue carrega os arquivos de `resources/dist` diretamente pelo pacote, sem depender dessa cópia nem de `vendor:publish --tag=updater-assets`.
 
 ## Rotas principais
 
@@ -68,6 +81,27 @@ php artisan vendor:publish --tag=updater-config --force
 - `/_updater/security`
 - `/_updater/settings`
 - `POST /_updater/api/trigger`
+- `/_updater/api-docs`
+- `/_updater/webhooks`
+
+## API e webhooks
+
+Os caminhos abaixo são relativos ao prefixo configurado (`/_updater` por padrão). A API aceita `Authorization: Bearer <token>` ou `X-Updater-Token: <token>` e preserva `updater.sync_token`/`UPDATER_SYNC_TOKEN`. Tokens administrativos novos têm hash, escopos mínimos, revogação/rotação e exibição única; não é possível recuperar seu valor pela listagem.
+
+| Método e caminho | Escopo / finalidade |
+| --- | --- |
+| `GET /api/status` | `status:read`: estado operacional |
+| `GET /api/check` | `check:read`: verificar atualização |
+| `GET /api/runs` | `runs:read`: execuções recentes |
+| `GET /api/release-notes?tag=v1.2.3-rc.1` | `releases:read`: notas da tag exata; `source_id` opcional |
+| `POST /api/trigger` | `updates:simulate` ou `updates:apply`: simular/aplicar |
+| `GET /api/openapi.json` | `status:read`: contrato completo |
+
+A documentação interna fica em `/api-docs`, protegida pela autenticação/permissões do painel. A especificação distribuída está em [resources/openapi.json](resources/openapi.json), com payloads, respostas, erros, limites e idempotência.
+
+Para simular, envie `{"dry_run":true}` a `/api/trigger`. Para aplicar, use um token com `updates:apply` e envie `{"dry_run":false,"confirmation":"ATUALIZAR"}`. `action=simulate` e `dry_run_before=true` sempre simulam. Use `Idempotency-Key` para repetir a mesma solicitação sem duplicar o disparo. Aprovações com senha continuam no painel; comandos, SQL e seed remotos não são aceitos.
+
+Webhooks são configurados em `/webhooks`. A entrada `POST /api/webhooks/{endpointId}` exige HMAC-SHA256, timestamp e ID único; aceita somente as ações permitidas `status`, `check` e `simulate`. Saídas exigem HTTPS público, cURL e scheduler/worker conforme a fila configurada; usam assinatura, proteção SSRF e tentativas auditáveis. Segredos de criação/rotação são exibidos uma única vez. O contrato de entrada consta no OpenAPI.
 
 ## Variáveis de ambiente (principais)
 
@@ -306,6 +340,7 @@ Na tela **Fontes** (`/_updater/sources`):
 ### 2) Editar e excluir fonte
 Na listagem de fontes:
 - Botão **Editar** abre a própria tela com os campos preenchidos.
+- Credenciais existentes mostram apenas se estão configuradas; nunca são preenchidas novamente.
 - Botão **Excluir** remove a fonte após confirmação.
 
 ### 3) Testar conexão real
@@ -319,9 +354,9 @@ O teste executa `git ls-remote` para validar acesso e listar versões/tags remot
 3. Opcionalmente informe uma branch alvo. Em branco, o updater usa a branch configurada na fonte selecionada.
 4. Escolha o modo (`merge`, `ff-only`, `tag`, `full update` se habilitado).
    - Para uma release de pré-lançamento, escolha `tag` e digite a tag exata, por exemplo `v1.2.3-rc.1`. As tags sugeridas são atalhos; tags fora da lista também podem ser digitadas.
-5. Mantenha **Dry-run antes** marcado (padrão).
-6. Clique em **Simular (Dry-run)**.
-7. Na tela da execução, clique em **Aprovar e executar** e informe a senha de admin.
+5. Escolha **Apenas simular** e clique em **Executar somente simulação**.
+6. Confira o plano e o resultado. As notas sempre correspondem à fonte/tag selecionadas; ausência de notas ou comparação não verificada são indicadas explicitamente.
+7. Para aplicar, escolha a ação real, revise fonte/branch/tag/perfil e digite `ATUALIZAR`. Quando houver aprovação pendente, use **Aprovar e executar** após a simulação concluída, mantendo a senha e a confirmação exigidas.
 
 No CLI, a branch alternativa pode ser informada com `--branch`; para pré-release, use `--update-type=git_tag` e `--tag` com a tag completa:
 
@@ -332,7 +367,7 @@ php artisan system:update:run --update-type=git_merge --branch=develop
 
 O status de pré-release do GitHub não muda o mecanismo de checkout: o updater aplica a referência Git exata associada à tag.
 
-> O backup FULL é obrigatório antes da atualização real via UI.
+> Confira a política de backup configurada no servidor antes de aplicar. A interface não substitui a verificação de um backup recuperável.
 
 ## Notificações de atualização (opcional)
 
@@ -437,15 +472,16 @@ Em versões de Laravel que não suportam `php artisan down --except`, o updater 
 
 No modo de atualização por tag, se a aplicação já estiver exatamente na tag alvo, o updater trata como execução válida (sem falso erro por revisão inalterada).
 
-## Atualização de arquivos publicados (config/views)
+## Atualização de arquivos publicados (config)
 
 O Laravel não sobrescreve automaticamente arquivos publicados em `config/` e `resources/views/`.
-Se você publicou `config/updater.php` ou views e quer atualizar para a versão mais recente do pacote (atenção: isso pode sobrescrever alterações), rode:
+Se você publicou `config/updater.php` e quer substituí-lo pela versão do pacote (atenção: isso pode sobrescrever alterações), rode:
 
 ```bash
 php artisan vendor:publish --tag=updater-config --force
-php artisan vendor:publish --tag=updater-views --force
 ```
+
+Views publicadas não precisam ser atualizadas para carregar o painel Vue. Preserve personalizações antigas para adaptação; publicar views ou assets não é requisito de instalação dessa interface.
 
 ### Erro: `.git` não é criado automaticamente
 

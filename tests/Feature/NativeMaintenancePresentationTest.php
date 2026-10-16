@@ -73,7 +73,8 @@ final class NativeMaintenancePresentationTest extends TestCase
         $assets = app(SpaAssets::class)->entry();
         self::assertNotEmpty($assets['css']);
         foreach ([$assets['js'], ...$assets['css']] as $url) {
-            $path = parse_url($url, PHP_URL_PATH);
+            $path = parse_url($url, PHP_URL_PATH) . '?' . parse_url($url, PHP_URL_QUERY);
+            self::assertStringContainsString(SpaAssets::QUERY_PARAMETER . '=', $path);
             $this->get($path)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
             // Exercise Laravel's early maintenance.php before Composer/provider boot too.
             $process = new Process([PHP_BINARY, '-r', '$_SERVER["REQUEST_URI"]=$argv[1]; require $argv[2]; echo "PASSED_EARLY_GATE";', $path, $this->maintenanceStorage . '/framework/maintenance.php']);

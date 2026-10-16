@@ -403,14 +403,14 @@ class UpdaterUiController extends Controller
         if (($authError = $this->validateApiRequest($request, 'status:read')) !== null) {
             return $authError;
         }
-        $document = json_decode((string) file_get_contents(__DIR__ . '/../../../docs/openapi.json'), true, 512, JSON_THROW_ON_ERROR);
+        $document = json_decode((string) file_get_contents(__DIR__ . '/../../../resources/openapi.json'), true, 512, JSON_THROW_ON_ERROR);
         $document['servers'] = [['url' => url(trim((string) config('updater.ui.prefix', '_updater'), '/'))]];
         return response()->json($document);
     }
 
     public function apiDocumentation()
     {
-        $specification = json_decode((string) file_get_contents(__DIR__ . '/../../../docs/openapi.json'), true, 512, JSON_THROW_ON_ERROR);
+        $specification = json_decode((string) file_get_contents(__DIR__ . '/../../../resources/openapi.json'), true, 512, JSON_THROW_ON_ERROR);
         $specification['servers'] = [['url' => url(trim((string) config('updater.ui.prefix', '_updater'), '/'))]];
         return view('laravel-updater::api.docs', [
             'specification' => $specification, 'endpoints' => $specification['paths'],
@@ -489,7 +489,7 @@ class UpdaterUiController extends Controller
             return app(\Argws\LaravelUpdater\Support\SpaAssets::class)->legacy('css');
         }
         $candidates = [
-            __DIR__ . '/../../../../resources/assets/updater.css',
+            __DIR__ . '/../../../resources/assets/updater.css',
             public_path('vendor/laravel-updater/updater.css'),
         ];
 
@@ -511,7 +511,7 @@ class UpdaterUiController extends Controller
             return app(\Argws\LaravelUpdater\Support\SpaAssets::class)->legacy('js');
         }
         $candidates = [
-            __DIR__ . '/../../../../resources/assets/updater.js',
+            __DIR__ . '/../../../resources/assets/updater.js',
             public_path('vendor/laravel-updater/updater.js'),
         ];
 

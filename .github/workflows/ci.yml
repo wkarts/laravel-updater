@@ -101,12 +101,17 @@ jobs:
           composer archive --format=tar --dir="$RUNNER_TEMP" --file=updater-distribution
           php -r '
             $archive = new PharData($argv[1]);
-            foreach (["docs/openapi.json", "docs/UPGRADE-VUE.md", "docs/SECURITY-UPGRADE.md", "resources/dist/.vite/manifest.json"] as $path) {
+            foreach (["docs", "vendor", "node_modules"] as $directory) {
+                if (isset($archive[$directory])) {
+                    throw new RuntimeException("Unexpected package directory: " . $directory);
+                }
+            }
+            foreach (["resources/openapi.json", "resources/dist/.vite/manifest.json"] as $path) {
                 if (!isset($archive[$path])) {
                     throw new RuntimeException("Missing package file: " . $path);
                 }
             }
-            $spec = json_decode($archive["docs/openapi.json"]->getContent(), true, 512, JSON_THROW_ON_ERROR);
+            $spec = json_decode($archive["resources/openapi.json"]->getContent(), true, 512, JSON_THROW_ON_ERROR);
             if (($spec["openapi"] ?? null) !== "3.0.3" || count($spec["paths"] ?? []) !== 7) {
                 throw new RuntimeException("Invalid packaged OpenAPI document");
             }
@@ -118,5 +123,5 @@ jobs:
                     }
                 }
             }
-            echo "Composer distribution: OpenAPI, upgrade guides and manifest assets verified\n";
+            echo "Composer distribution: OpenAPI and manifest assets verified\n";
           ' "$RUNNER_TEMP/updater-distribution.tar"

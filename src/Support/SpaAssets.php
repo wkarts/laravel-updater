@@ -10,7 +10,26 @@ use Symfony\Component\HttpFoundation\Response;
 
 class SpaAssets
 {
+    public const QUERY_PARAMETER = '_updater_asset';
+
     public static function directory(): string { return __DIR__ . '/../../resources/dist'; }
+
+    /** Keep the public URI extensionless so requests reach the Laravel asset handler. */
+    public function serveFromQuery(Request $request): Response
+    {
+        $file = $request->query(self::QUERY_PARAMETER);
+        abort_unless(is_string($file) && $file !== '', 404);
+
+        return $this->serve($request, $file);
+    }
+
+    /** Old route caches retain these paths; only static bundles are served instead of the page. */
+    public function isCachedRouteRequest(Request $request): bool
+    {
+        return in_array($request->method(), ['GET', 'HEAD'], true)
+            && $request->query->has(self::QUERY_PARAMETER)
+            && in_array($request->route()?->getName(), ['updater.index', 'updater.login', 'updater.health'], true);
+    }
 
     /** Hashed files are served directly from Composer package, without writable public/ or publish. */
     public function serve(Request $request, string $file): Response
@@ -60,6 +79,15 @@ class SpaAssets
         $item = $this->manifestEntry();
         if ($item === []) { return ['js' => null, 'css' => []]; }
         $assetUrl = function (string $file, string $type): string {
+            if (Route::has('updater.spa.entry')) {
+                return route('updater.spa.entry', [self::QUERY_PARAMETER => $file]);
+            }
+            // Reuse an existing extensionless route when the host still has a route
+            // cache generated before this endpoint existed. The query retains the
+            // hashed filename without changing the old public asset endpoints.
+            foreach (['updater.index', 'updater.login', 'updater.health'] as $name) {
+                if (Route::has($name)) { return route($name, [self::QUERY_PARAMETER => $file]); }
+            }
             if (Route::has('updater.spa.asset')) { return route('updater.spa.asset', ['file' => $file]); }
             $legacy = $type === 'js' ? 'updater.asset.js' : 'updater.asset.css';
             $version = is_file(self::directory() . '/' . $file) ? hash_file('sha256', self::directory() . '/' . $file) : basename($file);
