@@ -12,14 +12,62 @@ final class UpdateMaintenanceState
 {
     public const POLICY_MESSAGE = 'Política de manutenção da execução.';
     public const NATIVE_OWNER_KEY = 'updater_run_owner';
+    private const LEGACY_ENV_KEY = 'UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START';
 
     public static function enabled(?ManagerStore $managerStore = null): bool
     {
         $branding = $managerStore?->branding() ?? [];
         $value = $branding['enter_maintenance_on_update_start']
-            ?? config('updater.maintenance.enter_on_update_start', true);
+            ?? self::legacyEnvironmentValue()
+            ?? false;
+
+        if (is_string($value)) {
+            $value = match (strtolower(trim($value))) {
+                '(true)' => true,
+                '(false)' => false,
+                default => $value,
+            };
+        }
 
         return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+    }
+
+    private static function legacyEnvironmentValue(): mixed
+    {
+        $value = env(self::LEGACY_ENV_KEY);
+        if ($value !== null) {
+            return $value;
+        }
+
+        // With config:cache Laravel does not load .env. Read only the legacy
+        // flag, without loading dotenv globally or trusting an old true default
+        // retained in the host's published/cached config/updater.php.
+        try {
+            $application = app();
+            if (!method_exists($application, 'environmentFilePath')) {
+                return null;
+            }
+            $path = $application->environmentFilePath();
+            if (!is_file($path) || !is_readable($path)) {
+                return null;
+            }
+            $contents = @file_get_contents($path, false, null, 0, 1_048_577);
+            if (!is_string($contents) || strlen($contents) > 1_048_576) {
+                return null;
+            }
+            $pattern = '/^\h*(?:export\h+)?' . self::LEGACY_ENV_KEY . '\h*=\h*([^\r\n]*)/m';
+            if (preg_match_all($pattern, $contents, $matches) < 1) {
+                return null;
+            }
+            $assignment = self::LEGACY_ENV_KEY . '=' . end($matches[1]);
+            if (strlen($assignment) > 1024) {
+                return null;
+            }
+            $parsed = \Dotenv\Dotenv::parse($assignment);
+            return $parsed[self::LEGACY_ENV_KEY] ?? null;
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public static function recordPolicy(array $context, ?StateStore $store): void

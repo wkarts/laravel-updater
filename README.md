@@ -431,19 +431,19 @@ Quando não há uma identidade válida, o painel apresenta a revisão instalada.
 
 ## Página de manutenção (503) e Whitelabel
 
-Durante uma atualização, o updater só ativa o *maintenance mode* quando a opção **Entrar em manutenção ao iniciar a atualização** estiver habilitada. A configuração salva no Manager tem prioridade; sem configuração salva, usa `UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START`.
+Por padrão, a manutenção automática durante atualizações fica **desativada**. Para habilitá-la, use **Configurações → Manutenção** no Manager; não é necessário criar um parâmetro no `.env`.
 
 No Manager, acesse **Configurações → Manutenção**, escolha **Ativado** ou **Desativado** e clique em **Salvar configuração**. A seção mostra o estado salvo e tem acesso direto por `/settings?tab=maintenance`, dentro do prefixo do updater. Salvar essa preferência não altera a manutenção atual; ela vale para as próximas atualizações.
 
-```dotenv
-UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START=false
-```
+A preferência salva na UI tem prioridade, inclusive quando o `.env` legado informa outro valor. Para compatibilidade, uma definição explícita já existente de `UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START`, com valor booleano literal, ainda pode ser considerada quando não há preferência salva; sem definição explícita, o padrão é desativado. Um fallback `true` de configuração publicada antiga, sozinho, não habilita mais o recurso. Essa opção é editada na aba Manutenção, sem controles duplicados nos editores genéricos de configuração ou ambiente.
 
 Com a opção desabilitada, a execução não ativa a manutenção soft nem executa `artisan down`. A finalização e a recuperação também preservam a manutenção que já existia antes da execução; o lock da atualização continua sendo liberado. Os controles manuais de manutenção permanecem independentes e exigem as confirmações existentes.
 
 A flag de manutenção soft existente é restaurada após a limpeza de cache, inclusive no rollback. Essa restauração não garante ausência de uma janela transitória enquanto `optimize:clear` esvazia o cache; a opção desligada continua sem criar manutenção.
 
 Quando a opção estiver habilitada, a página 503 própria continua disponível.
+
+A página pública de manutenção preserva a URL da aplicação e não aplica o prefixo administrativo do updater à rota atual. **Verificar disponibilidade** consulta a raiz pública real com GET sem cache; enquanto houver 503, timeout ou falha de rede, permanece na tela e informa o resultado. Uma resposta disponível permite retornar à aplicação por navegação completa. A verificação não usa os endpoints de health/status, que podem continuar acessíveis durante a manutenção, e respeita instalações em subdiretório.
 
 ### Default (sem .env)
 

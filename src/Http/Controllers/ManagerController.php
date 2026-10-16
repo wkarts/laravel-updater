@@ -879,7 +879,10 @@ class ManagerController extends Controller
         $defs = [];
         $this->flattenUpdaterConfig('updater', $config, $defs);
 
-        return $defs;
+        // This policy has its own Manager form and persisted preference. Keep
+        // it out of generic runtime/env forms and their accepted input fields.
+        return array_values(array_filter($defs, static fn (array $item): bool =>
+            ($item['config'] ?? '') !== 'updater.maintenance.enter_on_update_start'));
     }
 
     /**

@@ -41,7 +41,7 @@ class ManagerStore
             'maintenance_footer' => (string) ($row['maintenance_footer'] ?? config('updater.maintenance.default_footer', 'Obrigado pela compreensão.')),
             'first_run_assume_behind' => (int) ($row['first_run_assume_behind'] ?? ((bool) config('updater.git.first_run_assume_behind', true) ? 1 : 0)),
             'first_run_assume_behind_commits' => (int) ($row['first_run_assume_behind_commits'] ?? (int) config('updater.git.first_run_assume_behind_commits', 1)),
-            'enter_maintenance_on_update_start' => (int) ($row['enter_maintenance_on_update_start'] ?? ((bool) config('updater.maintenance.enter_on_update_start', true) ? 1 : 0)),
+            'enter_maintenance_on_update_start' => (int) UpdateMaintenanceState::enabled($this),
 
             'is_custom' => $row !== null,
         ];
@@ -121,7 +121,7 @@ class ManagerStore
                 'first_run_assume_behind_commits' => max(1, (int) ($row['first_run_assume_behind_commits'] ?? config('updater.git.first_run_assume_behind_commits', 1))),
             ],
             'maintenance' => [
-                'enter_on_update_start' => (bool) ((int) ($row['enter_maintenance_on_update_start'] ?? ((bool) config('updater.maintenance.enter_on_update_start', true) ? 1 : 0))),
+                'enter_on_update_start' => UpdateMaintenanceState::enabled($this),
             ],
         ];
     }

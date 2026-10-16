@@ -3,9 +3,30 @@ import { route, state } from "../services/app";
 import { computed, ref, watch } from "vue";
 import ActionForm from "../components/ActionForm.vue";
 import Icon from "../components/Icon.vue";
+import { applicationRootUrl, probeApplication } from "../services/availability";
 const props = defineProps<{ data: any; page: string }>();
 const location = window.location;
 const logoFailed = ref(false);
+const checkingAvailability = ref(false);
+const availabilityMessage = ref("");
+const brandUrl = computed(() => props.page === "maintenance"
+  ? applicationRootUrl(state.context)
+  : route("updater.index") || "#");
+async function checkAvailability() {
+  if (checkingAvailability.value) return;
+  checkingAvailability.value = true;
+  availabilityMessage.value = "Verificando a disponibilidade da aplicação…";
+  const result = await probeApplication(state.context);
+  availabilityMessage.value = result.message;
+  checkingAvailability.value = false;
+  if (result.available && result.destination) location.assign(result.destination);
+}
+function visitBrand(event: MouseEvent) {
+  if (props.page === "maintenance") {
+    event.preventDefault();
+    void checkAvailability();
+  }
+}
 const brandImage = computed(() =>
   props.page === "maintenance"
     ? state.context.branding?.maintenance_logo_url ||
@@ -18,7 +39,7 @@ watch(brandImage, () => {
 </script>
 <template>
   <section class="auth-card">
-    <a class="brand auth-brand" :href="route('updater.index') || '#'"
+    <a class="brand auth-brand" :href="brandUrl" @click="visitBrand"
       ><img
         v-if="brandImage && !logoFailed"
         class="brand-image"
@@ -125,9 +146,10 @@ watch(brandImage, () => {
           "Obrigado pela compreensão."
         }}
       </p>
-      <button class="button subtle" @click="location.reload()">
-        Verificar disponibilidade
-      </button></template
+      <button class="button subtle" type="button" :disabled="checkingAvailability" :aria-busy="checkingAvailability" @click="checkAvailability">
+        {{ checkingAvailability ? "Verificando…" : "Verificar disponibilidade" }}
+      </button>
+      <p v-if="availabilityMessage" class="muted" role="status" aria-live="polite">{{ availabilityMessage }}</p></template
     ><template v-else
       ><p class="eyebrow">{{ data.status || state.statusCode || "ERRO" }}</p>
       <h1>{{ data.title || "Acesso indisponível" }}</h1>

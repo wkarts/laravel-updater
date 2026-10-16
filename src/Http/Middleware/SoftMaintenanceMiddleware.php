@@ -45,6 +45,7 @@ class SoftMaintenanceMiddleware
         }
 
         // Resposta 503 usando a view do pacote (whitelabel)
-        return response()->view('laravel-updater::maintenance', [], 503);
+        return response()->view('laravel-updater::maintenance', [], 503)
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     }
 }

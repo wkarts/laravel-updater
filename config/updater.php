@@ -353,7 +353,9 @@ return [
         'default_message' => env('UPDATER_MAINTENANCE_MESSAGE', "Estamos realizando uma atualização programada em nosso sistema para aprimorar desempenho, segurança e estabilidade.\n\nDurante este período, o acesso poderá ficar temporariamente indisponível.\nNossa equipe técnica está trabalhando para concluir o processo o mais breve possível.\n\nPedimos que retorne em alguns minutos."),
         'default_footer' => env('UPDATER_MAINTENANCE_FOOTER', "Agradecemos sua compreensão e confiança.\nSeguimos comprometidos em oferecer uma plataforma cada vez mais eficiente e segura para você."),
         'logo_url' => env('UPDATER_MAINTENANCE_LOGO_URL', env('UPDATER_BRAND_LOGO_URL', '')),
-        'enter_on_update_start' => (bool) env('UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START', true),
+        // Padrão: atualização sem manutenção. O Manager pode habilitar explicitamente.
+        // Mantém a variável legada somente como fallback quando ainda configurada.
+        'enter_on_update_start' => filter_var(env('UPDATER_MAINTENANCE_ENTER_ON_UPDATE_START', false), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false,
 
         // Rotas que nunca devem ser bloqueadas pelo maintenance mode.
         // Por padrão protege o prefixo da UI do updater.

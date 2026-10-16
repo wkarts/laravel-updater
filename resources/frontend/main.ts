@@ -1,10 +1,14 @@
 import { createApp } from "vue";
-import { createRouter, createWebHistory } from "vue-router";
+import { createMemoryHistory, createRouter, createWebHistory } from "vue-router";
 import App from "./App.vue";
 import { bindRouter, state } from "./services/app";
 import "./styles.css";
 const router = createRouter({
-  history: createWebHistory(state.context.basePath.replace(/\/$/, "") + "/"),
+  // A public maintenance page can live at any host route, outside the Manager.
+  // Memory history keeps Vue Router from rewriting /grafico as /_updater/grafico.
+  history: state.page === "maintenance"
+    ? createMemoryHistory()
+    : createWebHistory(state.context.basePath.replace(/\/$/, "") + "/"),
   routes: [{ path: "/:pathMatch(.*)*", component: { template: "<span />" } }],
 });
 bindRouter(router);
