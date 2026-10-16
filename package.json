@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "vue-tsc --noEmit && vite build",
+    "test:frontend": "node --test tests/frontend/*.test.mjs",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {

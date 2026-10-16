@@ -79,6 +79,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - run: npm run test:frontend
       - run: npm run build
       - name: Verify packaged production assets
         run: |

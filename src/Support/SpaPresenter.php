@@ -89,8 +89,17 @@ class SpaPresenter
             if ($request->session()->has('token_plain')) { $flash['token_plain'] = (string) $request->session()->pull('token_plain'); }
         }
         $basePath = Route::has('updater.index') ? (parse_url(route('updater.index'), PHP_URL_PATH) ?: '/') : '/' . trim((string) config('updater.ui.prefix', '_updater'), '/');
+        $prefix = '/' . trim((string) config('updater.ui.prefix', '_updater'), '/');
+        // Generated route URLs retain APP_URL subdirectories during artisan down --render,
+        // when the request is synthetic and getBaseUrl() may be empty.
+        $applicationRootPath = $prefix !== '/' && str_ends_with(rtrim($basePath, '/'), $prefix)
+            ? substr(rtrim($basePath, '/'), 0, -strlen($prefix))
+            : (parse_url(url('/'), PHP_URL_PATH) ?: $request->getBaseUrl());
+        $applicationRootPath = '/' . trim((string) $applicationRootPath, '/');
+        $applicationRootPath = rtrim($applicationRootPath, '/') . '/';
         return ['page' => $page, 'data' => $data, 'context' => [
             'basePath' => rtrim($basePath, '/'), 'csrfToken' => $request->hasSession() ? $request->session()->token() : '',
+            'applicationRootPath' => $applicationRootPath,
             'permissions' => array_fill_keys($user['permissions'], true), 'user' => $user, 'routes' => $this->routes(), 'flash' => $flash, 'branding' => $branding,
             'authEnabled' => (bool) config('updater.ui.auth.enabled', false),
             'security' => ['twoFactorEnabled' => (bool) config('updater.ui.auth.2fa.enabled', true), 'twoFactorRequired' => (bool) config('updater.ui.auth.2fa.required', false), 'maintenanceTwoFactorRequired' => (bool) config('updater.ui.auth.enabled', false) && (bool) ($user['totp_enabled'] ?? false)],

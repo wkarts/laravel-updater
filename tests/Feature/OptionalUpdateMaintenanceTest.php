@@ -46,7 +46,6 @@ final class OptionalUpdateMaintenanceTest extends TestCase
         $app['config']->set('cache.default', 'array');
         $app['config']->set('app.key', 'base64:' . base64_encode(str_repeat('m', 32)));
         $app['config']->set('app.maintenance.driver', 'file');
-        $app['config']->set('updater.maintenance.enter_on_update_start', true);
         $app['config']->set('updater.maintenance.soft_enabled', true);
     }
 
@@ -64,6 +63,9 @@ final class OptionalUpdateMaintenanceTest extends TestCase
         $this->store = app(StateStore::class);
         $this->store->ensureSchema();
         $this->manager = app(ManagerStore::class);
+        // These lifecycle fixtures explicitly opt into automatic maintenance.
+        // New-install defaults are tested without this saved preference.
+        $this->manager->saveBranding(['enter_maintenance_on_update_start' => 1]);
         $this->shell = new MaintenanceRecordingShell();
         $this->lock = new MaintenanceRecordingLock();
     }
@@ -92,6 +94,7 @@ final class OptionalUpdateMaintenanceTest extends TestCase
 
     public function testEnvironmentConfigFalseAndFalseStringAreRespectedWithoutSavedOverride(): void
     {
+        $this->manager->saveBranding([]);
         foreach ([false, 0, '0', 'false'] as $value) {
             config(['updater.maintenance.enter_on_update_start' => $value]);
             self::assertFalse($this->on()->shouldRun([]));

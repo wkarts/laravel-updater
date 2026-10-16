@@ -418,8 +418,8 @@ function configured(value: any): string {
       </header>
       <p>
         Configuração salva:
-        <span class="badge" :class="boolean(branding.enter_maintenance_on_update_start ?? 1) ? 'success' : 'pending'">
-          {{ boolean(branding.enter_maintenance_on_update_start ?? 1) ? "Ativada" : "Desativada" }}
+        <span class="badge" :class="boolean(branding.enter_maintenance_on_update_start ?? 0) ? 'success' : 'pending'">
+          {{ boolean(branding.enter_maintenance_on_update_start ?? 0) ? "Ativada" : "Desativada" }}
         </span>
       </p>
       <ActionForm
@@ -434,7 +434,7 @@ function configured(value: any): string {
                 type="radio"
                 name="enter_maintenance_on_update_start"
                 value="1"
-                :defaultChecked="boolean(branding.enter_maintenance_on_update_start ?? 1)"
+                :defaultChecked="boolean(branding.enter_maintenance_on_update_start ?? 0)"
                 required
               />
               <span>Ativado: exibe a página de manutenção aos clientes durante a atualização.</span>
@@ -444,7 +444,7 @@ function configured(value: any): string {
                 type="radio"
                 name="enter_maintenance_on_update_start"
                 value="0"
-                :defaultChecked="!boolean(branding.enter_maintenance_on_update_start ?? 1)"
+                :defaultChecked="!boolean(branding.enter_maintenance_on_update_start ?? 0)"
                 required
               />
               <span>Desativado: o Updater não coloca a aplicação em manutenção durante a atualização.</span>
