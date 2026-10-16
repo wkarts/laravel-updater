@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Route;
 
 $prefix = trim((string) config('updater.ui.prefix', '_updater'), '/');
 if ($prefix !== '') {
+    Route::get($prefix . '/assets/spa', [SpaAssets::class, 'serveFromQuery'])
+        ->name('updater.spa.entry');
     Route::get($prefix . '/assets/spa/{file}', [SpaAssets::class, 'serve'])
         ->where('file', '[A-Za-z0-9_\-\/.]+')->name('updater.spa.asset');
 }

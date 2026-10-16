@@ -12,6 +12,7 @@ export default defineConfig({
     rollupOptions: {
       input: "resources/frontend/main.ts",
       output: {
+        inlineDynamicImports: true,
         entryFileNames: "assets/updater-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",

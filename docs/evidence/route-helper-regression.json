@@ -1,8 +1,0 @@
-{
-  "fixture": true,
-  "checks": {
-    "missingRouteDoesNotBecomeQuery": true,
-    "cachedRouteDiagnosticsFallback": true,
-    "exactPrereleaseQuery": true
-  }
-}

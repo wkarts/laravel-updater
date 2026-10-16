@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Http\Middleware;
 
 use Argws\LaravelUpdater\Support\SpaPresenter;
+use Argws\LaravelUpdater\Support\SpaAssets;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,10 @@ class SpaResponseMiddleware
 {
     public function handle(Request $request, Closure $next): Response
     {
+        $assets = app(SpaAssets::class);
+        if ($assets->isCachedRouteRequest($request)) {
+            return $assets->serveFromQuery($request);
+        }
         try {
             $response = $next($request);
         } catch (ValidationException $exception) {
@@ -61,6 +66,6 @@ class SpaResponseMiddleware
     private function isDataRoute(Request $request): bool
     {
         $name = (string) $request->route()?->getName();
-        return in_array($name, ['updater.health', 'updater.release-notes'], true) || str_starts_with($name, 'updater.branding.') || in_array($request->query('download'), ['json', 'zip'], true) || $this->isApiRoute($request) || str_contains($name, '.asset') || str_contains($name, '.download') || str_contains($name, '.progress.') || $name === 'updater.status';
+        return in_array($name, ['updater.health', 'updater.release-notes', 'updater.spa.entry'], true) || str_starts_with($name, 'updater.branding.') || in_array($request->query('download'), ['json', 'zip'], true) || $this->isApiRoute($request) || str_contains($name, '.asset') || str_contains($name, '.download') || str_contains($name, '.progress.') || $name === 'updater.status';
     }
 }
