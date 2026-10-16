@@ -8,11 +8,9 @@ class Totp
 {
     public function qrcodeDataUri(string $otpauthUri, int $size = 220): string
     {
-        $png = $this->fetchQrPng($otpauthUri, $size);
-        if ($png !== null) {
-            return 'data:image/png;base64,' . base64_encode($png);
-        }
-
+        // The enrollment URI contains the TOTP secret. Never send it to a
+        // remote QR service. Vue renders the real QR locally from otpauthUri.
+        // Keep a clearly labelled local fallback for legacy consumers.
         $svg = sprintf(
             '<svg xmlns="http://www.w3.org/2000/svg" width="%1$d" height="%1$d"><rect width="100%%" height="100%%" fill="#f3f4f6"/><text x="50%%" y="45%%" text-anchor="middle" font-size="14" fill="#111827" font-family="Arial">QRCode indisponível</text><text x="50%%" y="58%%" text-anchor="middle" font-size="10" fill="#4b5563" font-family="Arial">Copie o segredo manualmente</text></svg>',
             $size
@@ -66,67 +64,4 @@ class Totp
         );
     }
 
-    private function fetchQrPng(string $otpauthUri, int $size): ?string
-    {
-        $providers = [
-            'https://quickchart.io/qr?size=%1$dx%1$d&text=%2$s',
-            'https://chart.googleapis.com/chart?chs=%1$dx%1$d&cht=qr&chl=%2$s',
-        ];
-
-        foreach ($providers as $template) {
-            $url = sprintf($template, $size, rawurlencode($otpauthUri));
-
-            $png = $this->fetchViaCurl($url);
-            if ($png === null) {
-                $png = $this->fetchViaFileGetContents($url);
-            }
-
-            if ($png !== null && $png !== '') {
-                return $png;
-            }
-        }
-
-        return null;
-    }
-
-    private function fetchViaCurl(string $url): ?string
-    {
-        if (!function_exists('curl_init')) {
-            return null;
-        }
-
-        $ch = curl_init($url);
-        if ($ch === false) {
-            return null;
-        }
-
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
-
-        $data = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if (!is_string($data) || $code < 200 || $code >= 300) {
-            return null;
-        }
-
-        return $data;
-    }
-
-    private function fetchViaFileGetContents(string $url): ?string
-    {
-        $ctx = stream_context_create([
-            'http' => [
-                'timeout' => 5,
-                'ignore_errors' => true,
-            ],
-        ]);
-
-        $data = @file_get_contents($url, false, $ctx);
-
-        return is_string($data) && $data !== '' ? $data : null;
-    }
 }

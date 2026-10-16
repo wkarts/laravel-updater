@@ -50,6 +50,11 @@ use Argws\LaravelUpdater\Support\TriggerDispatcher;
 use Argws\LaravelUpdater\Support\UiPermission;
 use Argws\LaravelUpdater\Support\UpdaterLockTools;
 use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
+use Argws\LaravelUpdater\Http\Middleware\SpaResponseMiddleware;
+use Argws\LaravelUpdater\Support\SpaAssets;
+use Argws\LaravelUpdater\Support\SpaPresenter;
+use Illuminate\Routing\Events\RouteMatched;
+use Illuminate\View\View;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Artisan;
@@ -217,10 +222,19 @@ $this->app->singleton(UpdaterKernel::class, function () {
     public function boot(Router $router): void
     {
         $this->applyRuntimeConfigOverrides();
+        $this->registerNativeMaintenanceExclusions();
 
         // Manutenção "soft": bloqueia a aplicação com 503, mas mantém o updater sempre acessível.
         // Prepend no grupo web para ser avaliado antes do resto do stack.
         if ((bool) config('updater.maintenance.soft_enabled', true)) {
+            // Kernel resolution can replace Router middleware groups (including on Laravel 12).
+            // Mirror the registration in the kernel so the maintenance gate survives that sync.
+            $this->callAfterResolving(\Illuminate\Contracts\Http\Kernel::class, function ($kernel): void {
+                if (!method_exists($kernel, 'prependMiddlewareToGroup')) { return; }
+                foreach (['web', 'api'] as $group) {
+                    try { $kernel->prependMiddlewareToGroup($group, \Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware::class); } catch (\InvalidArgumentException) {}
+                }
+            });
             try {
                 $router->prependMiddlewareToGroup('web', \Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware::class);
 
@@ -259,6 +273,19 @@ $this->app->singleton(UpdaterKernel::class, function () {
 
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'laravel-updater');
         $this->loadRoutesFrom(__DIR__ . '/../routes/updater.php');
+        $this->loadRoutesFrom(__DIR__ . '/../routes/spa.php');
+        foreach (['api-additions.php', 'webhooks.php'] as $routes) {
+            if (is_file(__DIR__ . '/../routes/' . $routes)) {
+                $this->loadRoutesFrom(__DIR__ . '/../routes/' . $routes);
+            }
+        }
+        $this->registerSpaPresentation();
+        $this->app->booted(function (): void {
+            if (!class_exists(\Argws\LaravelUpdater\Webhooks\WebhookDispatcher::class)) { return; }
+            $this->app->make(Schedule::class)->call(function (): void {
+                $this->app->make(\Argws\LaravelUpdater\Webhooks\WebhookDispatcher::class)->processPending();
+            })->everyMinute()->name('updater-webhooks')->withoutOverlapping(5);
+        });
 
         if ((bool) config('updater.ui.auth.enabled', false)) {
             $this->app->make(AuthStore::class)->ensureDefaultAdmin();
@@ -311,6 +338,57 @@ $this->app->booted(function () {
 
         }
     }
+    private function registerNativeMaintenanceExclusions(): void
+    {
+        $prefix = trim((string) config('updater.ui.prefix', '_updater'), '/');
+        if ($prefix === '') { return; }
+
+        // Laravel 10/11 DownCommand only asks for this conventional host class.
+        // Modern skeletons may omit it: supply a container fallback only when the
+        // host has neither that class nor a binding, retaining every host override.
+        $legacyMiddleware = 'App\\Http\\Middleware\\PreventRequestsDuringMaintenance';
+        if (!class_exists($legacyMiddleware) && !$this->app->bound($legacyMiddleware)) {
+            $this->app->bind($legacyMiddleware, \Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance::class);
+        }
+
+        // Laravel 10 has no public setter for native maintenance exclusions. A resolving
+        // callback preserves the host's middleware/subclass and its existing exclusions;
+        // it only adds this package's dedicated prefix, whose routes still enforce auth.
+        // DownCommand resolves the same middleware, so its early prerendered maintenance
+        // file receives these exclusions and can load the Vue shell's CSS/JS as well.
+        $this->app->resolving(\Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance::class, function ($middleware) use ($prefix): void {
+            $property = new \ReflectionProperty($middleware, 'except');
+            $existing = (array) $property->getValue($middleware);
+            $property->setValue($middleware, array_values(array_unique(array_merge($existing, [$prefix, $prefix . '/*']))));
+        });
+    }
+
+    private function registerSpaPresentation(): void
+    {
+        // Rebind the file before View renders: legacy/published Blade cannot run includes,
+        // inject old navigation, reference removed routes, or serialize stored credentials.
+        $this->app->make('view')->creator('laravel-updater::*', function (View $view): void {
+            $name = str_replace('laravel-updater::', '', $view->name());
+            if ($name === 'spa') { return; }
+            $page = $name === 'spa-error' ? 'error' : $name;
+            $payload = app(SpaPresenter::class)->present($page, $view->getData(), request());
+            $view->setPath(__DIR__ . '/../resources/views/spa.blade.php');
+            $view->with('__updaterBootstrap', $payload);
+            $view->with('__updaterAssets', app(SpaAssets::class)->entry());
+        });
+        // RouteMatched runs before Laravel gathers the stack. Existing host middleware,
+        // auth, authorization and CSRF are retained and remain authoritative.
+        $this->app->make('events')->listen(RouteMatched::class, function (RouteMatched $event): void {
+            if (!str_starts_with((string) $event->route->getName(), 'updater.')) { return; }
+            $action = $event->route->getAction();
+            $stack = (array) ($action['middleware'] ?? []);
+            if (!in_array(SpaResponseMiddleware::class, $stack, true)) {
+                $action['middleware'] = array_merge([SpaResponseMiddleware::class], $stack);
+                $event->route->setAction($action);
+            }
+        });
+    }
+
     private function syncAssetsIfNeeded(): void
     {
         $targetDir = public_path('vendor/laravel-updater');

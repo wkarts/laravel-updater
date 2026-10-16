@@ -145,6 +145,7 @@ class ManagerStore
 
     public function saveBackupUploadSettings(array $data): void
     {
+        $existing = $this->backupUploadSettings();
         $payload = [
             'provider' => (string) ($data['provider'] ?? 'none'),
             'prefix' => trim((string) ($data['prefix'] ?? 'updater/backups'), '/'),
@@ -172,6 +173,16 @@ class ManagerStore
             $payload['auto_upload'] = false;
         }
 
+        foreach (['dropbox' => ['access_token'], 'google_drive' => ['client_secret', 'refresh_token'], 's3' => ['access_key', 'secret_key']] as $provider => $fields) {
+            foreach ($fields as $field) {
+                if (!empty($data[$provider]['remove_' . $field])) {
+                    $payload[$provider][$field] = '';
+                } elseif ($payload[$provider][$field] === '') {
+                    $payload[$provider][$field] = (string) ($existing[$provider][$field] ?? '');
+                }
+            }
+        }
+
         $this->setRuntimeOption('backup_upload', $payload);
     }
 
@@ -186,11 +197,28 @@ class ManagerStore
 
         $decoded = json_decode((string) $row['value_json'], true);
 
+        if (is_array($decoded) && in_array($key, ['backup_upload', 'updater_config_overrides'], true)) {
+            // Upgrade legacy plaintext credentials conservatively on first use.
+            $protected = SecretVault::sealFields($decoded);
+            if ($protected !== $decoded) {
+                // Do not overwrite a simultaneous credential rotation.
+                $this->pdo()->prepare('UPDATE updater_runtime_settings SET value_json=:protected WHERE key=:key AND value_json=:original')->execute([
+                    ':protected' => json_encode($protected, JSON_UNESCAPED_UNICODE),
+                    ':key' => $key,
+                    ':original' => (string) $row['value_json'],
+                ]);
+            }
+            return SecretVault::openFields($protected);
+        }
+
         return $decoded ?? $default;
     }
 
     public function setRuntimeOption(string $key, mixed $value): void
     {
+        if (is_array($value) && in_array($key, ['backup_upload', 'updater_config_overrides'], true)) {
+            $value = SecretVault::sealFields($value);
+        }
         $stmt = $this->pdo()->prepare('INSERT INTO updater_runtime_settings (key, value_json, updated_at) VALUES (:key, :value_json, :updated_at)
             ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at');
         $stmt->execute([
@@ -210,12 +238,7 @@ class ManagerStore
 
     public function findUser(int $id): ?array
     {
-        $stmt = $this->pdo()->prepare('SELECT * FROM updater_users WHERE id = :id LIMIT 1');
-        $stmt->execute([':id' => $id]);
-
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        return $row ?: null;
+        return (new AuthStore($this->stateStore))->findUserById($id);
     }
 
     public function createUser(array $data): int
@@ -295,7 +318,7 @@ class ManagerStore
     {
         $stmt = $this->pdo()->query('SELECT * FROM updater_sources ORDER BY active DESC, id DESC');
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        return array_map(fn (array $row): array => $this->openSource($row), $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
     }
 
     public function findSource(int $id): ?array
@@ -304,11 +327,19 @@ class ManagerStore
         $stmt->execute([':id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $row ?: null;
+        return $row ? $this->openSource($row) : null;
     }
 
     public function createOrUpdateSource(array $data, ?int $id = null): void
     {
+        $existing = $id !== null ? $this->findSource($id) : null;
+        foreach (['auth_password', 'token_encrypted', 'ssh_private_key_path'] as $field) {
+            if (!empty($data['remove_' . $field]) || !empty($data['remove_credentials'])) {
+                $data[$field] = null;
+            } elseif (!isset($data[$field]) || trim((string) $data[$field]) === '') {
+                $data[$field] = $existing[$field] ?? null;
+            }
+        }
         $payload = [
             ':name' => $data['name'],
             ':type' => $data['type'],
@@ -316,8 +347,8 @@ class ManagerStore
             ':branch' => $data['branch'] ?? 'main',
             ':auth_mode' => $data['auth_mode'] ?? 'none',
             ':auth_username' => $data['auth_username'] ?? null,
-            ':auth_password' => $data['auth_password'] ?? null,
-            ':token_encrypted' => $data['token_encrypted'] ?? null,
+            ':auth_password' => SecretVault::seal($data['auth_password'] ?? null),
+            ':token_encrypted' => SecretVault::seal($data['token_encrypted'] ?? null),
             ':ssh_private_key_path' => $data['ssh_private_key_path'] ?? null,
             ':active' => (int) ($data['active'] ?? 0),
             ':updated_at' => date(DATE_ATOM),
@@ -358,7 +389,38 @@ class ManagerStore
 
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $row ?: null;
+        return $row ? $this->openSource($row) : null;
+    }
+
+    /** Safe shape for every UI response; operational code uses the internal methods. */
+    public function publicSource(?array $source): ?array
+    {
+        return $source === null ? null : SecretVault::publicFields($source);
+    }
+
+    public function publicSources(): array
+    {
+        return array_map(fn (array $source): array => $this->publicSource($source), $this->sources());
+    }
+
+    public function publicBackupUploadSettings(): array
+    {
+        return SecretVault::publicFields($this->backupUploadSettings());
+    }
+
+    private function openSource(array $source): array
+    {
+        foreach (['auth_password', 'token_encrypted'] as $field) {
+            $raw = $source[$field] ?? null;
+            if (is_string($raw) && $raw !== '' && !SecretVault::encrypted($raw)) {
+                $this->pdo()->prepare('UPDATE updater_sources SET ' . $field . '=:protected WHERE id=:id AND ' . $field . '=:original')->execute([
+                    ':protected' => SecretVault::seal($raw), ':id' => $source['id'], ':original' => $raw,
+                ]);
+            }
+            $source[$field] = SecretVault::open($raw);
+        }
+
+        return $source;
     }
 
     /** @return array<int,array<string,mixed>> */
@@ -380,6 +442,14 @@ class ManagerStore
 
     public function createOrUpdateProfile(array $data, ?int $id = null): void
     {
+        $existing = $id !== null ? $this->findProfile($id) : null;
+        foreach (['pre_update_commands', 'post_update_commands'] as $field) {
+            if (!empty($data['clear_' . $field])) {
+                $data[$field] = null;
+            } elseif ($existing !== null && (!isset($data[$field]) || trim((string) $data[$field]) === '')) {
+                $data[$field] = $existing[$field] ?? null;
+            }
+        }
         $fields = ['backup_enabled', 'dry_run', 'force', 'composer_install', 'migrate', 'seed', 'build_assets', 'health_check', 'rollback_on_fail', 'snapshot_include_vendor', 'active'];
         foreach ($fields as $field) {
             $data[$field] = (int) ($data[$field] ?? 0);
@@ -531,7 +601,7 @@ class ManagerStore
         $stmt->execute([
             ':user_id' => $userId,
             ':action' => $action,
-            ':meta_json' => json_encode($meta, JSON_UNESCAPED_UNICODE),
+            ':meta_json' => json_encode(RunDiagnosticsService::sanitize($meta), JSON_UNESCAPED_UNICODE),
             ':ip' => $ip,
             ':user_agent' => $userAgent,
             ':created_at' => date(DATE_ATOM),

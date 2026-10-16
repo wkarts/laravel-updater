@@ -25,7 +25,7 @@ class AuthStore
         $stmt->execute([':email' => mb_strtolower(trim($email))]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $row ?: null;
+        return $row ? $this->openUser($row) : null;
     }
 
     public function findUserById(int $id): ?array
@@ -34,7 +34,7 @@ class AuthStore
         $stmt->execute([':id' => $id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $row ?: null;
+        return $row ? $this->openUser($row) : null;
     }
 
     public function createUser(string $email, string $password, bool $isAdmin = false, string $name = "Admin"): int
@@ -73,7 +73,7 @@ class AuthStore
     {
         $stmt = $this->pdo()->prepare('UPDATE updater_users SET totp_secret = :secret, totp_enabled = :enabled, updated_at = :updated_at WHERE id = :id');
         $stmt->execute([
-            ':secret' => $secret,
+            ':secret' => SecretVault::seal($secret),
             ':enabled' => $enabled ? 1 : 0,
             ':updated_at' => date(DATE_ATOM),
             ':id' => $userId,
@@ -169,6 +169,21 @@ class AuthStore
             $this->invalidateSession($sessionId);
             return null;
         }
+
+        return $this->openUser($row, (int) $row['user_id']);
+    }
+
+    private function openUser(array $row, ?int $userId = null): array
+    {
+        $secret = $row['totp_secret'] ?? null;
+        if (is_string($secret) && $secret !== '' && !SecretVault::encrypted($secret)) {
+            $this->pdo()->prepare('UPDATE updater_users SET totp_secret=:secret WHERE id=:id AND totp_secret=:original')->execute([
+                ':secret' => SecretVault::seal($secret),
+                ':id' => $userId ?? (int) $row['id'],
+                ':original' => $secret,
+            ]);
+        }
+        $row['totp_secret'] = SecretVault::open($secret);
 
         return $row;
     }

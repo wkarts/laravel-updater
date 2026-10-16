@@ -308,7 +308,7 @@ class StateStore
         $stmt->execute([
             ':started_at' => $now,
             ':status' => 'running',
-            ':options_json' => json_encode($options, JSON_UNESCAPED_UNICODE),
+            ':options_json' => json_encode(RunDiagnosticsService::sanitize($options), JSON_UNESCAPED_UNICODE),
             ':heartbeat_at' => $now,
             ':worker_pid' => getmypid() ?: null,
             ':execution_mode' => PHP_SAPI,
@@ -324,7 +324,7 @@ class StateStore
         $stmt->execute([
             ':started_at' => $now,
             ':status' => 'queued',
-            ':options_json' => json_encode($options, JSON_UNESCAPED_UNICODE),
+            ':options_json' => json_encode(RunDiagnosticsService::sanitize($options), JSON_UNESCAPED_UNICODE),
             ':heartbeat_at' => $now,
             ':execution_mode' => 'queued',
         ]);
@@ -384,7 +384,7 @@ class StateStore
             ':revision_after' => $context['revision_after'] ?? null,
             ':backup_file' => $context['backup_file'] ?? null,
             ':snapshot_file' => $context['snapshot_file'] ?? null,
-            ':error_json' => $error ? json_encode($error, JSON_UNESCAPED_UNICODE) : null,
+            ':error_json' => $error ? json_encode(RunDiagnosticsService::sanitize($error), JSON_UNESCAPED_UNICODE) : null,
             ':id' => $runId,
         ]);
     }
@@ -395,7 +395,7 @@ class StateStore
         $stmt->execute([
             ':finished_at' => date(DATE_ATOM),
             ':status' => $status,
-            ':error_json' => $error ? json_encode($error, JSON_UNESCAPED_UNICODE) : null,
+            ':error_json' => $error ? json_encode(RunDiagnosticsService::sanitize($error), JSON_UNESCAPED_UNICODE) : null,
             ':id' => $runId,
         ]);
     }
@@ -415,8 +415,8 @@ class StateStore
         $stmt->execute([
             ':run_id' => $runId,
             ':level' => $level,
-            ':message' => $message,
-            ':context_json' => json_encode($context, JSON_UNESCAPED_UNICODE),
+            ':message' => RunDiagnosticsService::sanitizeText($message),
+            ':context_json' => json_encode(RunDiagnosticsService::sanitize($context), JSON_UNESCAPED_UNICODE),
             ':created_at' => (new \DateTimeImmutable())->format('Y-m-d\\TH:i:s.uP'),
         ]);
     }

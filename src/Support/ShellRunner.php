@@ -187,8 +187,8 @@ class ShellRunner
 		}
 		return [
             'code' => (int) $code,
-            'stdout' => $stdout,
-            'stderr' => $stderr,
+            'stdout' => $this->redactCredentialUrls($stdout),
+            'stderr' => $this->redactCredentialUrls($stderr),
             'cmd' => $cmdForLog,
         ];
     }
@@ -239,7 +239,7 @@ throw new UpdaterException($msg, $code);
     {
         $parts = [];
         foreach ($command as $part) {
-            $p = trim((string) $part);
+            $p = $this->redactCredentialUrls(trim((string) $part));
             if ($p === '') {
                 continue;
             }
@@ -541,13 +541,18 @@ private function resolveWorkingDirectory(?string $cwd, array $command): string
         }
 
         if (((int) ($result['exit_code'] ?? 1)) !== 0) {
-            $cmdStr = implode(' ', array_map(static fn ($p) => (string) $p, $command));
+            $cmdStr = $this->formatCommandForLog($command);
             $msg = trim((string) ($result['stderr'] ?: $result['stdout']));
             $suffix = $msg !== '' ? (' ' . $msg) : '';
             throw new UpdaterException(sprintf('Comando falhou (%s): %s%s', $result['exit_code'], $cmdStr, $suffix));
         }
 
         return $result;
+    }
+
+    private function redactCredentialUrls(string $text): string
+    {
+        return preg_replace('~(https?://)[^/\s@]+@~i', '$1[REDACTED]@', $text) ?? $text;
     }
 
     /**

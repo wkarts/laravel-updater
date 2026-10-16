@@ -69,3 +69,19 @@ jobs:
 
       - name: PHPUnit
         run: ./vendor/bin/phpunit
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Verify packaged production assets
+        run: |
+          git diff --exit-code -- resources/dist
+          test -f resources/dist/.vite/manifest.json
+          test -z "$(git ls-files --others --exclude-standard resources/dist)"

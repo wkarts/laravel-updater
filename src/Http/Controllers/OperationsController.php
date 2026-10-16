@@ -46,15 +46,14 @@ class OperationsController extends Controller
             'target_tag' => ['nullable', 'string', 'max:120'],
             'target_branch' => ['nullable', 'string', 'max:255'],
             'dry_run_before' => ['nullable', 'boolean'],
+            'action' => ['required', 'in:simulate,apply'],
+            'confirm_apply' => ['nullable', 'string', 'in:ATUALIZAR'],
             'replay_migrations_from_start' => ['nullable', 'boolean'],
         ], [
             'profile_id.required' => 'Selecione um perfil.',
             'source_id.required' => 'Selecione uma fonte.',
             'update_mode.required' => 'Selecione o modo de atualização.',
         ]);
-
-        $this->managerStore->activateProfile((int) $data['profile_id']);
-        $this->managerStore->setActiveSource((int) $data['source_id']);
 
         $updateType = $this->mapUpdateType((string) $data['update_mode']);
         $targetTag = trim((string) ($data['target_tag'] ?? ''));
@@ -64,8 +63,20 @@ class OperationsController extends Controller
             return back()->withErrors(['target_tag' => 'Selecione uma tag para atualizar por tag.'])->withInput();
         }
 
-        $action = (string) $request->input('action', 'apply');
-        $shouldDryRunFirst = $action === 'simulate' || ($action === '' && (bool) $request->boolean('dry_run_before', true));
+        // A checked simulation option is always a simulation, including old forms
+        // submitting action=apply. Only an explicit, separately confirmed apply
+        // with dry_run_before=false can mutate the installation.
+        $action = (string) $data['action'];
+        $shouldDryRunFirst = $action === 'simulate' || $request->boolean('dry_run_before', true);
+        if (!$shouldDryRunFirst && (string) ($data['confirm_apply'] ?? '') !== 'ATUALIZAR') {
+            return back()->withErrors(['confirm_apply' => 'Confirme explicitamente a atualização real digitando ATUALIZAR.']);
+        }
+
+        if ($this->managerStore->findProfile((int) $data['profile_id']) === null || $this->managerStore->findSource((int) $data['source_id']) === null) {
+            return back()->withErrors(['update' => 'Perfil ou fonte de atualização inválidos.']);
+        }
+        $this->managerStore->activateProfile((int) $data['profile_id']);
+        $this->managerStore->setActiveSource((int) $data['source_id']);
         $replayMigrationsFromStart = (bool) ($data['replay_migrations_from_start'] ?? false);
         $profile = $this->managerStore->activeProfile();
         $profileOptions = $this->resolveActiveBackupOptions();
@@ -148,6 +159,7 @@ class OperationsController extends Controller
     {
         $request->validate([
             'password' => ['required', 'string'],
+            'confirm_apply' => ['required', 'in:ATUALIZAR'],
         ]);
 
         $actor = request()->attributes->get('updater_user');
@@ -162,6 +174,19 @@ class OperationsController extends Controller
         if (!is_array($pending)) {
             return back()->withErrors(['approval' => 'Não há execução pendente de aprovação para este dry-run.']);
         }
+
+        $simulation = $this->stateStore->findRun($id);
+        $simulationOptions = json_decode((string) ($simulation['options_json'] ?? ''), true);
+        if (!in_array($simulation['status'] ?? null, ['success', 'DRY_RUN'], true) || !is_array($simulationOptions) || !($simulationOptions['dry_run'] ?? false)) {
+            return back()->withErrors(['approval' => 'A simulação precisa concluir com sucesso antes da aprovação.']);
+        }
+        if ($this->managerStore->findProfile((int) $pending['profile_id']) === null || $this->managerStore->findSource((int) $pending['source_id']) === null) {
+            return back()->withErrors(['approval' => 'O perfil ou a fonte da simulação não está mais disponível.']);
+        }
+        // Approve exactly the profile and source that were simulated, even if
+        // an administrator selected another active configuration afterwards.
+        $this->managerStore->activateProfile((int) $pending['profile_id']);
+        $this->managerStore->setActiveSource((int) $pending['source_id']);
 
         if ($this->requiresFullBackupBeforeUpdate()) {
             $this->performMandatoryFullBackup($request);
@@ -720,16 +745,25 @@ class OperationsController extends Controller
         $actor = request()->attributes->get('updater_user');
         abort_if(!is_array($actor), 403);
 
+        if (is_string($request->input('reason'))) {
+            $request->merge(['reason' => trim((string) $request->input('reason'))]);
+        }
+
         $data = $request->validate([
             'migration' => ['required', 'string'],
-            'reason' => ['nullable', 'string', 'max:1000'],
+            'reason' => ['required', 'string', 'min:3', 'max:1000'],
             'redirect_to' => ['nullable', 'string', 'in:index,show'],
-            'action_type' => ['nullable', 'string', 'in:queue,run_now'],
+            'action_type' => ['required', 'string', 'in:queue,run_now'],
+        ], [
+            'reason.required' => 'Informe o motivo da reexecução da migration.',
+            'reason.min' => 'Descreva o motivo com ao menos 3 caracteres.',
+            'action_type.required' => 'Escolha entre enfileirar ou executar agora.',
+            'action_type.in' => 'Escolha uma ação válida para a reexecução.',
         ]);
 
         $reason = trim((string) ($data['reason'] ?? ''));
         $requestedBy = (string) (($actor['email'] ?? $actor['name'] ?? 'unknown'));
-        $actionType = (string) ($data['action_type'] ?? 'run_now');
+        $actionType = (string) $data['action_type'];
         $migration = (string) $data['migration'];
 
         $result = $this->performMigrationReapply($migration, $reason, $requestedBy, $actionType);

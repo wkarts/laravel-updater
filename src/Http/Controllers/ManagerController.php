@@ -14,10 +14,13 @@ use Argws\LaravelUpdater\Support\UpdateRecoveryManager;
 use Argws\LaravelUpdater\Support\ShellRunner;
 use Argws\LaravelUpdater\Support\UiPermission;
 use Argws\LaravelUpdater\Support\ReleaseNotesResolver;
+use Argws\LaravelUpdater\Support\SecretVault;
+use Argws\LaravelUpdater\Support\RunDiagnosticsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Route;
 
 class ManagerController extends Controller
 {
@@ -31,8 +34,8 @@ class ManagerController extends Controller
             'updates' => view('laravel-updater::sections.updates', [
                 'profiles' => $this->managerStore->profiles(),
                 'activeProfile' => $this->managerStore->activeProfile(),
-                'sources' => $this->managerStore->sources(),
-                'activeSource' => $this->managerStore->activeSource(),
+                'sources' => $this->managerStore->publicSources(),
+                'activeSource' => $this->managerStore->publicSource($this->managerStore->activeSource()),
                 'statusCheck' => $this->buildUpdateStatusCheck(),
                 'availableTags' => $this->availableTags(),
                 'fullUpdateEnabled' => (bool) config('updater.full_update.enabled', false),
@@ -43,11 +46,11 @@ class ManagerController extends Controller
                 'runs' => app(UpdaterKernel::class)->stateStore()->recentRuns(100),
             ]),
             'sources' => view('laravel-updater::sections.sources', [
-                'sources' => $this->managerStore->sources(),
-                'editingSource' => $request->filled('edit') ? $this->managerStore->findSource((int) $request->input('edit')) : null,
+                'sources' => $this->managerStore->publicSources(),
+                'editingSource' => $request->filled('edit') ? $this->managerStore->publicSource($this->managerStore->findSource((int) $request->input('edit'))) : null,
                 'allowMultipleSources' => (bool) config('updater.sources.allow_multiple', false),
             ]),
-            'profiles' => redirect()->route('updater.profiles.index'),
+            'profiles' => $this->availableSectionRedirect('updater.profiles.index'),
             'backups' => view('laravel-updater::sections.backups', ['backups' => $this->managerStore->backups()]),
             'logs' => view('laravel-updater::sections.logs', [
                 'logs' => $this->managerStore->logs(
@@ -62,12 +65,21 @@ class ManagerController extends Controller
                 'lockInfo' => app(UpdaterLockTools::class)->info('system-update'),
                 'recoveryState' => app(UpdateRecoveryManager::class)->inspect(),
             ]),
-            'migrations' => redirect()->route('updater.migrations.index'),
-            'seeds' => redirect()->route('updater.seeds.index'),
-            'admin-users' => redirect()->route('updater.users.index'),
-            'settings' => redirect()->route('updater.settings.index'),
+            'migrations' => $this->availableSectionRedirect('updater.migrations.index'),
+            'seeds' => $this->availableSectionRedirect('updater.seeds.index'),
+            'admin-users' => $this->availableSectionRedirect('updater.users.index'),
+            'settings' => $this->availableSectionRedirect('updater.settings.index'),
             default => abort(404),
         };
+    }
+
+    private function availableSectionRedirect(string $route): RedirectResponse
+    {
+        // Host-auth mode historically registers only its existing operation subset.
+        // Do not fabricate administrative CRUD routes or weaken their access checks.
+        abort_unless(Route::has($route), 403, 'Esta área administrativa não está disponível neste modo de autenticação.');
+
+        return redirect()->route($route);
     }
 
     public function gitMaintainNow(Request $request): RedirectResponse
@@ -170,7 +182,7 @@ class ManagerController extends Controller
         abort_if($user === null, 404);
 
         return view('laravel-updater::users.edit', [
-            'user' => $user,
+            'user' => SecretVault::publicFields($user),
             'permissionDefinitions' => $this->permission->definitions(),
             'masterEmail' => (string) config('updater.ui.auth.master_email', ''),
         ]);
@@ -316,11 +328,11 @@ class ManagerController extends Controller
     {
         return view('laravel-updater::settings.index', [
             'branding' => $this->managerStore->resolvedBranding(),
-            'tokens' => $this->managerStore->apiTokens(),
-            'sources' => $this->managerStore->sources(),
-            'activeSource' => $this->managerStore->activeSource(),
+            'tokens' => app(\Argws\LaravelUpdater\Support\ApiTokenRegistry::class)->tokens(),
+            'sources' => $this->managerStore->publicSources(),
+            'activeSource' => $this->managerStore->publicSource($this->managerStore->activeSource()),
             'profiles' => $this->managerStore->profiles(),
-            'backupUpload' => $this->managerStore->backupUploadSettings(),
+            'backupUpload' => $this->managerStore->publicBackupUploadSettings(),
             'updaterConfigFields' => $this->buildUpdaterConfigFields(),
         ]);
     }
@@ -359,6 +371,11 @@ class ManagerController extends Controller
             }
 
             if ($envLocked) {
+                continue;
+            }
+
+            if ($isSensitive && $request->boolean('remove_' . $field)) {
+                $stored[$configKey] = '';
                 continue;
             }
 
@@ -405,6 +422,11 @@ class ManagerController extends Controller
             $sensitive = (bool) ($field['sensitive'] ?? false);
 
             if ($input === '' || $envKey === '') {
+                continue;
+            }
+
+            if ($sensitive && $request->boolean('remove_' . $input)) {
+                $updates[$envKey] = '';
                 continue;
             }
 
@@ -525,6 +547,10 @@ class ManagerController extends Controller
             'auth_username' => ['nullable', 'string', 'max:120'],
             'auth_password' => ['nullable', 'string', 'max:255'],
             'token_encrypted' => ['nullable', 'string', 'max:255'],
+            'remove_credentials' => ['nullable', 'boolean'],
+            'remove_auth_password' => ['nullable', 'boolean'],
+            'remove_token_encrypted' => ['nullable', 'boolean'],
+            'remove_ssh_private_key_path' => ['nullable', 'boolean'],
             'ssh_private_key_path' => ['nullable', 'string', 'max:255'],
             'active' => ['nullable', 'boolean'],
             'post_update_commands' => ['nullable', 'string', 'max:8000'],
@@ -540,10 +566,14 @@ class ManagerController extends Controller
             $data['token_encrypted'] = $data['auth_password'];
         }
 
+        if (str_contains((string) $data['repo_url'], '://') && (parse_url((string) $data['repo_url'], PHP_URL_USER) !== null || parse_url((string) $data['repo_url'], PHP_URL_PASS) !== null)) {
+            return back()->withErrors(['repo_url' => 'Informe uma URL sem credenciais. Use os campos protegidos de autenticação.']);
+        }
+
         $id = isset($data['id']) ? (int) $data['id'] : null;
         $allowMultipleSources = (bool) config('updater.sources.allow_multiple', false);
         if (!$allowMultipleSources && $id === null && count($this->managerStore->sources()) > 0) {
-            return back()->withErrors(['source' => 'Cadastro de múltiplas fontes está bloqueado. Para habilitar, defina UPDATER_SOURCES_ALLOW_MULTIPLE=true.'])->withInput();
+            return back()->withErrors(['source' => 'Cadastro de múltiplas fontes está bloqueado. Para habilitar, defina UPDATER_SOURCES_ALLOW_MULTIPLE=true.']);
         }
 
         if (!$allowMultipleSources) {
@@ -601,7 +631,7 @@ class ManagerController extends Controller
         $tags = $shellRunner->run(['git', 'ls-remote', '--tags', '--refs', $repoUrl], null, $env);
 
         if ($head['exit_code'] !== 0 && $tags['exit_code'] !== 0) {
-            return back()->withErrors(['source' => 'Falha ao conectar com a fonte: ' . ($head['stderr'] ?: $tags['stderr'] ?: 'erro desconhecido')]);
+            return back()->withErrors(['source' => 'Falha ao conectar com a fonte: ' . RunDiagnosticsService::sanitize($head['stderr'] ?: $tags['stderr'] ?: 'erro desconhecido')]);
         }
 
         $versions = $this->parseRemoteVersions((string) ($tags['stdout'] ?? ''));
@@ -612,8 +642,16 @@ class ManagerController extends Controller
 
     public function createApiToken(Request $request): RedirectResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:120']], ['name.required' => 'Informe um nome para o token.']);
-        $token = $this->managerStore->generateApiToken($data['name']);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'scopes' => ['sometimes', 'array', 'min:1'],
+            'scopes.*' => ['string', \Illuminate\Validation\Rule::in(\Argws\LaravelUpdater\Support\ApiTokenRegistry::SCOPES)],
+            'rotate_token_id' => ['nullable', 'integer', 'min:1'],
+        ], ['name.required' => 'Informe um nome para o token.']);
+        $token = app(\Argws\LaravelUpdater\Support\ApiTokenRegistry::class)->create($data['name'], $data['scopes'] ?? \Argws\LaravelUpdater\Support\ApiTokenRegistry::READ_SCOPES);
+        if (!empty($data['rotate_token_id'])) {
+            $this->managerStore->revokeApiToken((int) $data['rotate_token_id']);
+        }
         $this->audit($request, $this->actorId($request), 'Token de API criado.', ['token_id' => $token['id']]);
 
         return back()->with('status', 'Salvo com sucesso.')->with('token_plain', $token['token']);
@@ -645,6 +683,11 @@ class ManagerController extends Controller
             's3_access_key' => ['nullable', 'string', 'max:255'],
             's3_secret_key' => ['nullable', 'string', 'max:255'],
             's3_path_style' => ['nullable', 'boolean'],
+            'remove_dropbox_access_token' => ['nullable', 'boolean'],
+            'remove_google_client_secret' => ['nullable', 'boolean'],
+            'remove_google_refresh_token' => ['nullable', 'boolean'],
+            'remove_s3_access_key' => ['nullable', 'boolean'],
+            'remove_s3_secret_key' => ['nullable', 'boolean'],
         ]);
 
         $this->managerStore->saveBackupUploadSettings([
@@ -653,11 +696,14 @@ class ManagerController extends Controller
             'auto_upload' => $request->boolean('auto_upload'),
             'dropbox' => [
                 'access_token' => (string) ($data['dropbox_access_token'] ?? ''),
+                'remove_access_token' => $request->boolean('remove_dropbox_access_token'),
             ],
             'google_drive' => [
                 'client_id' => (string) ($data['google_client_id'] ?? ''),
                 'client_secret' => (string) ($data['google_client_secret'] ?? ''),
                 'refresh_token' => (string) ($data['google_refresh_token'] ?? ''),
+                'remove_client_secret' => $request->boolean('remove_google_client_secret'),
+                'remove_refresh_token' => $request->boolean('remove_google_refresh_token'),
                 'folder_id' => (string) ($data['google_folder_id'] ?? ''),
             ],
             's3' => [
@@ -666,6 +712,8 @@ class ManagerController extends Controller
                 'bucket' => (string) ($data['s3_bucket'] ?? ''),
                 'access_key' => (string) ($data['s3_access_key'] ?? ''),
                 'secret_key' => (string) ($data['s3_secret_key'] ?? ''),
+                'remove_access_key' => $request->boolean('remove_s3_access_key'),
+                'remove_secret_key' => $request->boolean('remove_s3_secret_key'),
                 'path_style' => $request->boolean('s3_path_style', true),
             ],
         ]);
@@ -695,6 +743,8 @@ class ManagerController extends Controller
             'active' => ['nullable', 'boolean'],
             'pre_update_commands' => ['nullable', 'string', 'max:8000'],
             'post_update_commands' => ['nullable', 'string', 'max:8000'],
+            'remove_pre_update_commands' => ['nullable', 'boolean'],
+            'remove_post_update_commands' => ['nullable', 'boolean'],
         ], [
             'name.required' => 'Informe o nome do perfil.',
             'retention_backups.integer' => 'A retenção deve ser numérica.',
@@ -710,7 +760,12 @@ class ManagerController extends Controller
             $data['pre_update_commands'] = null;
         }
 
-        $data['post_update_commands'] = $this->mergePostUpdateSuggestions(trim((string) ($data['post_update_commands'] ?? '')));
+        // Empty fields keep trusted commands on edits; only explicit removal
+        // clears them. Never repopulate stored commands in the browser.
+        $data['post_update_commands'] = trim((string) ($data['post_update_commands'] ?? ''));
+        foreach (['pre_update_commands', 'post_update_commands'] as $field) {
+            $data['clear_' . $field] = $request->boolean('remove_' . $field) || $request->boolean('clear_' . $field);
+        }
         $data['snapshot_compression'] = 'zip';
 
         return $data;
@@ -745,7 +800,9 @@ class ManagerController extends Controller
 
             $rows[] = array_merge($item, [
                 'env_locked' => $envLocked,
-                'value' => $this->normalizeFieldValue($value, $type),
+                'value' => !empty($item['sensitive']) ? '' : $this->normalizeFieldValue($value, $type),
+                'configured' => !empty($item['sensitive']) && $value !== null && $value !== '',
+                'default' => !empty($item['sensitive']) ? null : ($item['default'] ?? null),
                 'env_key' => implode(' | ', $envKeysForField),
                 'primary_env_key' => (string) ($envKeysForField[0] ?? ''),
             ]);
@@ -940,10 +997,15 @@ class ManagerController extends Controller
 
             $configKey = (string) ($field['config'] ?? '');
             $effectiveValue = $runtime[$configKey] ?? config($configKey, $field['default'] ?? null);
-            $field['value'] = $this->normalizeFieldValue($effectiveValue, (string) ($field['type'] ?? 'string'));
+            $sensitive = (bool) ($field['sensitive'] ?? false);
+            $field['value'] = $sensitive ? '' : $this->normalizeFieldValue($effectiveValue, (string) ($field['type'] ?? 'string'));
+            $field['configured'] = $sensitive && ($effectiveValue !== null && $effectiveValue !== '' || ($envMap[$primary] ?? '') !== '');
+            if ($sensitive) {
+                $field['default'] = null;
+            }
             $field['env_key'] = implode(' | ', $envKeys);
             $field['primary_env_key'] = $primary;
-            $field['env_value'] = $envMap[$primary] ?? '';
+            $field['env_value'] = $sensitive ? '' : ($envMap[$primary] ?? '');
             $rows[] = $field;
         }
 
