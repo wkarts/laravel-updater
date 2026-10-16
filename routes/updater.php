@@ -101,6 +101,7 @@ if ((bool) config('updater.ui.enabled', true)) {
                 Route::post('/profiles/{id}/activate', [ManagerController::class, 'profilesActivate'])->name('updater.profiles.activate');
 
                 Route::get('/settings', [ManagerController::class, 'settingsIndex'])->name('updater.settings.index');
+                Route::post('/settings/maintenance', [ManagerController::class, 'saveUpdateMaintenanceSettings'])->name('updater.settings.maintenance.save');
                 Route::post('/settings/branding', [ManagerController::class, 'saveBranding'])->name('updater.settings.branding.save');
                 Route::delete('/settings/branding/{asset}', [ManagerController::class, 'removeBrandingAsset'])->whereIn('asset', ['logo', 'favicon', 'maintenance-logo'])->name('updater.settings.branding.asset.remove');
                 Route::post('/settings/branding/reset', [ManagerController::class, 'resetBranding'])->name('updater.settings.branding.reset');

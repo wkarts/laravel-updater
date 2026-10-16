@@ -8,11 +8,12 @@ import { can, route, state } from "../services/app";
 
 const props = defineProps<{ data: any; page: string }>();
 const currentRoute = useRoute();
-const tabIds = ["branding", "runtime", "cloud", "tokens"];
+const tabIds = ["branding", "runtime", "maintenance", "cloud", "tokens"];
 function requestedTab(): string {
   const requested = String(currentRoute.query.tab || "");
   if (tabIds.includes(requested)) return requested;
-  return currentRoute.hash === "#tokens" ? "tokens" : "branding";
+  const hashTab = currentRoute.hash.slice(1);
+  return tabIds.includes(hashTab) ? hashTab : "branding";
 }
 const tab = ref(requestedTab());
 watch(
@@ -92,6 +93,7 @@ const scopes = [
 const tabs = [
   { id: "branding", label: "Identidade" },
   { id: "runtime", label: "Comportamento" },
+  { id: "maintenance", label: "Manutenção" },
   { id: "cloud", label: "Armazenamento" },
   { id: "tokens", label: "Tokens de API" },
 ];
@@ -361,20 +363,6 @@ function configured(value: any): string {
                 max="9999"
                 :defaultValue="branding.first_run_assume_behind_commits || 1"
             /></label>
-            <label class="toggle"
-              ><input
-                type="hidden"
-                name="enter_maintenance_on_update_start"
-                value="0"
-              /><input
-                type="checkbox"
-                name="enter_maintenance_on_update_start"
-                value="1"
-                :defaultChecked="
-                  boolean(branding.enter_maintenance_on_update_start ?? 1)
-                "
-              /><span>Ativar manutenção ao iniciar uma atualização</span></label
-            >
           </div>
         </fieldset>
         <div class="actions">
@@ -413,6 +401,64 @@ function configured(value: any): string {
           >
         </div>
       </details>
+    </section>
+
+    <section
+      v-if="!env && tab === 'maintenance'"
+      id="panel-maintenance"
+      role="tabpanel"
+      aria-labelledby="tab-maintenance"
+      class="panel stack"
+    >
+      <header>
+        <h2>Manutenção durante atualizações</h2>
+        <p class="muted">
+          Defina se a aplicação deve entrar em manutenção ao iniciar uma atualização.
+        </p>
+      </header>
+      <p>
+        Configuração salva:
+        <span class="badge" :class="boolean(branding.enter_maintenance_on_update_start ?? 1) ? 'success' : 'pending'">
+          {{ boolean(branding.enter_maintenance_on_update_start ?? 1) ? "Ativada" : "Desativada" }}
+        </span>
+      </p>
+      <ActionForm
+        :action="route('updater.settings.maintenance.save')"
+        class="stack"
+      >
+        <fieldset>
+          <legend>Ativar manutenção ao iniciar uma atualização</legend>
+          <div class="stack">
+            <label class="toggle">
+              <input
+                type="radio"
+                name="enter_maintenance_on_update_start"
+                value="1"
+                :defaultChecked="boolean(branding.enter_maintenance_on_update_start ?? 1)"
+                required
+              />
+              <span>Ativado: exibe a página de manutenção aos clientes durante a atualização.</span>
+            </label>
+            <label class="toggle">
+              <input
+                type="radio"
+                name="enter_maintenance_on_update_start"
+                value="0"
+                :defaultChecked="!boolean(branding.enter_maintenance_on_update_start ?? 1)"
+                required
+              />
+              <span>Desativado: o Updater não coloca a aplicação em manutenção durante a atualização.</span>
+            </label>
+          </div>
+        </fieldset>
+        <p class="muted">
+          O controle manual de manutenção é independente. Salvar esta configuração
+          não ativa nem desativa o modo de manutenção agora.
+        </p>
+        <div class="actions">
+          <button class="button primary" type="submit">Salvar configuração</button>
+        </div>
+      </ActionForm>
     </section>
 
     <section

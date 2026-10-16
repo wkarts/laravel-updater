@@ -95,6 +95,18 @@ class ManagerStore
 
     public function resetBrandingToEnv(): void
     {
+        $row = $this->branding();
+        if (($row['enter_maintenance_on_update_start'] ?? null) !== null) {
+            // Reset visual identity independently from the update-maintenance policy.
+            $statement = $this->pdo()->prepare('UPDATE updater_branding SET
+                app_name = NULL, app_sufix_name = NULL, app_desc = NULL,
+                logo_path = NULL, favicon_path = NULL, maintenance_logo_path = NULL,
+                primary_color = NULL, maintenance_title = NULL, maintenance_message = NULL,
+                maintenance_footer = NULL, first_run_assume_behind = NULL,
+                first_run_assume_behind_commits = NULL, updated_at = :updated_at WHERE id = 1');
+            $statement->execute([':updated_at' => date(DATE_ATOM)]);
+            return;
+        }
         $this->pdo()->exec('DELETE FROM updater_branding WHERE id = 1');
     }
 

@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Argws\LaravelUpdater\Support;
 
-use Argws\LaravelUpdater\Http\Middleware\SoftMaintenanceMiddleware;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Detecta e recupera execuções órfãs do updater.
@@ -206,7 +204,7 @@ class UpdateRecoveryManager
                 'etapa' => $step,
             ]);
         } finally {
-            $this->cleanupOperationalState(true);
+            $this->cleanupOperationalState(true, $runId);
         }
 
         return true;
@@ -370,7 +368,7 @@ class UpdateRecoveryManager
             }
 
             try {
-                $this->cleanupOperationalState(false);
+                $this->cleanupOperationalState(false, $runId);
             } catch (\Throwable) {
                 // Shutdown handler nunca deve gerar uma segunda falha fatal.
             }
@@ -386,30 +384,19 @@ class UpdateRecoveryManager
         }
     }
 
-    private function cleanupOperationalState(bool $runArtisanUp): void
+    private function cleanupOperationalState(bool $runArtisanUp, int $runId = 0): void
     {
         try {
-            Cache::forget(SoftMaintenanceMiddleware::CACHE_KEY);
+            $context = UpdateMaintenanceState::forRun($this->store, $runId);
+            UpdateMaintenanceState::release($context, $this->shell, $runArtisanUp, $this->store);
         } catch (\Throwable) {
-            // best effort
+            // Uma falha de recuperação não autoriza remover manutenção externa.
         }
 
         try {
             $this->lockTools->forceClear('system-update');
         } catch (\Throwable) {
             // best effort
-        }
-
-        if ($runArtisanUp) {
-            try {
-                $this->shell->run(['php', 'artisan', 'up']);
-            } catch (\Throwable) {
-                // fallback abaixo remove diretamente o marcador nativo.
-            }
-        }
-
-        if (function_exists('storage_path')) {
-            @unlink(storage_path('framework/down'));
         }
     }
 

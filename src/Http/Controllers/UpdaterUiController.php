@@ -232,7 +232,9 @@ class UpdaterUiController extends Controller
             'application' => [
                 'framework_version' => app()->version(),
                 'git_revision' => (string) ($status['revision'] ?? 'n/d'),
-                'git_tag' => (string) ($status['last_run']['revision_after'] ?? ''),
+                'git_tag' => (string) ($status['installed_release']['tag'] ?? ''),
+                'installed_version' => $status['installed_version'] ?? null,
+                'installed_release' => $status['installed_release'] ?? null,
                 'channel' => (string) ($status['channel'] ?? config('updater.channel', 'stable')),
                 'source_name' => (string) ($activeSource['name'] ?? 'n/d'),
                 'source_type' => (string) ($activeSource['type'] ?? 'n/d'),

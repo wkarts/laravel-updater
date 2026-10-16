@@ -34,6 +34,7 @@ class SpaPresenter
     private const USER = ['id', 'name', 'email', 'is_admin', 'is_master', 'is_active', 'totp_enabled', 'permissions', 'permissions_json', 'created_at', 'updated_at', 'last_login_at'];
     private const TOKEN = ['id', 'name', 'prefix', 'token_prefix', 'scopes', 'scopes_json', 'created_at', 'last_used_at', 'revoked_at', 'expires_at', 'legacy_scopes'];
     private const RUN = ['id', 'status', 'started_at', 'finished_at', 'revision_before', 'revision_after', 'created_at', 'updated_at', 'current_step', 'heartbeat_at', 'worker_pid', 'dry_run', 'mode', 'channel', 'target_tag', 'target_branch', 'type'];
+    private const INSTALLED_RELEASE = ['version', 'tag', 'base_stable_tag', 'git_commit_sha', 'release_channel', 'build_number', 'source'];
     private array $secrets = [];
 
     public function present(string $page, array $original, Request $request): array
@@ -136,7 +137,7 @@ class SpaPresenter
             }, (array) $value);
         }
         if ($key === 'status' && is_array($value)) {
-            $safe = $this->pick((array) $value, ['enabled', 'mode', 'channel', 'revision', 'warning']);
+            $safe = $this->pick((array) $value, ['enabled', 'mode', 'channel', 'revision', 'warning', 'installed_version', 'installed_release']);
             $safe['last_run'] = $this->field('run', $value['last_run'] ?? null);
             return $this->clean($safe);
         }
@@ -156,6 +157,10 @@ class SpaPresenter
         if (is_array($value)) {
             $result = [];
             foreach ($value as $key => $item) {
+                if ($key === 'installed_release') {
+                    $result[$key] = is_array($item) ? $this->clean($this->pick($item, self::INSTALLED_RELEASE), $depth + 1) : null;
+                    continue;
+                }
                 if (is_string($key) && preg_match('/(?:^secret$|^token$|password|token_encrypted|token_hash|totp_secret|private_key|secret_key|access_key|client_secret|refresh_token|access_token|authorization|cookie|signature|options_json|error_json|pre_update_commands|post_update_commands)/i', $key) && !str_ends_with($key, '_configured')) { continue; }
                 $result[$key] = $this->clean($item, $depth + 1);
             }

@@ -30,7 +30,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResult"
+                  "$ref": "#/components/schemas/StatusResult"
                 }
               }
             }
@@ -89,7 +89,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DataResult"
+                  "$ref": "#/components/schemas/StatusResult"
                 }
               }
             }
@@ -884,6 +884,71 @@
             "nullable": true
           }
         }
+      },
+      "InstalledRelease": {
+        "type": "object",
+        "nullable": true,
+        "description": "Identidade local da release vinculada ao commit instalado; null quando não há evidência confiável. A tag técnica e a base estável são diferentes da versão instalada.",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "git_commit_sha": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string",
+            "nullable": true
+          },
+          "base_stable_tag": {
+            "type": "string",
+            "nullable": true
+          },
+          "release_channel": {
+            "type": "string"
+          },
+          "build_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      },
+      "StatusResult": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DataResult"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "revision": {
+                    "type": "string",
+                    "description": "SHA atual; contrato anterior preservado em /status."
+                  },
+                  "current_revision": {
+                    "type": "string",
+                    "description": "SHA atual; contrato anterior preservado em /check."
+                  },
+                  "installed_version": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Versão da release instalada; não é a última tag remota nem a base estável."
+                  },
+                  "installed_release": {
+                    "$ref": "#/components/schemas/InstalledRelease"
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }

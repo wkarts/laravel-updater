@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Argws\LaravelUpdater\Kernel;
 
 use Argws\LaravelUpdater\Contracts\CodeDriverInterface;
+use Argws\LaravelUpdater\Drivers\GitDriver;
 use Argws\LaravelUpdater\Exceptions\RollbackException;
 use Argws\LaravelUpdater\Pipeline\UpdatePipeline;
 use Argws\LaravelUpdater\Pipeline\Steps\BuildAssetsStep;
@@ -23,6 +24,7 @@ use Argws\LaravelUpdater\Pipeline\Steps\MigrateStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SeedStep;
 use Argws\LaravelUpdater\Pipeline\Steps\SqlPatchStep;
 use Argws\LaravelUpdater\Support\EnvironmentDetector;
+use Argws\LaravelUpdater\Support\InstalledReleaseIdentity;
 use Argws\LaravelUpdater\Support\PreflightChecker;
 use Argws\LaravelUpdater\Support\RunReportMailer;
 use Argws\LaravelUpdater\Support\RunDiagnosticsService;
@@ -60,7 +62,7 @@ class UpdaterKernel
                 (array) config('updater.snapshot', []),
                 (bool) config('updater.backup.enabled', true)
             ),
-            new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null),
+            new MaintenanceOnStep($services['shell'], $services['maintenance_mode'] ?? null, $services['manager_store'] ?? null, $services['store']),
             new PreUpdateCommandsStep($services['shell']),
             new GitUpdateStep($services['code'], $services['manager_store'] ?? null, $services['shell']),
             new Psr4SanitizeStep($services['psr4_sanitizer'], $services['store'], $services['logger']),
@@ -74,7 +76,7 @@ class UpdaterKernel
             new PostUpdateCommandsStep($services['shell']),
             new CacheClearStep($services['shell']),
             new HealthCheckStep(config('updater.healthcheck')),
-            new MaintenanceOffStep($services['shell'], $services['lock']),
+            new MaintenanceOffStep($services['shell'], $services['lock'], $services['store']),
         ];
 
         return new UpdatePipeline($steps, $services['logger'], $services['store']);
@@ -90,11 +92,13 @@ class UpdaterKernel
         }
 
         $this->preflight->validate(['allow_dirty' => $allowDirty]);
+        $revision = $this->codeDriver->currentRevision();
 
         return [
             'enabled' => (bool) config('updater.enabled', true),
-            'current_revision' => $this->codeDriver->currentRevision(),
+            'current_revision' => $revision,
             ...$this->codeDriver->statusUpdates(),
+            ...$this->installedVersionDetails($revision),
         ];
     }
 
@@ -252,14 +256,30 @@ class UpdaterKernel
     public function status(): array
     {
         $this->store->ensureSchema();
+        $revision = $this->codeDriver->currentRevision();
 
         return [
             'enabled' => (bool) config('updater.enabled', true),
             'mode' => (string) config('updater.mode', 'inplace'),
             'channel' => (string) config('updater.channel', 'stable'),
-            'revision' => $this->codeDriver->currentRevision(),
+            'revision' => $revision,
             'last_run' => $this->store->lastRun(),
+            ...$this->installedVersionDetails($revision),
         ];
+    }
+
+    /** Additive identity fields; revision keeps its original SHA contract. */
+    private function installedVersionDetails(string $revision): array
+    {
+        $directory = $this->codeDriver instanceof GitDriver
+            ? $this->codeDriver->workingDirectory()
+            : (string) config('updater.git.path', function_exists('base_path') ? base_path() : getcwd());
+        $identity = (new InstalledReleaseIdentity($directory))->resolve();
+        if ($identity !== null && preg_match('/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/iD', $revision) === 1
+            && strtolower($revision) !== $identity['git_commit_sha']) {
+            $identity = null;
+        }
+        return ['installed_version' => $identity['version'] ?? null, 'installed_release' => $identity];
     }
 
     public function stateStore(): StateStore

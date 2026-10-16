@@ -222,6 +222,7 @@ $this->app->singleton(UpdaterKernel::class, function () {
     public function boot(Router $router): void
     {
         $this->applyRuntimeConfigOverrides();
+        $this->registerOwnedNativeMaintenance();
         $this->registerNativeMaintenanceExclusions();
 
         // Manutenção "soft": bloqueia a aplicação com 503, mas mantém o updater sempre acessível.
@@ -338,6 +339,22 @@ $this->app->booted(function () {
 
         }
     }
+    private function registerOwnedNativeMaintenance(): void
+    {
+        $owner = getenv('UPDATER_MAINTENANCE_OWNER');
+        $arguments = $_SERVER['argv'] ?? [];
+        if (PHP_SAPI !== 'cli'
+            || basename((string) ($arguments[0] ?? '')) !== 'artisan'
+            || ($arguments[1] ?? '') !== 'down'
+            || !is_string($owner)
+            || preg_match('/^[a-f0-9]{32}$/D', $owner) !== 1) {
+            return;
+        }
+
+        $this->app->extend(\Illuminate\Contracts\Foundation\MaintenanceMode::class,
+            static fn ($driver) => new \Argws\LaravelUpdater\Support\OwnedNativeMaintenanceMode($driver, $owner));
+    }
+
     private function registerNativeMaintenanceExclusions(): void
     {
         $prefix = trim((string) config('updater.ui.prefix', '_updater'), '/');

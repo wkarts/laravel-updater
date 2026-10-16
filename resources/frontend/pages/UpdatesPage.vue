@@ -36,6 +36,9 @@ const notesCache = new Map<string, { until: number; value: any }>();
 let timeout: ReturnType<typeof setTimeout>;
 let request = 0;
 const status = computed(() => props.data.statusCheck || {});
+const installedRelease = computed(() => status.value.installed_release || null);
+const installedVersion = computed(() => status.value.installed_version || null);
+const installedRevision = computed(() => status.value.current_revision || installedRelease.value?.git_commit_sha || null);
 const hasExecutionPrerequisites = computed(() => !!props.data.profiles?.length && !!props.data.sources?.length);
 const legacyMode = computed(() => !route("updater.updates.execute") && !!route("updater.trigger.update"));
 const legacyProfileSimulates = computed(() => [true, 1, "1", "true"].includes(props.data.activeProfile?.dry_run));
@@ -521,8 +524,8 @@ const noteBlocks = computed<NoteBlock[]>(() => {
         </div>
       </section>
     <details class="panel installation-state">
-      <summary><span><strong>Estado da instalação</strong><code>{{ status.current_revision || "Revisão não informada" }}</code></span><span class="badge" :class="status.status_unavailable ? 'pending' : status.has_updates || status.has_update_by_tag ? 'success' : ''">{{ status.status_unavailable ? 'Verificação indisponível' : status.has_updates || status.has_update_by_tag ? 'Atualização disponível' : 'Sem atualização detectada' }}</span><Icon name="chevron-down" :size="17" /></summary>
-      <div class="installation-details"><div class="metrics"><div class="metric"><span>Revisão atual</span><strong><code>{{ status.current_revision || "—" }}</code></strong></div><div class="metric"><span>Referência remota</span><strong><code>{{ status.remote || "—" }}</code></strong></div><div class="metric"><span>Commits pendentes</span><strong>{{ status.status_unavailable ? "—" : (status.behind_by_commits ?? 0) }}</strong></div><div class="metric"><span>Última tag remota</span><strong>{{ status.latest_tag || "—" }}</strong></div></div></div>
+      <summary><span><strong>Estado da instalação</strong><code>{{ installedVersion || installedRevision || "Revisão não informada" }}</code></span><span class="badge" :class="status.status_unavailable ? 'pending' : status.has_updates || status.has_update_by_tag ? 'success' : ''">{{ status.status_unavailable ? 'Verificação indisponível' : status.has_updates || status.has_update_by_tag ? 'Atualização disponível' : 'Sem atualização detectada' }}</span><Icon name="chevron-down" :size="17" /></summary>
+      <div class="installation-details"><div class="metrics"><div v-if="installedVersion" class="metric"><span>Versão instalada</span><strong>{{ installedVersion }}</strong></div><div v-if="installedRelease?.tag" class="metric"><span>Tag instalada</span><strong><code>{{ installedRelease.tag }}</code></strong></div><div v-if="installedRelease?.base_stable_tag" class="metric"><span>Base estável</span><strong>{{ installedRelease.base_stable_tag }}</strong></div><div class="metric"><span>{{ installedVersion ? "Commit instalado" : "Revisão instalada" }}</span><strong><code>{{ installedRevision || "—" }}</code></strong></div><div class="metric"><span>Referência remota</span><strong><code>{{ status.remote || "—" }}</code></strong></div><div class="metric"><span>Commits pendentes</span><strong>{{ status.status_unavailable ? "—" : (status.behind_by_commits ?? 0) }}</strong></div><div class="metric"><span>Última tag remota</span><strong>{{ status.latest_tag || "—" }}</strong></div></div></div>
     </details>
     <p v-if="status.warning" class="notice warning">{{ status.warning }}</p>
     <ProgressPanel v-if="legacyMode" :endpoint="route('updater.updates.progress.status')" title="Progresso da atualização ou simulação" />
