@@ -1,0 +1,32 @@
+[
+  {
+    "uploaded_name": "Painel responsivo do Updater Manager-1(2).png",
+    "package_path": "docs/references/dashboard.png",
+    "sha256": "44d42e61d70041531cede49efaaecbe8d032749e034be678ada2a508cfa2cbd9",
+    "unchanged": true
+  },
+  {
+    "uploaded_name": "Atualizações Laravel com tags e notas-2(2).png",
+    "package_path": "docs/references/updates.png",
+    "sha256": "1ed40c53f570aa6671ef3565799e4d4e89e6485db8ebef90e94f521f0cb5e290",
+    "unchanged": true
+  },
+  {
+    "uploaded_name": "Painel de integrações API e webhooks-3(2).png",
+    "package_path": "docs/references/integrations.png",
+    "sha256": "80245708657fb1c8e612de87c886b5c9d9da617fd29da76a4601693715372ecf",
+    "unchanged": true
+  },
+  {
+    "uploaded_name": "Diagnóstico e auditoria de migrations-4(2).png",
+    "package_path": "docs/references/diagnostics-migrations.png",
+    "sha256": "d30a97761c47d93f9324489bac5772599285ce2f12cbb7916d13642a8fad06d0",
+    "unchanged": true
+  },
+  {
+    "uploaded_name": "Prancha 2x2 do Updater Manager-5(2).png",
+    "package_path": "docs/references/overview.png",
+    "sha256": "e17da74ae45f5f92113cf347df181ca26f437d15047952132c91a2db26eb95f6",
+    "unchanged": true
+  }
+]

@@ -1,3 +1,5 @@
+> **Evolução Vue após 0.1.219:** interface em Vue 3 + TypeScript, assets de produção incluídos no Composer, API/OpenAPI e webhooks. Consulte [instalação/upgrade](docs/UPGRADE-VUE.md), [notas da candidata](docs/RELEASE-NOTES.md), [inventário](docs/ROUTE-INVENTORY.md), [conceitos visuais](docs/DESIGN-CONCEPTS.html) e [evidências](docs/VALIDATION.md). A aplicação hospedeira não precisa de Node/npm/build manual.
+
 # argws/laravel-updater
 
 Pacote Composer para autoatualização segura, idempotente e reversível de aplicações Laravel, agora com camada de **Updater Manager** (painel administrativo, auth independente, branding white-label e API de disparo).

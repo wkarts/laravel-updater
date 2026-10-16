@@ -1,0 +1,12 @@
+{
+  "resources/frontend/main.ts": {
+    "file": "assets/updater-CFK8JIkP.js",
+    "name": "main",
+    "src": "resources/frontend/main.ts",
+    "isEntry": true
+  },
+  "style.css": {
+    "file": "assets/style-Cik7iK-9.css",
+    "src": "style.css"
+  }
+}

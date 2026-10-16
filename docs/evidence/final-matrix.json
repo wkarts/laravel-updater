@@ -1,0 +1,55 @@
+{
+  "runtime": "PHP 8.3.6",
+  "php_source_sha256": "a80cbb8a47c2d03e41e9c2b25439edbff28cc845d9a2539dc055fee3c572afec",
+  "source_unchanged_after_tests": true,
+  "frameworks": {
+    "10": {
+      "laravel/framework": "v10.50.3",
+      "orchestra/testbench": "v8.39.0",
+      "phpunit/phpunit": "10.5.66",
+      "expected_tests": 212,
+      "exit_code": 0,
+      "log": "/workspace/scratch/db3f733b96d2/compat/results/final-full-laravel-10.log",
+      "junit": "/workspace/scratch/db3f733b96d2/compat/results/final-full-laravel-10.xml",
+      "summary_present": true,
+      "tests": 212,
+      "assertions": 1185,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed": true
+    },
+    "11": {
+      "laravel/framework": "v11.57.0",
+      "orchestra/testbench": "v9.18.0",
+      "phpunit/phpunit": "11.5.57",
+      "expected_tests": 212,
+      "exit_code": 0,
+      "log": "/workspace/scratch/db3f733b96d2/compat/results/final-full-laravel-11.log",
+      "junit": "/workspace/scratch/db3f733b96d2/compat/results/final-full-laravel-11.xml",
+      "summary_present": true,
+      "tests": 212,
+      "assertions": 1190,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed": true
+    },
+    "12": {
+      "laravel/framework": "v12.70.0",
+      "orchestra/testbench": "v10.12.0",
+      "phpunit/phpunit": "11.5.57",
+      "expected_tests": 212,
+      "exit_code": 0,
+      "log": "/workspace/scratch/db3f733b96d2/compat/results/final-full-laravel-12.log",
+      "junit": "/workspace/scratch/db3f733b96d2/compat/results/final-full-laravel-12.xml",
+      "summary_present": true,
+      "tests": 212,
+      "assertions": 1190,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed": true
+    }
+  }
+}

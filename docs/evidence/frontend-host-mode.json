@@ -1,0 +1,26 @@
+{
+  "fixture": true,
+  "tokensUnavailableHidden": true,
+  "selectorsHidden": true,
+  "profilePolicyPreserved": true,
+  "emptyPrerequisitesClear": true,
+  "unavailableClear": true,
+  "posts": [
+    {
+      "action": "simulate",
+      "dryRun": "1",
+      "dryRunBefore": "1",
+      "csrf": true,
+      "noIgnoredSelectors": true
+    },
+    {
+      "action": "apply",
+      "dryRun": "0",
+      "dryRunBefore": "0",
+      "confirmApply": "ATUALIZAR",
+      "csrf": true,
+      "noIgnoredSelectors": true
+    }
+  ],
+  "errors": []
+}

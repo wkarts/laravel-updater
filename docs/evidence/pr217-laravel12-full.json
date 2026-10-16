@@ -1,0 +1,24 @@
+{
+  "command": [
+    "php",
+    "vendor/bin/phpunit",
+    "--colors=never",
+    "--log-junit",
+    "/workspace/scratch/db3f733b96d2/qa-pr217/phpunit-laravel12-full.xml"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 115.841,
+  "working_directory": "/workspace/scratch/db3f733b96d2/pr217-review",
+  "junit_summary": {
+    "name": "/workspace/scratch/db3f733b96d2/pr217-review/phpunit.xml",
+    "tests": "212",
+    "assertions": "1190",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "time": "115.676296"
+  },
+  "junit_testcases": 212,
+  "junit_failures": 0,
+  "junit_errors": 0
+}

@@ -1,0 +1,13 @@
+{
+  "baseline_commit": "bfc175e5c3abee4a3a9e4861a19b6f4579b78396",
+  "compared_paths": [
+    "src",
+    "routes",
+    "config",
+    "tests",
+    "composer.json"
+  ],
+  "changed_files": [],
+  "backend_test_evidence": "final-matrix.json",
+  "note": "A revisão visual não alterou as fontes e contratos PHP validados na matriz final."
+}

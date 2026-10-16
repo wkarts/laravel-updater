@@ -9,7 +9,8 @@
      "illuminate/console": "^10.0|^11.0|^12.0",
      "illuminate/filesystem": "^10.0|^11.0|^12.0",
      "illuminate/contracts": "^10.0|^11.0|^12.0",
-     "monolog/monolog": "^3.0"
+     "monolog/monolog": "^3.0",
+     "guzzlehttp/guzzle": "^7.5"
    },
    "require-dev": {
      "orchestra/testbench": "^8.0|^9.0|^10.0",

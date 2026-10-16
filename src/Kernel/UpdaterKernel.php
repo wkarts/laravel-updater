@@ -135,11 +135,42 @@ class UpdaterKernel
             }
 
             if ($isDryRun) {
-                $status = $this->codeDriver->statusUpdates();
+                $requestedType = trim((string) ($options['update_type'] ?? config('updater.git.update_type', 'git_ff_only')));
+                $requestedTag = trim((string) ($options['target_tag'] ?? ''));
+                $requestedBranch = trim((string) ($options['target_branch'] ?? ''));
+                $sourceId = (int) ($options['source_id'] ?? 0);
+                $profileId = (int) ($options['profile_id'] ?? 0);
+                $hasRequestedTarget = $sourceId > 0 || $requestedTag !== '' || $requestedBranch !== '';
+                $requestedReference = $requestedType === 'git_tag'
+                    ? ($requestedTag !== '' ? $requestedTag : null)
+                    : ($requestedBranch !== '' ? $requestedBranch : null);
+
+                // statusUpdates describes the repository currently configured in
+                // the driver. It cannot prove the commit or distance of another
+                // selected source/tag/branch without preparing that context.
+                // A dry-run must not mutate Git to manufacture that comparison.
+                $status = $hasRequestedTarget ? [] : $this->codeDriver->statusUpdates();
                 $context['dry_run_plan'] = [
                     'versao_atual' => $this->codeDriver->currentRevision(),
-                    'versao_alvo' => $status['remote'] ?? null,
-                    'diff_commits' => $status['behind_by_commits'] ?? 0,
+                    'versao_alvo' => $hasRequestedTarget ? $requestedReference : ($status['remote'] ?? null),
+                    'diff_commits' => $hasRequestedTarget ? null : ($status['behind_by_commits'] ?? null),
+                    'alvo_solicitado' => [
+                        'source_id' => $sourceId > 0 ? $sourceId : null,
+                        'profile_id' => $profileId > 0 ? $profileId : null,
+                        'update_type' => $requestedType,
+                        'target_tag' => $requestedTag !== '' ? $requestedTag : null,
+                        'target_branch' => $requestedBranch !== '' ? $requestedBranch : null,
+                        'reference' => $requestedReference,
+                        'commit' => null,
+                        'verification' => 'not_verified',
+                    ],
+                    'comparacao' => [
+                        'disponivel' => !$hasRequestedTarget && isset($status['remote'], $status['behind_by_commits']),
+                        'escopo' => $hasRequestedTarget ? 'alvo_solicitado_nao_verificado' : 'repositorio_atualmente_configurado',
+                        'mensagem' => $hasRequestedTarget
+                            ? 'Referência solicitada preservada. O commit e a distância do alvo não foram verificados; nenhuma preparação ou alteração Git foi executada.'
+                            : 'A consulta descreve somente o repositório atualmente configurado, sem validar uma fonte ou referência alternativa.',
+                    ],
                     'steps' => ['lock','backup_full','pre_update_commands','maintenance_on','git_update','psr4_sanitize','composer_install','migrate','seed','sql_patch','build_assets','post_update_commands','cache_clear','health_check','maintenance_off'],
                     'comandos_simulados' => [
                         'git fetch origin <branch>',

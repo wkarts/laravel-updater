@@ -254,6 +254,13 @@ final class RunDiagnosticsService
         return $path;
     }
 
+    public static function sanitizeText(string $value): string
+    {
+        $safe = self::sanitize($value);
+
+        return is_string($safe) ? $safe : (string) json_encode($safe, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
     public static function sanitize(mixed $value, int $depth = 0): mixed
     {
         if ($depth >= 9) {
@@ -306,7 +313,7 @@ final class RunDiagnosticsService
                 return self::sanitize($decoded, $depth + 1);
             }
         }
-        $value = preg_replace('~(https?://)[^/\s@:]+:[^/\s@]+@~i', '$1[REDACTED]@', $value) ?? $value;
+        $value = preg_replace('~(https?://)[^/\s@]+@~i', '$1[REDACTED]@', $value) ?? $value;
         $value = preg_replace('/\b(Bearer\s+)[a-z0-9._~+\/=-]+/i', '$1[REDACTED]', $value) ?? $value;
         $value = preg_replace(
             '/\b(password|token|secret|api[_-]?key|client_secret|authorization|access_key|APP_KEY)\s*(=|:)\s*([^\s,;&]+)/i',

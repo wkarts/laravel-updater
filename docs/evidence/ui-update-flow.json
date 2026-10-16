@@ -1,0 +1,161 @@
+{
+  "fixture": true,
+  "framework": "Laravel QA + compiled Vue production bundle",
+  "real_updates_performed": false,
+  "checked_at": "2026-10-16T04:31:17.358Z",
+  "bundle": "assets/updater-CFK8JIkP.js",
+  "checks": [
+    {
+      "name": "fixture-login",
+      "passed": true
+    },
+    {
+      "name": "selected-prerequisites",
+      "passed": true
+    },
+    {
+      "name": "simulation-wire-contract",
+      "passed": true,
+      "requests": [
+        {
+          "action": "simulate",
+          "dry_run_before": "1",
+          "confirmationPresent": false
+        }
+      ]
+    },
+    {
+      "name": "simulation-run-diagnostics",
+      "passed": true,
+      "run_id": 10,
+      "run_status": "DRY_RUN"
+    },
+    {
+      "name": "simulation-status-visible",
+      "passed": true,
+      "label": "Simulação concluída"
+    },
+    {
+      "name": "simulation-progress-complete",
+      "passed": true,
+      "progress": 100,
+      "message": "Dry-run concluído."
+    },
+    {
+      "name": "progress-diagnostics-link",
+      "passed": true
+    },
+    {
+      "name": "progress-link-navigates-to-diagnostics",
+      "passed": true
+    },
+    {
+      "name": "apply-without-confirmation-blocked-in-browser",
+      "passed": true,
+      "invalid_field": "confirm_apply",
+      "post_dispatched": false
+    },
+    {
+      "name": "apply-without-confirmation-rejected-by-server",
+      "passed": true,
+      "status": 302,
+      "error": "Confirme explicitamente a atualização real digitando ATUALIZAR."
+    },
+    {
+      "name": "no-real-update-dispatched",
+      "passed": true,
+      "last_run_id": 10,
+      "last_run_status": "DRY_RUN",
+      "qa_real_dispatcher_blocked": true
+    },
+    {
+      "name": "local-branding-login",
+      "passed": true,
+      "fixture_only": true,
+      "source": "/panel-logo.svg",
+      "accessible_alt": true
+    },
+    {
+      "name": "local-branding-dashboard",
+      "passed": true,
+      "fixture_only": true,
+      "source": "/panel-logo.svg",
+      "accessible_alt": true
+    },
+    {
+      "name": "local-branding-maintenance",
+      "passed": true,
+      "fixture_only": true,
+      "source": "/maintenance-logo.svg",
+      "accessible_alt": true
+    },
+    {
+      "name": "local-maintenance-panel-logo-fallback",
+      "passed": true,
+      "fixture_only": true
+    },
+    {
+      "name": "local-logo-error-cube-fallback",
+      "passed": true,
+      "fixture_only": true
+    },
+    {
+      "name": "local-render-twofactor-320px",
+      "passed": true,
+      "fixture_only": true,
+      "overflow": false,
+      "charset": "UTF-8",
+      "text_encoding_valid": true,
+      "screenshot": "docs/previews/twofactor-320.png",
+      "input_labelled": true
+    },
+    {
+      "name": "local-render-maintenance-320px",
+      "passed": true,
+      "fixture_only": true,
+      "overflow": false,
+      "charset": "UTF-8",
+      "text_encoding_valid": true,
+      "screenshot": "docs/previews/maintenance-320.png"
+    },
+    {
+      "name": "local-render-error-320px",
+      "passed": true,
+      "fixture_only": true,
+      "overflow": false,
+      "charset": "UTF-8",
+      "text_encoding_valid": true,
+      "screenshot": "docs/previews/forbidden-320.png"
+    },
+    {
+      "name": "local-render-twofactor-1280px",
+      "passed": true,
+      "fixture_only": true,
+      "overflow": false,
+      "charset": "UTF-8",
+      "text_encoding_valid": true,
+      "screenshot": "docs/previews/twofactor-1280.png",
+      "input_labelled": true
+    },
+    {
+      "name": "local-render-maintenance-1280px",
+      "passed": true,
+      "fixture_only": true,
+      "overflow": false,
+      "charset": "UTF-8",
+      "text_encoding_valid": true,
+      "screenshot": "docs/previews/maintenance-1280.png"
+    },
+    {
+      "name": "local-render-error-1280px",
+      "passed": true,
+      "fixture_only": true,
+      "overflow": false,
+      "charset": "UTF-8",
+      "text_encoding_valid": true,
+      "screenshot": "docs/previews/forbidden-1280.png"
+    }
+  ],
+  "errors": [],
+  "passed": true
+}

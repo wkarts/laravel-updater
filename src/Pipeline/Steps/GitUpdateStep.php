@@ -164,7 +164,11 @@ class GitUpdateStep implements PipelineStepInterface
             config(['updater.git.branch' => $requestedBranch]);
         }
 
-        $activeSource = $this->managerStore?->activeSource();
+        $sourceId = (int) ($context['options']['source_id'] ?? 0);
+        $activeSource = $sourceId > 0 ? $this->managerStore?->findSource($sourceId) : $this->managerStore?->activeSource();
+        if ($sourceId > 0 && !is_array($activeSource)) {
+            throw new \RuntimeException('A fonte selecionada para esta execução não está mais disponível.');
+        }
         if (!is_array($activeSource) || $this->shellRunner === null) {
             return;
         }

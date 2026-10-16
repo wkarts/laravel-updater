@@ -1,0 +1,31 @@
+{
+  "source": "resources/frontend/styles.css",
+  "defaultTheme": "light",
+  "direction": "Referências visuais fornecidas pelo usuário",
+  "tokens": {
+    "canvas": "#f4f7fc",
+    "surface": "#ffffff",
+    "soft": "#f3f6fb",
+    "surface-soft": "#f3f6fb",
+    "ink": "#0b1945",
+    "muted": "#64759a",
+    "line": "#dce5f3",
+    "border": "#dce5f3",
+    "primary": "#155bff",
+    "primary-soft": "#eaf2ff",
+    "accent": "#139d5d",
+    "accent-soft": "#e5f9ed",
+    "danger": "#df4052",
+    "danger-soft": "#fff0f2",
+    "warning": "#ac6800",
+    "warning-soft": "#fff5dc",
+    "radius": "8px",
+    "shadow": "0 4px 18px #12387206",
+    "font-mono": "ui-monospace, SFMono-Regular, Consolas, monospace"
+  },
+  "responsiveWidthsVerified": [
+    320,
+    768,
+    1280
+  ]
+}

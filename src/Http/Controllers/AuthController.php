@@ -130,22 +130,27 @@ class AuthController extends Controller
     {
         $user = $this->currentUser($request);
 
-        $pendingSecret = (string) $request->session()->get('updater_totp_secret', '');
-        if ($pendingSecret === '') {
-            $pendingSecret = !empty($user['totp_secret']) ? (string) $user['totp_secret'] : $this->totp->generateSecret();
+        $enabled = (bool) ($user['totp_enabled'] ?? false);
+        $pendingSecret = $enabled ? '' : (string) $request->session()->get('updater_totp_secret', '');
+        if (!$enabled && $pendingSecret === '') {
+            $pendingSecret = $this->totp->generateSecret();
             $request->session()->put('updater_totp_secret', $pendingSecret);
+        }
+        if ($enabled) {
+            $request->session()->forget('updater_totp_secret');
         }
 
         $issuer = (string) config('updater.ui.auth.2fa.issuer', 'Argws Updater');
-        $otpauthUri = $this->totp->otpauthUri($issuer, (string) $user['email'], $pendingSecret);
+        $otpauthUri = $enabled ? '' : $this->totp->otpauthUri($issuer, (string) $user['email'], $pendingSecret);
+        unset($user['totp_secret'], $user['password_hash']);
 
         return view('laravel-updater::profile', [
             'user' => $user,
             'pendingTotpSecret' => $pendingSecret,
             'otpauthUri' => $otpauthUri,
-            'qrcodeDataUri' => $this->totp->qrcodeDataUri($otpauthUri),
+            'qrcodeDataUri' => $enabled ? '' : $this->totp->qrcodeDataUri($otpauthUri),
             'recoverySummary' => $this->authStore->recoveryCodesSummary((int) $user['id']),
-            'newRecoveryCodes' => $request->session()->get('updater_new_recovery_codes', []),
+            'newRecoveryCodes' => $request->session()->pull('updater_new_recovery_codes', []),
         ]);
     }
 
@@ -166,6 +171,9 @@ class AuthController extends Controller
         $request->validate(['code' => ['required', 'string']]);
 
         $user = $this->currentUser($request);
+        if ((bool) ($user['totp_enabled'] ?? false)) {
+            return back()->withErrors(['code' => 'O 2FA já está habilitado. Redefina-o com sua senha antes de cadastrar outro autenticador.']);
+        }
         $secret = (string) $request->session()->get('updater_totp_secret', '');
         if ($secret === '') {
             $secret = $this->totp->generateSecret();
@@ -204,8 +212,15 @@ class AuthController extends Controller
 
     public function disableTwoFactor(Request $request): RedirectResponse
     {
+        $request->validate(['password' => ['required', 'string']]);
         $user = $this->currentUser($request);
+        $row = $this->authStore->findUserById((int) $user['id']);
+        if ($row === null || !$this->authStore->verifyPassword($row, (string) $request->input('password'))) {
+            return back()->withErrors(['password' => 'Informe sua senha atual para redefinir o 2FA.']);
+        }
         $this->authStore->updateTotp((int) $user['id'], null, false);
+        $request->session()->forget('updater_totp_secret');
+        $this->managerStore->addAuditLog((int) $user['id'], 'disable2fa', [], $request->ip(), $request->userAgent());
 
         return back()->with('status', 'Salvo com sucesso.');
     }

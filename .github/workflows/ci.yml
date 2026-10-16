@@ -69,3 +69,54 @@ jobs:
 
       - name: PHPUnit
         run: ./vendor/bin/phpunit
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Verify packaged production assets
+        run: |
+          git diff --exit-code -- resources/dist
+          test -f resources/dist/.vite/manifest.json
+          test -z "$(git ls-files --others --exclude-standard resources/dist)"
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+      - name: Verify Composer distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          composer archive --format=tar --dir="$RUNNER_TEMP" --file=updater-distribution
+          php -r '
+            $archive = new PharData($argv[1]);
+            foreach (["docs/openapi.json", "docs/UPGRADE-VUE.md", "docs/SECURITY-UPGRADE.md", "resources/dist/.vite/manifest.json"] as $path) {
+                if (!isset($archive[$path])) {
+                    throw new RuntimeException("Missing package file: " . $path);
+                }
+            }
+            $spec = json_decode($archive["docs/openapi.json"]->getContent(), true, 512, JSON_THROW_ON_ERROR);
+            if (($spec["openapi"] ?? null) !== "3.0.3" || count($spec["paths"] ?? []) !== 7) {
+                throw new RuntimeException("Invalid packaged OpenAPI document");
+            }
+            $manifest = json_decode($archive["resources/dist/.vite/manifest.json"]->getContent(), true, 512, JSON_THROW_ON_ERROR);
+            foreach ($manifest as $entry) {
+                foreach (array_merge([$entry["file"]], $entry["css"] ?? []) as $asset) {
+                    if (!isset($archive["resources/dist/" . $asset])) {
+                        throw new RuntimeException("Missing packaged asset: " . $asset);
+                    }
+                }
+            }
+            echo "Composer distribution: OpenAPI, upgrade guides and manifest assets verified\n";
+          ' "$RUNNER_TEMP/updater-distribution.tar"

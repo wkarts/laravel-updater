@@ -1,0 +1,14 @@
+{
+  "command": [
+    "php",
+    "vendor/bin/phpunit",
+    "--colors=never",
+    "--filter",
+    "ApiCompatibilityTest|SpaAuthenticationFlowTest",
+    "--log-junit",
+    "/workspace/scratch/db3f733b96d2/qa-pr217/phpunit-laravel12-focused.xml"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 4.749,
+  "working_directory": "/workspace/scratch/db3f733b96d2/pr217-review"
+}

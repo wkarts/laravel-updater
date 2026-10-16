@@ -38,10 +38,22 @@ final class SchemaCompatibilityResolverTest extends TestCase
         $context = $method->invoke(
             $resolver,
             'SQLSTATE[HY000]: General error: 3780 Referencing column filial_id and referenced column id are incompatible. '
-            . '(Connection: mysql, SQL: alter table \x60apontamentos\x60 modify column \x60filial_id\x60 INT UNSIGNED NULL)'
+            . '(Connection: mysql, SQL: alter table `apontamentos` modify column `filial_id` INT UNSIGNED NULL)'
         );
 
         self::assertSame(['apontamentos', 'filial_id', true, 'sql_error'], $context);
+    }
+
+    public function testDoesNotRepairANotNullableTarget(): void
+    {
+        $database = $this->createMock(DatabaseManager::class);
+        $database->expects($this->never())->method('connection');
+        $resolver = new SchemaCompatibilityResolver($database, sys_get_temp_dir() . '/argws-updater-schema-repairs');
+
+        self::assertSame(
+            ['repaired' => false, 'reason' => 'unsafe_target'],
+            $resolver->repair(new \RuntimeException('SQL: alter table `apontamentos` modify column `filial_id` INT UNSIGNED NOT NULL)'))
+        );
     }
 
     public function testInfersNullableIntentFromActiveForeignKeyGuard(): void
